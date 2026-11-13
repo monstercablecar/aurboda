@@ -252,6 +252,9 @@ export function AssessmentCard({
           entries.map((entry) => (
             <section class="mental-history" key={entry.id}>
               <Result entry={entry} template={template} />
+              <a href={`/journal?new=1&source_kind=questionnaire&source_id=${encodeURIComponent(entry.id)}`}>
+                Continue reflecting in Journal
+              </a>
               <button type="button" disabled={busy} onClick={() => remove(entry.id)}>
                 Delete result
               </button>

@@ -1,10 +1,11 @@
-import { nativeTaskPaths } from './native-tasks-paths.ts'
 import * as fs from 'node:fs'
 import * as yaml from 'yaml'
 import { z } from 'zod'
 /** Generates the OpenAPI 3.1 specification from the Zod schemas: pnpm generate:openapi */
 import { createDocument } from 'zod-openapi'
 
+import { journalPaths } from './journal-paths.ts'
+import { nativeTaskPaths } from './native-tasks-paths.ts'
 import { peoplePaths } from './people-paths.ts'
 import { isAllowedWhenReadOnly } from './read-only.ts'
 import { resourcesPaths } from './resources-paths.ts'
@@ -261,6 +262,7 @@ const openApiDocument = createDocument({
       },
     },
     ...resourcesPaths,
+    ...journalPaths,
     ...nativeTaskPaths,
     '/challenges': {
       get: {
