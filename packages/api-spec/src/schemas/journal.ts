@@ -14,6 +14,9 @@ export const journalSourceSchema = z.object({
   adaptation: z.string(),
   reviewed_at: z.string(),
   exclusions: z.string().default(''),
+  content_author: z.string().optional(),
+  content_license: z.string().optional(),
+  content_license_url: z.url().optional(),
 })
 export const journalPromptSchema = z.object({
   id: z.string(),

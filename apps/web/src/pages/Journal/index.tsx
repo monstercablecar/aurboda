@@ -28,8 +28,32 @@ const download = (name: string, data: string, type: string) => {
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-const markdown = (entry: CreateJournalEntryBody) =>
-  `# ${entry.title || 'Untitled entry'}\n\n${entry.occurred_at}\n\n${entry.content}\n\n${entry.workbook ? entry.workbook.definition.sections.map((s) => `## ${s.title}\n\n${s.prompts.map((p) => `### ${p.label}\n\n${entry.workbook?.answers[p.id] ?? ''}`).join('\n\n')}`).join('\n\n') + `\n\nSource: ${entry.workbook.definition.source.title} — ${entry.workbook.definition.source.author}\n${entry.workbook.definition.source.url}\n${entry.workbook.definition.source.license}: ${entry.workbook.definition.source.license_url}\n${entry.workbook.definition.source.adaptation}` : ''}`
+const markdown = (entry: CreateJournalEntryBody) => {
+  const heading = `# ${entry.title || 'Untitled entry'}\n\n${entry.occurred_at}\n\n${entry.content}`
+  if (!entry.workbook) return heading
+  const { definition, answers } = entry.workbook
+  const source = definition.source
+  const sections = definition.sections
+    .map(
+      (section) =>
+        `## ${section.title}\n\n${section.introduction}\n\n${section.prompts.map((prompt) => `### ${prompt.label}\n\n${answers[prompt.id] ?? ''}`).join('\n\n')}`,
+    )
+    .join('\n\n')
+  const credit = [
+    `Source / recommended reading: ${source.title} — ${source.author}`,
+    source.url,
+    `Source license: ${source.license} — ${source.license_url}`,
+    source.adaptation,
+    source.exclusions,
+    source.content_author ? `Companion text: ${source.content_author}` : '',
+    source.content_license
+      ? `Companion license: ${source.content_license} — ${source.content_license_url}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  return `${heading}\n\n${sections}\n\n${credit}`
+}
 const localDate = (iso: string) => {
   const d = new Date(iso)
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
@@ -550,7 +574,7 @@ function Source({ definition }: { definition: JournalWorkbookDefinition }) {
   const s = definition.source
   return (
     <aside class="journal-source">
-      Adapted from{' '}
+      Source / recommended reading:{' '}
       <a href={s.url} target="_blank" rel="noreferrer">
         {s.title}
       </a>{' '}
@@ -560,6 +584,15 @@ function Source({ definition }: { definition: JournalWorkbookDefinition }) {
       </a>
       <p>{s.adaptation}</p>
       {s.exclusions && <p>{s.exclusions}</p>}
+      {s.content_author && <p>Companion text: {s.content_author}</p>}
+      {s.content_license && (
+        <p>
+          Companion license:{' '}
+          <a href={s.content_license_url} target="_blank" rel="noreferrer">
+            {s.content_license}
+          </a>
+        </p>
+      )}
     </aside>
   )
 }

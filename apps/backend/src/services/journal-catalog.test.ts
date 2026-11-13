@@ -60,8 +60,36 @@ describe('journal catalog', () => {
       const license = contentLicenses.entries.find((entry) => entry.id === item.id)
       expect(license?.source_url).toBe(item.source.url)
       expect(license?.content_license).toMatch(/^CC BY/)
+      expect(item.source.content_author).toBe('Aurboda contributors (2026)')
+      expect(item.source.content_license).toBe(license?.content_license)
+      expect(item.source.content_license_url).toBe(license?.content_license_url)
+      expect(journalWorkbookDefinitionSchema.parse(item).source.content_license).toBe(
+        license?.content_license,
+      )
       expect(license?.content_license_url).toMatch(/^https:\/\/creativecommons.org\/licenses\//)
     }
+  })
+
+  it('separates original companion licensing from source rights', () => {
+    for (const id of ['wellness', 'anger']) {
+      expect(get(id).source.license).toBe('Public domain (SAMHSA source; exclusions apply)')
+      expect(get(id).source.content_license).toBe('CC BY 4.0')
+    }
+  })
+
+  it('suggests seeded areas rather than creating unmatched area names', () => {
+    const areas = [
+      'Mental health',
+      'Relationships',
+      'Work',
+      'Physical health',
+      'Recreation',
+      'Family & parenting',
+      'Personal growth',
+      'Creativity & learning',
+      'Meaning & spirituality',
+    ]
+    for (const item of JOURNAL_CATALOG) expect(areas).toContain(item.suggested_area)
   })
 
   it('preserves source-specific exclusions and honest adaptation limits', () => {

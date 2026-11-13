@@ -40,7 +40,7 @@ MCP has 19 Journal tools, including read/write/search, workbook attempts, revisi
 
 Journal-specific JSON/Markdown downloads respect selected filters across all pages; the media JSON archive includes original attachment bytes as data URLs. These portable downloads are not a new database restore UI. Print uses the browser's Save as PDF. On-this-day is opt-in and scans prior-year entries, respecting each entry's resurfacing setting.
 
-Android source adds an embedded Journal menu entry. Existing Android WebView microphone permission bridging is absent; browser microphone support does not establish Android recording parity. Physical-device microphone, upload, blob download and print checks remain open. An attempt to file the required parity issue failed because Issues are disabled on this fork; track the gap in PR #3 until Issues are enabled. No APK is built or distributed.
+Android source adds an embedded Journal menu entry. Existing Android WebView microphone permission bridging is absent; browser microphone support does not establish Android recording parity. Physical-device microphone, upload, blob download and print checks remain open. An attempt to file the required parity issue failed because Issues are disabled on this fork; track the gap in PR #3 until Issues are enabled. CI may build a debug APK for validation; this change does not distribute an APK.
 
 The page links existing People profiles and saved mental-assessment results into new unsaved reflections. Other event/entry references can be added as metadata in the editor. Links do not copy source notes or grant access to another account's data.
 

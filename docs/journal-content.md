@@ -11,7 +11,7 @@ These are reflection and creative-writing materials, without diagnosis, clinical
 - `apps/backend/src/services/journal-catalog.ts`: local asset loader and shared-schema validation. No network, account, external model or download is needed to use any catalog option.
 - `apps/backend/src/services/journal-catalog.test.ts`: catalog integrity and attribution/exclusion regression checks.
 
-IDs are permanent keys, including prompt IDs. Do not repurpose an existing prompt ID for a different question. Changes to wording or structure require a new definition version; saved snapshots preserve the edition the user started. The checked-in assets must remain next to the loader when packaging the backend. No upstream PDFs are redistributed.
+IDs are permanent keys, including prompt IDs. Do not repurpose an existing prompt ID for a different question. Changes to wording or structure require a new definition version; saved snapshots preserve the edition the user started. The checked-in assets must remain next to the loader when packaging the backend. No upstream PDFs are redistributed. The loader validates an exact catalog-to-license-manifest ID match and matching source URLs, then merges `content_author`, `content_license` and `content_license_url` into each definition’s source metadata. These fields survive API validation and saved snapshots separately from the original source license. They are optional for compatibility with older snapshots.
 
 ## License boundary
 
@@ -61,4 +61,4 @@ The ten creative titles are new Aurboda exercise names, not ten separately publi
 
 ## Verification
 
-Targeted catalog Vitest run: 5 tests passed. Checks cover all definitions against the shared schema, exact 30/10 counts, unique entry/section/prompt keys, unique substantive prompt labels, source/license completeness, separate content licensing, preserved source-specific exclusions and absence of embedded executable assets. These checks establish structural consistency; editorial and rights review remains necessary for future content changes.
+Targeted catalog Vitest run: 7 tests passed. Checks cover all definitions against the shared schema, exact 30/10 counts, unique entry/section/prompt keys, unique substantive prompt labels, source/license completeness, separate content licensing, preserved source-specific exclusions and absence of embedded executable assets. These checks establish structural consistency; editorial and rights review remains necessary for future content changes.
