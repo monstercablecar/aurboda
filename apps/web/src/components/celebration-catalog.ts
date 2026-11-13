@@ -29,7 +29,7 @@ export const celebrationFamilies = {
     icon: '✦',
     size: 'large',
     copy: [
-      ['Welcome to your Foghouse.', 'Your workspace is ready to grow with you.'],
+      ['Welcome to Aurboda.', 'Your workspace is ready to grow with you.'],
       ['A place for your bigger picture.', 'You have made the workspace your own.'],
       ['Your beginning, beautifully made.', 'Come back to any step whenever it helps.'],
       ['Settled in, at your own pace.', 'Your setup choices are saved.'],

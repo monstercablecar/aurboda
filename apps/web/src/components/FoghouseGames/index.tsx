@@ -125,7 +125,7 @@ export function FoghouseGames() {
     >
       <header class="foghouse-arcade-header">
         <h2 id="foghouse-games-title">
-          <span aria-hidden="true">◈</span> Foghouse arcade
+          <span aria-hidden="true">◈</span> Arcade
         </h2>
         {!run && <span class="foghouse-arcade-tag">PLAY · NOTICE · REPEAT</span>}
       </header>

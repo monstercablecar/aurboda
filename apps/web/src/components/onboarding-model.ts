@@ -28,7 +28,7 @@ const definitions: Omit<OnboardingStep, 'status'>[] = [
     title: 'Make yourself at home',
     description:
       'Use the browser for full dashboards, detailed history, longer questionnaires, Work, People and bigger forms. Android is your companion for device integrations, background syncing and quick checks. These features also remain available inside Android where supported.',
-    action: { href: FOGHOUSE_URL, label: 'Open The Foghouse' },
+    action: { href: FOGHOUSE_URL, label: 'Open Aurboda' },
     manualLabel: 'Got it',
   },
   {

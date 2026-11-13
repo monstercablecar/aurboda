@@ -118,7 +118,7 @@ export function AndroidAppSource() {
               <li>Download and install the Aurboda APK on your Android phone.</li>
               <li>
                 Set Server URL to <strong>https://stats.foghouse.org</strong>, then sign in with your existing
-                Foghouse account. The public APK may default to the upstream server, so enter this address
+                Aurboda account. The public APK may default to the upstream server, so enter this address
                 yourself.
               </li>
               <li>

@@ -4,7 +4,6 @@ import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
-import { appContentClass, brandForRoute, useBrandTitle } from './branding'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
 import { auth } from './state/auth'
@@ -36,39 +35,7 @@ afterEach(() => {
   auth.value = {}
 })
 
-test.each([
-  '/login',
-  '/signup',
-  '/privacy',
-  '/terms',
-  '/blog',
-  '/challenges/join',
-  '/u',
-  '/u/person',
-  '/u/person/posts/1',
-])('public route %s retains Aurboda with or without a session', (path) => {
-  for (const signedIn of [true, false]) {
-    expect(brandForRoute(`${path}/?next=/people#section`, signedIn).name).toBe('Aurboda')
-  }
-})
-
-test.each(['/', '/people', '/work', '/resources', '/timeline', '/settings'])(
-  'private route %s requires a session to show The Foghouse',
-  (path) => {
-    expect(brandForRoute(path, true).name).toBe('The Foghouse')
-    expect(brandForRoute(path, false).name).toBe('Aurboda')
-  },
-)
-
-test('dark content scope is exclusive to login', () => {
-  expect(appContentClass('/login/?next=/people')).toBe('app-content login-theme')
-  for (const path of ['/', '/signup', '/people', '/login-other', '/u/login']) {
-    expect(appContentClass(path)).toBe('app-content')
-  }
-})
-
 function ShellIdentity() {
-  useBrandTitle(currentUrl, Boolean(auth.value.token))
   return (
     <>
       <Header />
@@ -85,21 +52,27 @@ function show(url: string, signedIn: boolean) {
   })
 }
 
-test('shell identity and title restore on public navigation and logout', () => {
+test('shell retains Aurboda across login, private and public navigation, and logout', () => {
+  for (const [url, signedIn] of [
+    ['/login', false],
+    ['/people', true],
+    ['/u/person', true],
+  ] as const) {
+    show(url, signedIn)
+    expect(container.querySelectorAll('a[aria-label="Aurboda home"]')).toHaveLength(2)
+    expect(container.querySelector('.nav-mobile-brand img')?.getAttribute('src')).toBe('/logo.svg')
+    expect(container.querySelector('.sidebar-brand')?.textContent).toBe('Aurboda')
+    expect(container.querySelector('.sidebar-brand img')).toBeNull()
+  }
   show('/people', true)
-  expect(document.title).toBe('The Foghouse')
-  expect(container.querySelectorAll('a[aria-label="The Foghouse home"]')).toHaveLength(2)
-  expect(container.querySelectorAll('img[src="/foghouse-mark.png"]')).toHaveLength(2)
-  show('/u/person', true)
-  expect(document.title).toBe('Aurboda')
-  expect(container.querySelectorAll('a[aria-label="Aurboda home"]')).toHaveLength(2)
-  expect(container.querySelector('img[src="/foghouse-mark.png"]')).toBeNull()
-  show('/people', true)
+  expect(container.querySelector('.sidebar-nav a[href="/people"]')).not.toBeNull()
   const logout = container.querySelector<HTMLAnchorElement>('.sidebar-footer a[href="#"]')
   if (!logout) throw new Error('Missing logout link')
   act(() => logout.click())
-  expect(document.title).toBe('Aurboda')
   expect(container.querySelectorAll('a[aria-label="Aurboda home"]')).toHaveLength(2)
+  expect(container.querySelector('.nav-mobile-brand img')?.getAttribute('src')).toBe('/logo.svg')
+  expect(container.querySelector('.sidebar-nav a[href="/people"]')).toBeNull()
+  expect(container.querySelector('.sidebar-nav a[href="/login"]')).not.toBeNull()
 })
 
 test('sidebar collapse still toggles without changing navigation', () => {

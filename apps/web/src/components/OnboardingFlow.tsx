@@ -36,7 +36,7 @@ export function OnboardingFlow(props: OnboardingFlowProps) {
     <section class="onboarding-flow" aria-labelledby="onboarding-title">
       <header class="onboarding-heading">
         <div>
-          <span class="onboarding-eyebrow">THE FOGHOUSE · YOUR OWN PACE</span>
+          <span class="onboarding-eyebrow">AURBODA · YOUR OWN PACE</span>
           <h2 id="onboarding-title">A little setup. A clearer picture.</h2>
           <p>Start with what helps you. Everything else can wait.</p>
         </div>
@@ -184,7 +184,7 @@ function StepDescription({
               Set <strong>Server URL</strong> to <strong>{FOGHOUSE_URL}</strong>. The public APK may still
               default to the upstream server; enter this address yourself.
             </li>
-            <li>Sign in with your existing Foghouse account.</li>
+            <li>Sign in with your existing Aurboda account.</li>
             <li>
               Open <strong>Sync</strong> and grant Health Connect read permissions.
             </li>

@@ -3,8 +3,6 @@ import axios from 'axios'
 import { render } from 'preact'
 import { LocationProvider, Route, Router, useLocation } from 'preact-iso'
 
-import { appContentClass, useBrandTitle } from './branding.js'
-import './branding.css'
 import { Footer } from './components/Footer.jsx'
 import { GuestBar } from './components/GuestBar.jsx'
 import { Header } from './components/Header.jsx'
@@ -116,7 +114,6 @@ function AppShell() {
   // all web chrome (header, sidebar, footer) and just render page content.
   const embedded = isEmbedded()
   const isLoggedIn = Boolean(auth.value.token)
-  useBrandTitle(path, isLoggedIn)
   const showNav = !embedded && shouldShowNav(path, isLoggedIn)
   const showGuestBar = !embedded && shouldShowGuestBar(path, isLoggedIn)
   // Shown in the native app's WebView too: Android users would otherwise only see the 402s.
@@ -126,7 +123,7 @@ function AppShell() {
     <>
       {showNav && <Header />}
       {showNav && <Sidebar />}
-      <div class={appContentClass(path)}>
+      <div class="app-content">
         {showGuestBar && <GuestBar />}
         {showPlanBanner && <PlanBanner />}
         <main>

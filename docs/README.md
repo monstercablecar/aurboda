@@ -14,7 +14,7 @@ For coding work, start with root [AGENTS.md](../AGENTS.md) and [AI onboarding](a
 | Known issues and safe next steps | [Prioritized technical debt](ai/technical-debt.md) |
 | Private tasks, projects and preserved health goals | [Native Tasks](native-tasks.md) |
 | Work and custom metric dashboards | [Custom dashboards / Work](custom-dashboards.md), [feature map](ai/frontend-and-features.md) |
-| Private Foghouse branding and public Aurboda presentation | [Branding scope, logo and verification](foghouse-branding.md) |
+| Aurboda name, original icons and theme | [Branding and deployment boundary](branding.md) |
 | Shared Resources library | [Resources architecture, permissions, storage and operations](resources.md) |
 | People | [Architecture and user flows](people.md), [catalog coverage](people-catalog-coverage.md), [reminders](people-reminders.md), [latest verification](people-verification/goals-calendar-questionnaires.md) |
 | Treatments and nutrition questionnaire ownership | [Treatments/recovery](features/treatments-recovery.md), [feature map](ai/frontend-and-features.md) |

@@ -2,6 +2,8 @@
 
 Baseline: `feae57c68351927f33e322d2c61841b4fed0132d` (November 9, 2026). This is the initial Foghouse publication snapshot. A = added, M = modified, D = deleted. Line counts are Git diff counts, not a measure of feature size or quality. This inventory itself is also added. See [the change guide](foghouse-fork.md) for purpose and implementation maps.
 
+This historical inventory is not the current tree. The subsequent [Aurboda branding restoration](branding.md) removes the custom logo and branding module/style, replaces the branding guide, and restores the original presentation while preserving the functional additions.
+
 | Status | File | Added lines | Removed lines |
 | --- | --- | ---: | ---: |
 | M | `.dockerignore` | 4 | 0 |
