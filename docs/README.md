@@ -7,6 +7,7 @@ For coding work, start with root [AGENTS.md](../AGENTS.md) and [AI onboarding](a
 | Need | Read |
 | --- | --- |
 | Architecture, ownership, APIs and storage | [Backend map](ai/backend-architecture.md), [data storage](data-storage.md), [MCP](mcp-server.md) |
+| Basic setup and optional one-time Kanban discovery | [Guided setup](onboarding.md), [optional Kanban onboarding](optional-kanban-onboarding.md) |
 | User menu choices and automatic page discovery | [Feature Control](feature-control.md) |
 | UI navigation and implemented feature status | [Frontend/feature map](ai/frontend-and-features.md), [web theme](web-theme.md), [Android hybrid architecture](android-app.md) |
 | Commands, verified development history and deployment | [History and operations](ai/history-and-operations.md), [Docker](docker.md) |

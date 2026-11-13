@@ -5,12 +5,10 @@ import type { Queryable } from '../db/pool.ts'
 import { withUserTransaction } from '../db/connection.ts'
 import { httpError } from '../http-error.ts'
 import { checkVersion, recordVersion, stampUpdate, taskWorkflowStatus } from './native-tasks-store.ts'
+import { defaultTaskColumns } from './task-board-defaults.ts'
 
-export const defaultTaskColumns: spec.TaskBoardColumn[] = [
-  { id: 'todo', title: 'To do', status: 'todo', color: '#64748b', wip_limit: null },
-  { id: 'in_progress', title: 'In progress', status: 'in_progress', color: '#3b82f6', wip_limit: null },
-  { id: 'done', title: 'Done', status: 'done', color: '#22c55e', wip_limit: null },
-]
+export { defaultTaskColumns } from './task-board-defaults.ts'
+
 export async function lockTaskBoard(tx: Queryable): Promise<spec.TaskBoardSettings> {
   await tx.query('INSERT INTO task_board_settings (id, columns) VALUES (1,$1) ON CONFLICT DO NOTHING', [
     JSON.stringify(defaultTaskColumns),

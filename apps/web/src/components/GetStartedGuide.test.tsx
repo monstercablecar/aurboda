@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { advanceSessionGeneration } from '../state/sessionBoundary'
 import { GetStartedGuide } from './GetStartedGuide'
+import { onboardingSteps } from './onboarding-model'
+import { OnboardingFlow } from './OnboardingFlow'
 import { OnboardingSettings } from './OnboardingSettings'
 
 const api = vi.hoisted(() => ({
@@ -183,6 +185,7 @@ it('keeps the completion summary until explicitly closed and supports review wit
   expect(root.textContent).toContain('1 complete · 12 skipped · 0 remaining')
   expect(root.querySelector('.celebration-onboarding-finish')).not.toBeNull()
   expect(root.textContent).toContain('Your workspace, your way.')
+  expect(root.querySelectorAll('[aria-label="Optional next steps"]')).toHaveLength(1)
   act(() => render(null, root))
   await mount(<GetStartedGuide forceReview />)
   expect(root.textContent).toContain('1 complete · 12 skipped · 0 remaining')
@@ -384,4 +387,79 @@ it('skips feature selection without altering menu preferences', async () => {
     onboarding_progress: { feature_control: 'skipped' },
   })
   expect(settings.hidden_pages).toEqual(['/cpap'])
+})
+
+it.each([
+  { hiddenPages: [], destination: '/goals?view=board', hidden: false },
+  { hiddenPages: ['/goals'], destination: '/settings', hidden: true },
+  { hiddenPages: ['/goals/?view=board', '/future-page'], destination: '/settings', hidden: true },
+  { hiddenPages: ['/future-page'], destination: '/goals?view=board', hidden: false },
+])(
+  'offers optional Tasks guidance using current visibility: $hiddenPages',
+  async ({ hiddenPages, destination, hidden }) => {
+    settings.hidden_pages = hiddenPages
+    const before = structuredClone(settings)
+    await mount()
+    expect(root.querySelector('[aria-label="Optional next steps"]')).toBeNull()
+    await click('Explore your workspace')
+    const handoff = root.querySelector('[aria-label="Optional next steps"]')!
+    expect(handoff.textContent).toContain('optional onboarding cards')
+    expect(handoff.textContent).toContain('delete anything you don’t need')
+    expect(handoff.querySelector('a')?.getAttribute('href')).toBe(destination)
+    expect(handoff.textContent?.includes('enable Tasks')).toBe(hidden)
+    expect(api.updateUserSettings).not.toHaveBeenCalled()
+    expect(settings).toEqual(before)
+  },
+)
+
+it('does not offer a Tasks link until settings confirm visibility', async () => {
+  let resolveSettings!: (value: unknown) => void
+  settings.hidden_pages = ['/goals']
+  api.fetchUserSettings.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveSettings = resolve
+      }),
+  )
+  await mount()
+  expect(root.querySelector('[aria-label="Optional next steps"]')).toBeNull()
+  await act(async () => resolveSettings(settings))
+  await flush()
+  await click('Explore your workspace')
+  expect(root.querySelector('[aria-label="Optional next steps"] a')?.getAttribute('href')).toBe('/settings')
+  expect(api.updateUserSettings).not.toHaveBeenCalled()
+})
+
+it('does not replay a dismissed guide to announce optional Tasks cards', async () => {
+  settings.onboarding_dismissed_at = '2026-11-01T00:00:00Z'
+  settings.hidden_pages = ['/goals', '/unknown-page']
+  await mount()
+  expect(root.querySelector('.onboarding-flow')).toBeNull()
+  expect(api.updateUserSettings).not.toHaveBeenCalled()
+  expect(settings.hidden_pages).toEqual(['/goals', '/unknown-page'])
+})
+
+it.each([false, true])('supports optional handoff navigation in previews (hidden=%s)', async (hidden) => {
+  const navigate = vi.fn()
+  await mount(
+    <OnboardingFlow
+      steps={onboardingSteps()}
+      chapter={2}
+      selectedId="treatments"
+      hiddenPages={hidden ? ['/goals'] : []}
+      onChapter={vi.fn()}
+      onSelect={vi.fn()}
+      onStatus={vi.fn()}
+      onHide={vi.fn()}
+      onCopyUrl={vi.fn()}
+      onNavigate={navigate}
+    />,
+  )
+  const link = root.querySelector<HTMLAnchorElement>('[aria-label="Optional next steps"] a')!
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+  await act(async () => {
+    link.dispatchEvent(event)
+  })
+  expect(event.defaultPrevented).toBe(true)
+  expect(navigate).toHaveBeenCalledWith(hidden ? '/settings' : '/goals?view=board')
 })

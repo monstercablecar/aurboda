@@ -67,7 +67,7 @@ export type TaskBoardColumn = z.infer<typeof taskBoardColumnSchema>
 const boardColumns = z
   .array(taskBoardColumnSchema)
   .min(3)
-  .max(20)
+  .max(21)
   .refine(
     (columns) =>
       new Set(columns.map((c) => c.id)).size === columns.length &&
