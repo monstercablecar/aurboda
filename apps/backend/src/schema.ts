@@ -1,4 +1,6 @@
-import { nativeTaskTables } from './schema/native-tasks.ts'
+import { createHash } from 'node:crypto'
+
+import { activitiesTables } from './schema/activities.ts'
 /**
  * Per-domain table SQL lives in `schema/`; this file assembles the full
  * `createTableStatements` map and the dependency-respecting
@@ -6,15 +8,13 @@ import { nativeTaskTables } from './schema/native-tasks.ts'
  *
  * See docs/data-storage.md for design decisions and data flow documentation.
  */
-
-import { createHash } from 'node:crypto'
-import { peopleTables } from './schema/people.ts'
-
-import { activitiesTables } from './schema/activities.ts'
 import { activityFeaturesTables } from './schema/activity-features.ts'
+import { journalTables } from './schema/journal.ts'
 import { locationsTables } from './schema/locations.ts'
 import { mealsTables } from './schema/meals.ts'
 import { metricsTables } from './schema/metrics.ts'
+import { nativeTaskTables } from './schema/native-tasks.ts'
+import { peopleTables } from './schema/people.ts'
 import { pharmacologyTables } from './schema/pharmacology.ts'
 import { productivityTables } from './schema/productivity.ts'
 import { reportsTables } from './schema/reports.ts'
@@ -52,6 +52,7 @@ export const SCHEMA_VERSION = 1
  * Assembled from per-domain SQL modules under `schema/`.
  */
 export const createTableStatements: Record<string, string> = {
+  ...journalTables,
   ...peopleTables,
   ...activitiesTables,
   ...activityFeaturesTables,
@@ -79,6 +80,7 @@ export const createTableStatements: Record<string, string> = {
  *  - activities before activity_tracks, routes, activity_routes (FK)
  */
 export const tableCreationOrder = [
+  ...Object.keys(journalTables),
   ...Object.keys(nativeTaskTables),
   ...Object.keys(peopleTables),
   'browser_push_subscriptions',

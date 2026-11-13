@@ -215,3 +215,33 @@ export type JournalAttachmentResponse = z.infer<typeof journalAttachmentResponse
 export type JournalRevisionsResponse = z.infer<typeof journalRevisionsResponseSchema>
 export type JournalCatalogResponse = z.infer<typeof journalCatalogResponseSchema>
 export type JournalSuccessResponse = z.infer<typeof journalSuccessResponseSchema>
+
+/** Keep MCP messages bounded; full 20 MiB originals use authenticated REST multipart/binary. */
+export const journalMcpAttachmentBytes = 1024 * 1024
+export const journalAttachmentBase64Schema = z
+  .string()
+  .min(4)
+  .max(4 * Math.ceil(journalMcpAttachmentBytes / 3))
+  .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)
+export const createJournalAttachmentBodySchema = z
+  .object({
+    entry_id: id,
+    filename: z.string().min(1).max(200),
+    mime_type: z.string().min(1).max(100),
+    prompt_id: z.string().min(1).max(200).optional(),
+    data_base64: journalAttachmentBase64Schema,
+  })
+  .meta({
+    id: 'CreateJournalAttachmentBody',
+    description:
+      'MCP attachment upload capped at 1 MiB decoded bytes. Larger files use REST multipart, up to 20 MiB.',
+  })
+export const journalAttachmentBytesResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: journalAttachmentSchema,
+    data_base64: journalAttachmentBase64Schema,
+  })
+  .meta({ id: 'JournalAttachmentBytesResponse' })
+export type CreateJournalAttachmentBody = z.infer<typeof createJournalAttachmentBodySchema>
+export type JournalAttachmentBytesResponse = z.infer<typeof journalAttachmentBytesResponseSchema>

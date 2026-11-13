@@ -1,4 +1,3 @@
-import { createNativeTasksRouter } from '../routes/native-tasks-router.ts'
 /**
  * Mounts the per-domain REST routers under the Express app. Each router lives
  * in `routes/` and is instantiated with the auth middleware (and any service
@@ -74,10 +73,12 @@ import { createFeedRouter, type FeedDeliver } from '../routes/feed-router.ts'
 import { createFoodItemsRouter } from '../routes/food-items-router.ts'
 import { createIconsRouter } from '../routes/icons-router.ts'
 import { createImportsRouter } from '../routes/imports-router.ts'
+import { createJournalRouter } from '../routes/journal-router.ts'
 import { createLocationsRouter } from '../routes/locations-router.ts'
 import { createMealsRouter } from '../routes/meals-router.ts'
 import { createMediaRouter } from '../routes/media-router.ts'
 import { createMetricsRouter } from '../routes/metrics-router.ts'
+import { createNativeTasksRouter } from '../routes/native-tasks-router.ts'
 import { createNotesRouter } from '../routes/notes-router.ts'
 import { createNutrientRecommendationsRouter } from '../routes/nutrient-recommendations-router.ts'
 import { createOEmbedRouter } from '../routes/oembed-router.ts'
@@ -250,6 +251,7 @@ export const mountRestRouters = ({
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))
   httpd.use('/resources', createResourcesRouter(authMiddleware, centralDb, apiBaseUrl))
+  httpd.use('/journal', createJournalRouter(authMiddleware))
   httpd.use('/work', createWorkRouter(authMiddleware, activityNotifier))
   httpd.use('/people', createPeopleRouter(authMiddleware))
   httpd.use('/tasks', createNativeTasksRouter(authMiddleware))

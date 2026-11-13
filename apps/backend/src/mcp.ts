@@ -1,4 +1,3 @@
-import { registerNativeTasksTools } from './mcp/native-tasks-tools.ts'
 /**
  * Each request creates a fresh McpServer + transport pair. No session tracking
  * is needed since the server only exposes tools (no resources, subscriptions,
@@ -57,9 +56,11 @@ import { registerFeedImageTools } from './mcp/feed-image-tools.ts'
 import { registerFeedTools } from './mcp/feed-tools.ts'
 import { registerFoodItemTools } from './mcp/food-item-tools.ts'
 import { registerImportTools } from './mcp/import-tools.ts'
+import { registerJournalTools } from './mcp/journal-tools.ts'
 import { registerLocationTools } from './mcp/location-tools.ts'
 import { registerMealTools } from './mcp/meal-tools.ts'
 import { registerMetricTools } from './mcp/metric-tools.ts'
+import { registerNativeTasksTools } from './mcp/native-tasks-tools.ts'
 import { registerNoteTools } from './mcp/note-tools.ts'
 import { registerNutrientRecommendationTools } from './mcp/nutrient-recommendation-tools.ts'
 import { registerPeopleTools } from './mcp/people-tools.ts'
@@ -198,6 +199,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerTrainingLoadTools(server, user)
   registerTrendTools(server, user)
   registerChartTools(server, user)
+  registerJournalTools(server, user)
   registerWorkTools(server, user, deps.onActivityMutated)
   registerPeopleTools(server, user)
   registerNativeTasksTools(server, user)

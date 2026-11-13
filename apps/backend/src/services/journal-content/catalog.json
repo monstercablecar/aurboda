@@ -1,0 +1,2033 @@
+[
+  {
+    "id": "who",
+    "version": "1.0.0",
+    "title": "Doing What Matters — stress companion",
+    "description": "Make space around a difficult moment and choose one small action that matters.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Doing What Matters in Times of Stress: An Illustrated Guide",
+      "author": "World Health Organization (2020)",
+      "url": "https://www.who.int/publications/i/item/9789240003927",
+      "license": "CC BY-NC-SA 3.0 IGO",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/igo/",
+      "adaptation": "Aurboda-authored stress-reflection companion. The publication overview was reviewed; the full PDF could not be retrieved. This is not the full WHO guide or a validated intervention.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "WHO logo, illustrations, audio and third-party material excluded. WHO does not endorse this adaptation. Noncommercial use and ShareAlike terms apply."
+    },
+    "sections": [
+      {
+        "id": "arrive",
+        "title": "Arrive in the present",
+        "introduction": "Choose a manageable moment. You can skip body-focused attention and use a neutral object instead.",
+        "prompts": [
+          {
+            "id": "who-surroundings",
+            "label": "Look around slowly. Which three ordinary details tell you where you are right now?",
+            "optional": true
+          },
+          {
+            "id": "who-contact",
+            "label": "What steady point of contact or nearby object can you notice without needing to change anything?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "unhook",
+        "title": "Loosen a thought’s grip",
+        "introduction": "Write about a thought as an event in your mind, not an instruction you must obey.",
+        "prompts": [
+          {
+            "id": "who-thought",
+            "label": "What sentence keeps pulling your attention away from what you want to do?",
+            "optional": true
+          },
+          {
+            "id": "who-distance",
+            "label": "Rewrite it as something your mind is saying. What options become visible when it is a thought rather than a command?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "direction",
+        "title": "Choose a direction",
+        "introduction": "A useful action can be small and still leave an uncomfortable feeling present.",
+        "prompts": [
+          {
+            "id": "who-value",
+            "label": "In this situation, what quality would you like your actions to express?",
+            "optional": true
+          },
+          {
+            "id": "who-action",
+            "label": "What is one action lasting a few minutes that would express that quality?",
+            "optional": true
+          },
+          {
+            "id": "who-kindness",
+            "label": "What kind, believable sentence could accompany you while you try it?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "year",
+    "version": "1.0.0",
+    "title": "YearCompass — look back, look ahead",
+    "description": "Close a chapter and choose what deserves space in the next one.",
+    "category": "life_reflection",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "YearCompass",
+      "author": "YearCompass",
+      "url": "https://yearcompass.com/en/",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored short retrospective and planning companion to YearCompass; not the original booklet. Public community-content licensing guide reviewed.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "look-back",
+        "title": "Look back with evidence",
+        "introduction": "Choose a year or another clearly bounded chapter. Ordinary moments count.",
+        "prompts": [
+          {
+            "id": "year-chapter",
+            "label": "What dates or events mark the beginning and end of this chapter?",
+            "optional": true
+          },
+          {
+            "id": "year-moments",
+            "label": "Name three moments you would put in its scrapbook and explain why.",
+            "optional": true
+          },
+          {
+            "id": "year-surprise",
+            "label": "What turned out differently from your expectations, and what did you learn?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "carry",
+        "title": "Carry and release",
+        "introduction": "You do not have to make every unfinished thing into a new obligation.",
+        "prompts": [
+          {
+            "id": "year-keep",
+            "label": "Which relationship, practice or discovery is worth carrying forward?",
+            "optional": true
+          },
+          {
+            "id": "year-release",
+            "label": "Which commitment or expectation can end here? What loose end actually needs attention?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "ahead",
+        "title": "Make room ahead",
+        "introduction": "Choose a direction and a first experiment, not a perfect future self.",
+        "prompts": [
+          {
+            "id": "year-space",
+            "label": "What would you like more room for, and what will take less room to make that possible?",
+            "optional": true
+          },
+          {
+            "id": "year-experiment",
+            "label": "Describe a small experiment for the next month and the evidence you will review.",
+            "optional": true
+          },
+          {
+            "id": "year-letter",
+            "label": "Write a short note to your future self about what you hope they remember.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "heart",
+    "version": "1.0.0",
+    "title": "Heart of Resilience — companion reflection",
+    "description": "Explore a protective pattern and the choices it leaves available.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "The Heart of Resilience Companion Journal",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/the-heart-of-resilience-companion-journal/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "pattern",
+        "title": "Notice the pattern",
+        "introduction": "Use an everyday difficulty rather than your hardest experience.",
+        "prompts": [
+          {
+            "id": "heart-scene",
+            "label": "Describe a moment when you went into a familiar protective reaction.",
+            "optional": true
+          },
+          {
+            "id": "heart-purpose",
+            "label": "What was that reaction trying to protect: belonging, safety, competence, or something else?",
+            "optional": true
+          },
+          {
+            "id": "heart-cost",
+            "label": "What did it help with immediately, and what did it make harder afterward?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "choice",
+        "title": "Find a little room",
+        "introduction": "Respect the need while experimenting with another response.",
+        "prompts": [
+          {
+            "id": "heart-need",
+            "label": "How could you honor the same need without repeating the whole reaction?",
+            "optional": true
+          },
+          {
+            "id": "heart-support",
+            "label": "Which person, place or reminder makes that alternative easier?",
+            "optional": true
+          },
+          {
+            "id": "heart-rehearse",
+            "label": "Write the first sentence or movement of your alternative response.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "family",
+    "version": "1.0.0",
+    "title": "Practical Skills for a More Resilient Family — companion",
+    "description": "Make one recurring family transition easier together.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Parents and caregivers; optional shared family discussion",
+    "suggested_area": "Family",
+    "source": {
+      "title": "Practical Skills for a More Resilient Family",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/practical-skills-for-a-more-resilient-family/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "routine",
+        "title": "Map a difficult transition",
+        "introduction": "Describe behavior without assigning blame or guessing motives.",
+        "prompts": [
+          {
+            "id": "family-transition",
+            "label": "Choose a transition such as leaving home or settling in. What happens just before it becomes difficult?",
+            "optional": true
+          },
+          {
+            "id": "family-needs",
+            "label": "What might each person need during that transition? Mark guesses as guesses.",
+            "optional": true
+          },
+          {
+            "id": "family-works",
+            "label": "When has this gone a little better, and what was different?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "together",
+        "title": "Try a shared adjustment",
+        "introduction": "Invite participation; do not use this page to write rules for someone else.",
+        "prompts": [
+          {
+            "id": "family-invite",
+            "label": "How will you ask each person what would help?",
+            "optional": true
+          },
+          {
+            "id": "family-change",
+            "label": "What small environmental or timing change could you try together?",
+            "optional": true
+          },
+          {
+            "id": "family-review",
+            "label": "When will you compare what worked, and how can anyone request a revision?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "center",
+    "version": "1.0.0",
+    "title": "Practical Centering Skills — personal companion",
+    "description": "Find an accessible pause before a demanding response.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Practical Centering Skills for Personal Resilience",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/practical-centering-skills-for-personal-resilience/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "signal",
+        "title": "Recognize your signal",
+        "introduction": "No special posture or breathing technique is required.",
+        "prompts": [
+          {
+            "id": "center-sign",
+            "label": "What early sign tells you that you are reacting faster than you want?",
+            "optional": true
+          },
+          {
+            "id": "center-anchor",
+            "label": "Choose a neutral sight, sound or point of contact you can notice comfortably.",
+            "optional": true
+          },
+          {
+            "id": "center-pause",
+            "label": "Try a brief pause using that anchor. Describe what you noticed without grading it.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "return",
+        "title": "Return on purpose",
+        "introduction": "A pause is preparation for a response, not an obligation to feel calm.",
+        "prompts": [
+          {
+            "id": "center-choice",
+            "label": "What needs a response now, and what can wait?",
+            "optional": true
+          },
+          {
+            "id": "center-phrase",
+            "label": "Write a short phrase you could use to ask for time.",
+            "optional": true
+          },
+          {
+            "id": "center-cue",
+            "label": "Where could you put a reminder that would be visible before the next demanding moment?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "student",
+    "version": "1.0.0",
+    "title": "We Are Resilient — student companion",
+    "description": "Think through a school-day challenge and a realistic source of support.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Students in grades 6–12; optional trusted-adult support",
+    "suggested_area": "Learning",
+    "source": {
+      "title": "We Are Resilient Student Workbook",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/we-are-resilient-student-workbook/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "school",
+        "title": "One school-day scene",
+        "introduction": "You can use a made-up example. Do not record someone else’s private information.",
+        "prompts": [
+          {
+            "id": "student-scene",
+            "label": "Describe a moment at school when joining in, speaking up or asking for help felt difficult.",
+            "optional": true
+          },
+          {
+            "id": "student-story",
+            "label": "What did you know for sure, and what were you guessing about what others thought?",
+            "optional": true
+          },
+          {
+            "id": "student-strength",
+            "label": "What did you do that showed effort, care or courage, even if the outcome was disappointing?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "support",
+        "title": "Build your next option",
+        "introduction": "You can stop or skip any prompt. A trusted adult can help with situations that feel unsafe.",
+        "prompts": [
+          {
+            "id": "student-ally",
+            "label": "Who at school or at home could listen without making the situation worse?",
+            "optional": true
+          },
+          {
+            "id": "student-ask",
+            "label": "Write the first sentence you could use to ask that person for help.",
+            "optional": true
+          },
+          {
+            "id": "student-step",
+            "label": "What is one safe, realistic next step that remains under your control?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "empathy",
+    "version": "1.0.0",
+    "title": "Empathizing — family companion",
+    "description": "Practice checking another person’s experience instead of assuming it.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Parents, caregivers and consenting family participants",
+    "suggested_area": "Family",
+    "source": {
+      "title": "Connecting Skill Family Activity – Empathizing",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/connecting-skill-family-activity-empathizing/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "listen",
+        "title": "Listen for their meaning",
+        "introduction": "Choose a low-stakes conversation with someone willing to take part.",
+        "prompts": [
+          {
+            "id": "empathy-account",
+            "label": "What did the other person actually say mattered to them?",
+            "optional": true
+          },
+          {
+            "id": "empathy-guess",
+            "label": "What are you inferring about their feelings, and what remains unknown?",
+            "optional": true
+          },
+          {
+            "id": "empathy-check",
+            "label": "Write a question that lets them correct your understanding.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "respond",
+        "title": "Respond without taking over",
+        "introduction": "Understanding someone does not require agreement or solving everything.",
+        "prompts": [
+          {
+            "id": "empathy-reflect",
+            "label": "Draft a brief reflection of their experience in your own words.",
+            "optional": true
+          },
+          {
+            "id": "empathy-request",
+            "label": "How could you ask whether they want listening, practical help or space?",
+            "optional": true
+          },
+          {
+            "id": "empathy-learn",
+            "label": "After checking, what did you get right and what did you revise?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "agreements",
+    "version": "1.0.0",
+    "title": "Honoring Agreements — family companion",
+    "description": "Turn a vague expectation into an agreement people can actually keep.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Parents, caregivers and consenting family participants",
+    "suggested_area": "Family",
+    "source": {
+      "title": "Collaborating Skill Family Activity – Honoring Agreements",
+      "author": "Dovetail Learning",
+      "url": "https://dovetaillearning.org/downloads/collaborating-skill-family-activity-honoring-agreements/",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "adaptation": "Aurboda-authored companion to the named Dovetail resource and its publicly described resilience themes. Resource landing page and OER license reviewed; full downloadable worksheet not inspected. Not a transcription or complete adaptation of the source. The source is recommended reading; these are independent prompts, not reconstructed author exercises.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "clarify",
+        "title": "Make the agreement explicit",
+        "introduction": "Choose one small recurring issue. Participation must be voluntary.",
+        "prompts": [
+          {
+            "id": "agreements-expectation",
+            "label": "Which expectation is currently understood differently by different people?",
+            "optional": true
+          },
+          {
+            "id": "agreements-voices",
+            "label": "What does each person say is possible, and what constraints need to be respected?",
+            "optional": true
+          },
+          {
+            "id": "agreements-terms",
+            "label": "Draft who will do what, when, and how everyone will know it is done.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "repair",
+        "title": "Plan for real life",
+        "introduction": "A missed agreement is a reason to communicate and repair, not to invent a punishment.",
+        "prompts": [
+          {
+            "id": "agreements-obstacle",
+            "label": "What is the most likely obstacle, and what reminder or resource could reduce it?",
+            "optional": true
+          },
+          {
+            "id": "agreements-renegotiate",
+            "label": "How will someone signal early that they cannot keep the agreement?",
+            "optional": true
+          },
+          {
+            "id": "agreements-repair",
+            "label": "What fair repair and review process can everyone accept?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ggsc",
+    "version": "1.0.0",
+    "title": "Family Well-Being for the Greater Good — parent companion",
+    "description": "Reflect on caregiver support, connection and contribution.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Parents and caregivers; original source aimed at parenting practitioners",
+    "suggested_area": "Family",
+    "source": {
+      "title": "Family Well-Being for the Greater Good: A science-based workbook for people supporting parents",
+      "author": "Greater Good Science Center (2025); project leads Maryam Abdullah and Megan Bander",
+      "url": "https://ggsc.berkeley.edu/who_we_serve/parents_families/parenting_professionals/family_well_being_for_the_greater_good",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored parent-facing companion on caregiver support and community. Original workbook is for parenting practitioners. Public overview and indexed license notice reviewed; full 27 MB PDF was not inspected. No claim to reproduce its lessons or evidence base.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "caregiver",
+        "title": "Include the caregiver",
+        "introduction": "The source serves parenting practitioners. These original prompts are for a parent or caregiver’s own reflection.",
+        "prompts": [
+          {
+            "id": "ggsc-load",
+            "label": "What invisible work are you carrying that someone else may not notice?",
+            "optional": true
+          },
+          {
+            "id": "ggsc-nourish",
+            "label": "Recall a small experience that helped you feel like a person beyond your caregiving role.",
+            "optional": true
+          },
+          {
+            "id": "ggsc-support",
+            "label": "What concrete kind of support would make this week more workable?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "community",
+        "title": "Connect outward",
+        "introduction": "Choose an action that fits your available time and resources.",
+        "prompts": [
+          {
+            "id": "ggsc-network",
+            "label": "Who or what already supports your household: people, groups, places or services?",
+            "optional": true
+          },
+          {
+            "id": "ggsc-ask",
+            "label": "Draft a specific request that gives someone an easy way to say yes, no or offer an alternative.",
+            "optional": true
+          },
+          {
+            "id": "ggsc-give",
+            "label": "What small contribution could you offer freely without adding unsustainable work?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wellness",
+    "version": "1.0.0",
+    "title": "Creating a Healthier Life — wellness companion",
+    "description": "Look across eight life dimensions without turning them into a score.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Creating a Healthier Life: A Step-by-Step Guide to Wellness",
+      "author": "Substance Abuse and Mental Health Services Administration (2016)",
+      "url": "https://library.samhsa.gov/sites/default/files/sma16-4958.pdf",
+      "license": "Public domain (SAMHSA source; exclusions apply)",
+      "license_url": "https://www.govinfo.gov/app/details/GOVPUB-HE20_400-PURL-gpo119300",
+      "adaptation": "Aurboda-authored companion to the eight wellness dimensions in the official publication summary; full PDF retrieval was unavailable. New companion text is CC BY 4.0.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "Third-party copyrighted material excluded. Preserve applicable SAMHSA publication notices; this catalog does not authorize fee-based distribution of source publications. No SAMHSA endorsement."
+    },
+    "sections": [
+      {
+        "id": "landscape",
+        "title": "Look across your life",
+        "introduction": "Consider social, environmental, physical, emotional, spiritual, occupational, intellectual and financial life. Spiritual can mean meaning or purpose.",
+        "prompts": [
+          {
+            "id": "wellness-supports",
+            "label": "Which two dimensions already support you? Give a concrete example for each.",
+            "optional": true
+          },
+          {
+            "id": "wellness-pressure",
+            "label": "Which dimension feels constrained, and what outside conditions contribute?",
+            "optional": true
+          },
+          {
+            "id": "wellness-connections",
+            "label": "How does that pressure spill into another dimension?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "experiment",
+        "title": "Choose a feasible change",
+        "introduction": "You do not need to improve every dimension at once.",
+        "prompts": [
+          {
+            "id": "wellness-leverage",
+            "label": "Which small change could help more than one dimension?",
+            "optional": true
+          },
+          {
+            "id": "wellness-resource",
+            "label": "What resource, accommodation or practical help would make the change possible?",
+            "optional": true
+          },
+          {
+            "id": "wellness-review",
+            "label": "What will you try, for how long, and what observable difference would make it worth keeping?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "anger",
+    "version": "1.0.0",
+    "title": "Anger Management — cues and choices",
+    "description": "Map an anger episode and prepare a safe pause and repair.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Anger Management for Substance Use Disorder and Mental Health Clients: Participant Workbook",
+      "author": "Patrick M. Reilly, Michael S. Shopshire, Timothy C. Durazzo and Torri A. Campbell; SAMHSA (2019)",
+      "url": "https://www.govinfo.gov/content/pkg/GOVPUB-HE20_400-PURL-gpo129410/pdf/GOVPUB-HE20_400-PURL-gpo129410.pdf",
+      "license": "Public domain (SAMHSA source; exclusions apply)",
+      "license_url": "https://www.govinfo.gov/content/pkg/GOVPUB-HE20_400-PURL-gpo129410/pdf/GOVPUB-HE20_400-PURL-gpo129410.pdf",
+      "adaptation": "Aurboda short adaptation of events/cues and timeout planning (sessions 2–3), with original repair prompts. Not the complete 12-session treatment workbook. New companion text is CC BY 4.0.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "Public-domain notice excludes material taken from copyrighted sources. Reproduction or distribution of the publication for a fee requires specific written authorization from SAMHSA Office of Communications. No third-party material, anger-meter scoring, or endorsement included."
+    },
+    "sections": [
+      {
+        "id": "episode",
+        "title": "Separate event, cues and action",
+        "introduction": "Use a past, manageable event. This short reflection is not the source’s treatment program.",
+        "prompts": [
+          {
+            "id": "anger-event",
+            "label": "What happened that another observer could have seen or heard?",
+            "optional": true
+          },
+          {
+            "id": "anger-cues",
+            "label": "What early body, behavior, feeling and thought cues preceded your response?",
+            "optional": true
+          },
+          {
+            "id": "anger-effect",
+            "label": "What did you do next, and what effects did that behavior have?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "pause",
+        "title": "Prepare a timeout",
+        "introduction": "A timeout protects safety; it is not a threat or a way to prevent someone leaving.",
+        "prompts": [
+          {
+            "id": "anger-signal",
+            "label": "What early cue will tell you to pause, and what words will you use?",
+            "optional": true
+          },
+          {
+            "id": "anger-plan",
+            "label": "Where can you take a safe break, and how will you arrange a mutually acceptable time to revisit the issue?",
+            "optional": true
+          },
+          {
+            "id": "anger-repair",
+            "label": "What responsibility can you take afterward, and what respectful request can you make without blaming or intimidation?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "thought",
+    "version": "1.0.0",
+    "title": "Thought Records — companion",
+    "description": "Examine one interpretation against the available evidence.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Thought Records",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "capture",
+        "title": "Capture the moment",
+        "introduction": "Use a specific event, not a verdict about your whole life.",
+        "prompts": [
+          {
+            "id": "thought-event",
+            "label": "Describe what happened and the thought that immediately followed.",
+            "optional": true
+          },
+          {
+            "id": "thought-meaning",
+            "label": "What did that thought imply about you, another person or the future?",
+            "optional": true
+          },
+          {
+            "id": "thought-impact",
+            "label": "What feeling or urge followed, and what did you do?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "examine",
+        "title": "Examine the claim",
+        "introduction": "An alternative should be credible rather than artificially positive.",
+        "prompts": [
+          {
+            "id": "thought-evidence",
+            "label": "What observations support the thought, and what observations complicate it?",
+            "optional": true
+          },
+          {
+            "id": "thought-alternative",
+            "label": "Write a more complete interpretation that includes uncertainty.",
+            "optional": true
+          },
+          {
+            "id": "thought-test",
+            "label": "What small action or question could help distinguish between the interpretations?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "progress",
+    "version": "1.0.0",
+    "title": "Work in Progress — companion",
+    "description": "Make quiet progress visible without demanding a finished self.",
+    "category": "life_reflection",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Work in Progress",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "evidence",
+        "title": "Gather evidence of effort",
+        "introduction": "Look back over a meaningful period rather than rating today.",
+        "prompts": [
+          {
+            "id": "progress-attempts",
+            "label": "What have you tried that would have been harder for you in the past?",
+            "optional": true
+          },
+          {
+            "id": "progress-invisible",
+            "label": "What preparation, restraint or recovery took effort but was easy to overlook?",
+            "optional": true
+          },
+          {
+            "id": "progress-learning",
+            "label": "Which attempt taught you something even though it did not work?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "continue",
+        "title": "Choose what deserves repetition",
+        "introduction": "Progress can include changing a strategy or asking for help.",
+        "prompts": [
+          {
+            "id": "progress-conditions",
+            "label": "What conditions helped your best attempt happen?",
+            "optional": true
+          },
+          {
+            "id": "progress-credit",
+            "label": "Write a fair description of your contribution without minimizing it or exaggerating it.",
+            "optional": true
+          },
+          {
+            "id": "progress-repeat",
+            "label": "Which useful condition or action will you repeat next, and which burden can you stop carrying?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "stress",
+    "version": "1.0.0",
+    "title": "Managing Stress — companion",
+    "description": "Match a practical response to a particular source of pressure.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Managing Stress",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "map",
+        "title": "Name the pressure",
+        "introduction": "Work on one stressor; you do not need a complete inventory.",
+        "prompts": [
+          {
+            "id": "stress-demand",
+            "label": "What demand is exceeding your available time, energy or resources?",
+            "optional": true
+          },
+          {
+            "id": "stress-control",
+            "label": "Which part can you change directly, influence with help, or only respond to?",
+            "optional": true
+          },
+          {
+            "id": "stress-attempt",
+            "label": "What have you tried, and what happened afterward?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "match",
+        "title": "Match the response",
+        "introduction": "Consider changing the demand, seeking support or making recovery easier.",
+        "prompts": [
+          {
+            "id": "stress-fit",
+            "label": "Which response addresses the actual source of pressure rather than only postponing it?",
+            "optional": true
+          },
+          {
+            "id": "stress-setup",
+            "label": "What will you prepare or remove to make that response easier to use?",
+            "optional": true
+          },
+          {
+            "id": "stress-feedback",
+            "label": "After trying it, what changed in the situation or your ability to handle it?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "plan",
+    "version": "1.0.0",
+    "title": "Personal Wellbeing Plan — companion",
+    "description": "Write a usable early-support plan in your own language.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Personal Wellbeing Plan",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "recognize",
+        "title": "Recognize your patterns",
+        "introduction": "This is a personal support note, not a diagnosis or emergency plan.",
+        "prompts": [
+          {
+            "id": "plan-baseline",
+            "label": "When life is manageable, what do your ordinary routines and connections look like?",
+            "optional": true
+          },
+          {
+            "id": "plan-signals",
+            "label": "What changes usually tell you that extra support would help?",
+            "optional": true
+          },
+          {
+            "id": "plan-context",
+            "label": "Which situations tend to precede those changes?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "support",
+        "title": "Make help easier to use",
+        "introduction": "Choose actions that remain possible when your capacity is lower.",
+        "prompts": [
+          {
+            "id": "plan-first",
+            "label": "What is the smallest helpful action you can take when you notice an early signal?",
+            "optional": true
+          },
+          {
+            "id": "plan-people",
+            "label": "Who could help, and what specific help would you ask them for?",
+            "optional": true
+          },
+          {
+            "id": "plan-access",
+            "label": "Where will you keep this plan so you can find it, and when will you update it?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "balance",
+    "version": "1.0.0",
+    "title": "Creating Balance — companion",
+    "description": "Trade one draining demand for something that restores capacity.",
+    "category": "life_reflection",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Creating Balance",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "pattern",
+        "title": "Notice the imbalance",
+        "introduction": "Balance need not mean equal time for everything.",
+        "prompts": [
+          {
+            "id": "balance-drain",
+            "label": "Which type of demand has crowded out other parts of your life recently?",
+            "optional": true
+          },
+          {
+            "id": "balance-restore",
+            "label": "Which activities leave you more able to engage afterward?",
+            "optional": true
+          },
+          {
+            "id": "balance-gap",
+            "label": "What has been absent that you genuinely miss, rather than think you should do?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "trade",
+        "title": "Make a real trade",
+        "introduction": "Adding restoration without removing anything can create another obligation.",
+        "prompts": [
+          {
+            "id": "balance-reduce",
+            "label": "What will you reduce, defer or ask someone else to share?",
+            "optional": true
+          },
+          {
+            "id": "balance-protect",
+            "label": "What modest block of time or space can you protect for what is missing?",
+            "optional": true
+          },
+          {
+            "id": "balance-check",
+            "label": "What would tell you this trade improved your week, even if the week remained uneven?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "understanding",
+    "version": "1.0.0",
+    "title": "Understanding Your Own Mental Health — companion",
+    "description": "Describe personal changes and the support you want others to understand.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Understanding Your Own Mental Health",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "describe",
+        "title": "Describe, do not diagnose",
+        "introduction": "Use your own observations. Patterns can have multiple explanations.",
+        "prompts": [
+          {
+            "id": "understanding-usual",
+            "label": "What does being reasonably well look like for you in attention, connection and everyday tasks?",
+            "optional": true
+          },
+          {
+            "id": "understanding-change",
+            "label": "Which changes in those areas would you want to notice earlier?",
+            "optional": true
+          },
+          {
+            "id": "understanding-context",
+            "label": "What contextual factors could explain those changes besides a fixed trait or diagnosis?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "communicate",
+        "title": "Translate insight into support",
+        "introduction": "You decide what to share and with whom.",
+        "prompts": [
+          {
+            "id": "understanding-helpful",
+            "label": "What have other people done that felt helpful, and what responses made things harder?",
+            "optional": true
+          },
+          {
+            "id": "understanding-explain",
+            "label": "Draft a few sentences explaining one change and the support you would prefer.",
+            "optional": true
+          },
+          {
+            "id": "understanding-question",
+            "label": "What unresolved question would you want to discuss with a qualified professional or trusted support person?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kit",
+    "version": "1.0.0",
+    "title": "Emotional First Aid Kit — companion",
+    "description": "Prepare a small set of accessible comforts and supports.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Emotional First Aid Kit",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "gather",
+        "title": "Gather what is useful",
+        "introduction": "Choose familiar supports that are safe and workable for you.",
+        "prompts": [
+          {
+            "id": "kit-sensory",
+            "label": "Which ordinary object, sound or place helps you feel more settled?",
+            "optional": true
+          },
+          {
+            "id": "kit-words",
+            "label": "What believable words would you want available during a difficult moment?",
+            "optional": true
+          },
+          {
+            "id": "kit-connection",
+            "label": "Who can offer the kind of contact you find useful, and how could you ask?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "assemble",
+        "title": "Make the kit reachable",
+        "introduction": "The kit can be a note, a bag or a small set of shortcuts.",
+        "prompts": [
+          {
+            "id": "kit-location",
+            "label": "Where will these supports live so you can reach them without searching?",
+            "optional": true
+          },
+          {
+            "id": "kit-instructions",
+            "label": "Write a three-step instruction card for a moment when decisions feel difficult.",
+            "optional": true
+          },
+          {
+            "id": "kit-maintain",
+            "label": "Which item will you test first, and how will you replace something that does not help?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wall",
+    "version": "1.0.0",
+    "title": "Wall of Resilience — companion",
+    "description": "Build a picture of the supports beneath your perseverance.",
+    "category": "wellbeing",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Wall of Resilience",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "bricks",
+        "title": "Name your building blocks",
+        "introduction": "Resilience can include help, rest and changed circumstances.",
+        "prompts": [
+          {
+            "id": "wall-people",
+            "label": "Name a person or community that has supported you, and what they actually did.",
+            "optional": true
+          },
+          {
+            "id": "wall-skills",
+            "label": "Describe a skill you learned through a difficult but manageable experience.",
+            "optional": true
+          },
+          {
+            "id": "wall-resources",
+            "label": "Which practical resource or stable condition has made coping easier?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "structure",
+        "title": "Strengthen the structure",
+        "introduction": "A wall needs support and maintenance; it does not have to withstand everything alone.",
+        "prompts": [
+          {
+            "id": "wall-gap",
+            "label": "Which support is currently missing or carrying too much weight?",
+            "optional": true
+          },
+          {
+            "id": "wall-reinforce",
+            "label": "What could strengthen that area through help, practice or an environmental change?",
+            "optional": true
+          },
+          {
+            "id": "wall-remember",
+            "label": "Write a short account of getting through something that credits both your effort and the support around you.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goal",
+    "version": "1.0.0",
+    "title": "Goal Setting — companion",
+    "description": "Turn one chosen direction into a small, testable commitment.",
+    "category": "life_reflection",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Personal",
+    "source": {
+      "title": "Goal Setting Worksheets",
+      "author": "Katherine Clark / Essential Life Skills",
+      "url": "https://www.essentiallifeskills.org/self-help-worksheets.php",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored companion adapting the purpose described in the free worksheet listing; not a transcription of the PDF. Original attribution is retained here. No clinical scoring or daily tracking is imported.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "choose",
+        "title": "Choose a goal worth the cost",
+        "introduction": "Choose one goal rather than collecting aspirations.",
+        "prompts": [
+          {
+            "id": "goal-outcome",
+            "label": "What concrete outcome do you want, and why is it worth pursuing now?",
+            "optional": true
+          },
+          {
+            "id": "goal-tradeoff",
+            "label": "What time, money or attention will it require, and what are you willing to trade?",
+            "optional": true
+          },
+          {
+            "id": "goal-evidence",
+            "label": "What observable evidence would count as enough progress for this first attempt?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "start",
+        "title": "Make starting easier",
+        "introduction": "Design for your actual conditions, including interruptions.",
+        "prompts": [
+          {
+            "id": "goal-first",
+            "label": "What is the first action small enough to do in one sitting?",
+            "optional": true
+          },
+          {
+            "id": "goal-obstacle",
+            "label": "What obstacle is most likely, and what will you prepare in advance?",
+            "optional": true
+          },
+          {
+            "id": "goal-review",
+            "label": "Choose a review date. What result would tell you to continue, adjust or stop?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "character-laboratory",
+    "version": "1.0.0",
+    "title": "Character Laboratory",
+    "description": "Invent a person whose choices reveal more than their biography.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Start writing fiction",
+      "author": "Candida Clark / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of character, setting and genre; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Activity 1 from Fiction Writer’s Workshop by Josip Novakovich (1998). No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "specimen",
+        "title": "Build your character",
+        "introduction": "Invent someone rather than profiling a real acquaintance.",
+        "prompts": [
+          {
+            "id": "character-laboratory-object",
+            "label": "Give your character an object they keep despite having no practical use for it. Why do they keep it?",
+            "optional": true
+          },
+          {
+            "id": "character-laboratory-contradiction",
+            "label": "What quality do they proudly claim, and what small behavior contradicts it?",
+            "optional": true
+          },
+          {
+            "id": "character-laboratory-want",
+            "label": "What do they want during the next ten minutes, and what makes it hard to ask?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "scene",
+        "title": "Put them under pressure",
+        "introduction": "Reveal character through speech, attention and action.",
+        "prompts": [
+          {
+            "id": "character-laboratory-encounter",
+            "label": "Write a short scene where another person wants the same object or opportunity.",
+            "optional": true
+          },
+          {
+            "id": "character-laboratory-gesture",
+            "label": "Replace one explanation of personality with a gesture or choice.",
+            "optional": true
+          },
+          {
+            "id": "character-laboratory-surprise",
+            "label": "Which choice surprised you, and what possibility does it open for a later scene?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "places-with-personality",
+    "version": "1.0.0",
+    "title": "Places with Personality",
+    "description": "Build a setting that changes what a character can do.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Start writing fiction",
+      "author": "Candida Clark / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of character, setting and genre; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Activity 1 from Fiction Writer’s Workshop by Josip Novakovich (1998). No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "place",
+        "title": "Give the place habits",
+        "introduction": "Use an invented setting or transform an ordinary place you know.",
+        "prompts": [
+          {
+            "id": "places-with-personality-details",
+            "label": "Describe three details that reveal how people use this place, without naming its type.",
+            "optional": true
+          },
+          {
+            "id": "places-with-personality-rule",
+            "label": "What unwritten rule would a newcomer discover by making a mistake?",
+            "optional": true
+          },
+          {
+            "id": "places-with-personality-history",
+            "label": "What damaged, repaired or abandoned feature hints at the place’s history?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "pressure",
+        "title": "Let the setting act",
+        "introduction": "The setting can create opportunities and obstacles.",
+        "prompts": [
+          {
+            "id": "places-with-personality-arrival",
+            "label": "Write a newcomer’s arrival using only details they would notice while seeking something.",
+            "optional": true
+          },
+          {
+            "id": "places-with-personality-change",
+            "label": "Change the lighting, crowd or weather. Which available action changes?",
+            "optional": true
+          },
+          {
+            "id": "places-with-personality-voice",
+            "label": "Give the place a one-sentence complaint about its visitors.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "genre-switch",
+    "version": "1.0.0",
+    "title": "Genre Switch",
+    "description": "Tell the same small event through two different genre promises.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Start writing fiction",
+      "author": "Candida Clark / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of character, setting and genre; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Activity 1 from Fiction Writer’s Workshop by Josip Novakovich (1998). No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "seed",
+        "title": "Fix the event",
+        "introduction": "Keep the basic facts steady so the changes in telling are visible.",
+        "prompts": [
+          {
+            "id": "genre-switch-event",
+            "label": "Invent an ordinary event involving a delayed delivery, a misplaced key or an unexpected visitor.",
+            "optional": true
+          },
+          {
+            "id": "genre-switch-facts",
+            "label": "List three facts that both versions must preserve.",
+            "optional": true
+          },
+          {
+            "id": "genre-switch-genres",
+            "label": "Choose two genres and describe what readers of each would expect to feel or wonder.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "versions",
+        "title": "Change the promise",
+        "introduction": "You can write very short versions; a paragraph each is enough.",
+        "prompts": [
+          {
+            "id": "genre-switch-first",
+            "label": "Write the event in your first genre, choosing details that create its expected effect.",
+            "optional": true
+          },
+          {
+            "id": "genre-switch-second",
+            "label": "Retell it in the other genre while preserving your three facts.",
+            "optional": true
+          },
+          {
+            "id": "genre-switch-compare",
+            "label": "Which change in pacing, detail or withheld information did the most work?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "everyday-treasure-hunt",
+    "version": "1.0.0",
+    "title": "Everyday Treasure Hunt",
+    "description": "Collect overlooked details and turn one into a story seed.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Writing what you know",
+      "author": "Derek Neale / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of observation, senses and memory; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Lesley Glaister’s Memory: the True key to real imagining. No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "collect",
+        "title": "Search an ordinary patch",
+        "introduction": "A desk, window or familiar room is enough. Observe without recording strangers’ private information.",
+        "prompts": [
+          {
+            "id": "everyday-treasure-hunt-finds",
+            "label": "List five small details you usually pass over.",
+            "optional": true
+          },
+          {
+            "id": "everyday-treasure-hunt-oddity",
+            "label": "Which detail seems out of place? Describe it precisely before explaining it.",
+            "optional": true
+          },
+          {
+            "id": "everyday-treasure-hunt-possibilities",
+            "label": "Invent three different explanations for that oddity.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "make",
+        "title": "Choose and transform",
+        "introduction": "Observation supplies raw material; invention can take it somewhere else.",
+        "prompts": [
+          {
+            "id": "everyday-treasure-hunt-keeper",
+            "label": "Pick one detail and describe it using a comparison you have never used before.",
+            "optional": true
+          },
+          {
+            "id": "everyday-treasure-hunt-scene",
+            "label": "Write a short scene in which that detail matters to someone.",
+            "optional": true
+          },
+          {
+            "id": "everyday-treasure-hunt-return",
+            "label": "What would you look for differently on a second visit to the same patch?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "five-senses-explorer",
+    "version": "1.0.0",
+    "title": "Five-Senses Explorer",
+    "description": "Explore how sensory choices change a description.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Writing what you know",
+      "author": "Derek Neale / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of observation, senses and memory; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Lesley Glaister’s Memory: the True key to real imagining. No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "notice",
+        "title": "Collect impressions",
+        "introduction": "Use the senses available to you. Never taste unknown objects; imagined or remembered impressions are fine.",
+        "prompts": [
+          {
+            "id": "five-senses-explorer-inventory",
+            "label": "Choose a familiar place and collect impressions through sight, sound, touch, smell or taste as available.",
+            "optional": true
+          },
+          {
+            "id": "five-senses-explorer-dominant",
+            "label": "Which impression dominates your memory of that place?",
+            "optional": true
+          },
+          {
+            "id": "five-senses-explorer-neglected",
+            "label": "What overlooked impression could make the place more specific?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "compose",
+        "title": "Choose a sensory route",
+        "introduction": "You do not need to include every sense in the finished passage.",
+        "prompts": [
+          {
+            "id": "five-senses-explorer-without-sight",
+            "label": "Describe the place without relying on visual detail.",
+            "optional": true
+          },
+          {
+            "id": "five-senses-explorer-perspective",
+            "label": "Describe it again for someone who has been waiting there for an hour.",
+            "optional": true
+          },
+          {
+            "id": "five-senses-explorer-selection",
+            "label": "Which two details carry the most atmosphere, and which can you remove?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "memory-postcards",
+    "version": "1.0.0",
+    "title": "Memory Postcards",
+    "description": "Turn an ordinary memory into a brief, deliberately shaped scene.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Writing what you know",
+      "author": "Derek Neale / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored creative mini-workbook inspired by the course themes of observation, senses and memory; a new exercise title, not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party material and images excluded, especially Lesley Glaister’s Memory: the True key to real imagining. No source literary passage reproduced."
+    },
+    "sections": [
+      {
+        "id": "retrieve",
+        "title": "Choose a postcard-sized memory",
+        "introduction": "Choose an easy memory or invent one. You do not need to revisit distressing experiences.",
+        "prompts": [
+          {
+            "id": "memory-postcards-moment",
+            "label": "Recall a small moment in a kitchen, journey, garden or other ordinary setting.",
+            "optional": true
+          },
+          {
+            "id": "memory-postcards-detail",
+            "label": "Which detail feels vivid, and which parts are uncertain?",
+            "optional": true
+          },
+          {
+            "id": "memory-postcards-recipient",
+            "label": "Who is the imagined recipient of this postcard, and what would they need explained?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "shape",
+        "title": "Make a small narrative",
+        "introduction": "Memory and invention can coexist if you mark the distinction for yourself.",
+        "prompts": [
+          {
+            "id": "memory-postcards-postcard",
+            "label": "Write a short postcard that gives the moment a beginning and an ending.",
+            "optional": true
+          },
+          {
+            "id": "memory-postcards-turn",
+            "label": "Rewrite the ending so one earlier detail takes on a different meaning.",
+            "optional": true
+          },
+          {
+            "id": "memory-postcards-boundary",
+            "label": "Which details came from memory, and which did you invent to shape the scene?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "poetry-playground",
+    "version": "1.0.0",
+    "title": "Poetry Playground",
+    "description": "Play with sound, line breaks and surprising comparisons using your own words.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "What is poetry?",
+      "author": "Eva Solzman (as credited in course acknowledgements) / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/literature/what-poetry/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored playful companion exploring poetic choices and invented speakers. Title and prompts are new; not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party poems, excerpts, readings and images listed in the course acknowledgements excluded. Use only your own lines; no imitation of a named living poet is required."
+    },
+    "sections": [
+      {
+        "id": "materials",
+        "title": "Gather language",
+        "introduction": "No source poem is needed. Ordinary objects are good starting points.",
+        "prompts": [
+          {
+            "id": "poetry-playground-object",
+            "label": "Choose a commonplace object and list five precise words associated with it.",
+            "optional": true
+          },
+          {
+            "id": "poetry-playground-sound",
+            "label": "Make a short phrase in which repeated sounds suit or amusingly contradict that object.",
+            "optional": true
+          },
+          {
+            "id": "poetry-playground-comparison",
+            "label": "Invent a surprising comparison and one concrete detail that makes it work.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "play",
+        "title": "Try the lines aloud",
+        "introduction": "There is no required form or correct interpretation.",
+        "prompts": [
+          {
+            "id": "poetry-playground-draft",
+            "label": "Write six short lines using your object, phrase and comparison.",
+            "optional": true
+          },
+          {
+            "id": "poetry-playground-breaks",
+            "label": "Move two line breaks. What becomes emphasized, delayed or ambiguous?",
+            "optional": true
+          },
+          {
+            "id": "poetry-playground-revision",
+            "label": "Read it aloud or silently for rhythm. Remove one weak word and choose a title that adds something new.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "borrow-another-voice",
+    "version": "1.0.0",
+    "title": "Borrow Another Voice",
+    "description": "Create an invented speaker with a perspective unlike your own.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "What is poetry?",
+      "author": "Eva Solzman (as credited in course acknowledgements) / The Open University",
+      "url": "https://www.open.edu/openlearn/history-the-arts/literature/what-poetry/content-section-0",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "adaptation": "Aurboda-authored playful companion exploring poetic choices and invented speakers. Title and prompts are new; not a separately published OpenLearn workbook.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "All third-party poems, excerpts, readings and images listed in the course acknowledgements excluded. Use only your own lines; no imitation of a named living poet is required."
+    },
+    "sections": [
+      {
+        "id": "speaker",
+        "title": "Invent the speaker",
+        "introduction": "Borrow a viewpoint, not another author’s lines or a real person’s private experience.",
+        "prompts": [
+          {
+            "id": "borrow-another-voice-voice",
+            "label": "Choose a fictional speaker: an elevator, a patient moon, a retired map or your own invention.",
+            "optional": true
+          },
+          {
+            "id": "borrow-another-voice-knowledge",
+            "label": "What does this speaker notice that a human observer would miss?",
+            "optional": true
+          },
+          {
+            "id": "borrow-another-voice-blindspot",
+            "label": "What does the speaker confidently misunderstand?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "monologue",
+        "title": "Let the speaker speak",
+        "introduction": "A distinctive voice comes from attention and attitude as well as vocabulary.",
+        "prompts": [
+          {
+            "id": "borrow-another-voice-address",
+            "label": "Write a short address from the speaker to someone who never listens.",
+            "optional": true
+          },
+          {
+            "id": "borrow-another-voice-turn",
+            "label": "Let the speaker accidentally reveal a wish they meant to hide.",
+            "optional": true
+          },
+          {
+            "id": "borrow-another-voice-revise",
+            "label": "Which phrase sounds too much like your ordinary voice? Replace it with something this speaker would choose.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pocket-nature-explorer",
+    "version": "1.0.0",
+    "title": "Pocket Nature Explorer",
+    "description": "Make a small field note that separates observation from explanation.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Nature Journaling and Field Notetaking",
+      "author": "Barbra Sobhani, University of Colorado Boulder / SERC",
+      "url": "https://oai.serc.carleton.edu/details/files/516925.html",
+      "license": "CC BY-NC-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "adaptation": "Aurboda-authored field-observation companion inspired by the named workshop resource; file metadata and reuse terms reviewed, not the full slide deck.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "No source illustrations, third-party quotations, logos, or assessment scores are included."
+    },
+    "sections": [
+      {
+        "id": "field",
+        "title": "Choose a tiny field site",
+        "introduction": "A window view, houseplant or accessible outdoor spot works. Observe without disturbing wildlife or collecting unknown plants.",
+        "prompts": [
+          {
+            "id": "pocket-nature-explorer-context",
+            "label": "Record the place, approximate time and conditions that might affect what you see.",
+            "optional": true
+          },
+          {
+            "id": "pocket-nature-explorer-observe",
+            "label": "Describe one small feature in enough detail that you could recognize it again.",
+            "optional": true
+          },
+          {
+            "id": "pocket-nature-explorer-sketch",
+            "label": "Make a sketch in words: note shapes, relative sizes, textures and positions.",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "wonder",
+        "title": "Ask and revisit",
+        "introduction": "An unanswered question is a useful outcome.",
+        "prompts": [
+          {
+            "id": "pocket-nature-explorer-question",
+            "label": "What question did close observation raise?",
+            "optional": true
+          },
+          {
+            "id": "pocket-nature-explorer-hypotheses",
+            "label": "Offer two possible explanations and distinguish them from what you directly observed.",
+            "optional": true
+          },
+          {
+            "id": "pocket-nature-explorer-return",
+            "label": "What would you compare on a return visit, and what change would surprise you?",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "writing-adventure",
+    "version": "1.0.0",
+    "title": "Writing Adventure Workbook — original companion",
+    "description": "Take an invented story from a spark to a changed ending; original prompts with recommended reading.",
+    "category": "creative_play",
+    "format": "mini_workbook",
+    "audience": "Adults; self-guided reflection",
+    "suggested_area": "Creative",
+    "source": {
+      "title": "Writing Exercises Workbook",
+      "author": "Charlie Forêt",
+      "url": "https://charlieforet.com/blog/writing-exercises-workbook",
+      "license": "CC BY-NC 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "adaptation": "Original Aurboda companion prompts, not copied or adapted from the inaccessible full workbook. The public page states CC BY-NC 4.0; downloading may require free membership. This independently usable companion does not require membership.",
+      "reviewed_at": "2026-11-13",
+      "exclusions": "Full workbook not inspected or reproduced. No claim of complete source coverage; no account access or third-party content included."
+    },
+    "sections": [
+      {
+        "id": "departure",
+        "title": "Create the departure",
+        "introduction": "These are original Aurboda prompts. The recommended Charlie Forêt workbook is separate and was not inspected.",
+        "prompts": [
+          {
+            "id": "writing-adventure-traveler",
+            "label": "Invent a traveler who is good at something surprisingly unhelpful for their journey.",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-mission",
+            "label": "What must they deliver, recover or decide before sunset?",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-cost",
+            "label": "What comfortable thing must they leave behind to begin?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "detour",
+        "title": "Introduce a detour",
+        "introduction": "Make the obstacle change the traveler’s options rather than merely delay them.",
+        "prompts": [
+          {
+            "id": "writing-adventure-offer",
+            "label": "Write a scene in which a stranger offers a shortcut with an awkward condition.",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-choice",
+            "label": "What choice exposes the traveler’s priorities? Show the choice through action.",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-consequence",
+            "label": "How does that choice create a new problem that skill alone cannot solve?",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "return",
+        "title": "Earn a changed ending",
+        "introduction": "A short ending can leave a larger world outside the frame.",
+        "prompts": [
+          {
+            "id": "writing-adventure-ending",
+            "label": "Write an ending in which the mission and the traveler’s original wish no longer mean the same thing.",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-echo",
+            "label": "Bring back an early object or phrase with a changed meaning.",
+            "optional": true
+          },
+          {
+            "id": "writing-adventure-next",
+            "label": "Choose one scene to expand later and leave yourself a concrete starting sentence.",
+            "optional": true
+          }
+        ]
+      }
+    ]
+  }
+]
