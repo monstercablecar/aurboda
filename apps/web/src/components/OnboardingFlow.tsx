@@ -1,6 +1,7 @@
 import type { OnboardingStepId } from '@aurboda/api-spec'
 import type { ComponentChildren } from 'preact'
 
+import { isPageVisible } from './feature-control'
 import {
   chapters,
   FOGHOUSE_URL,
@@ -19,6 +20,7 @@ export interface OnboardingFlowProps {
   copied?: boolean
   computerSetup?: ComponentChildren
   featureControl?: ComponentChildren
+  hiddenPages?: readonly string[]
   onChapter: (chapter: number) => void
   onSelect: (id: OnboardingStepId) => void
   onStatus: (id: OnboardingStepId, status: StepStatus) => void
@@ -74,6 +76,7 @@ export function OnboardingFlow(props: OnboardingFlowProps) {
         <div class="onboarding-summary">
           <h3>Your workspace, your way.</h3>
           <p>You have reviewed every step. Skipped ideas stay here whenever you want to revisit them.</p>
+          <OptionalTasksHandoff hiddenPages={props.hiddenPages} onNavigate={props.onNavigate} />
           <button type="button" disabled={busy} onClick={props.onHide}>
             Done — close guide
           </button>
@@ -127,6 +130,9 @@ export function OnboardingFlow(props: OnboardingFlowProps) {
             </li>
           ))}
       </ol>
+      {counts.remaining > 0 && chapter === chapters.length - 1 && (
+        <OptionalTasksHandoff hiddenPages={props.hiddenPages} onNavigate={props.onNavigate} />
+      )}
       <footer class="onboarding-footer">
         <button type="button" disabled={busy || chapter === 0} onClick={() => onChapter(chapter - 1)}>
           ← Back
@@ -253,4 +259,35 @@ function stepLabel(step: OnboardingStep) {
   if (step.status === 'completed') return 'Complete'
   if (step.status === 'skipped') return 'Skipped'
   return step.id === 'browser_basics' ? 'Start here' : 'Optional'
+}
+
+function OptionalTasksHandoff({
+  hiddenPages,
+  onNavigate,
+}: Pick<OnboardingFlowProps, 'hiddenPages' | 'onNavigate'>) {
+  const tasksVisible = isPageVisible('/goals', hiddenPages)
+  const href = tasksVisible ? '/goals?view=board' : '/settings'
+  return (
+    <aside class="onboarding-handoff" aria-label="Optional next steps">
+      <h3>Want to explore more?</h3>
+      <p>
+        Tasks includes optional onboarding cards to help you discover features and set up useful baseline
+        data. Move one into your workflow when you’re ready, and delete anything you don’t need.
+      </p>
+      {!tasksVisible && <p>Open Settings → Feature Control and enable Tasks to show it in your menus.</p>}
+      <a
+        href={href}
+        onClick={
+          onNavigate
+            ? (event) => {
+                event.preventDefault()
+                onNavigate(href)
+              }
+            : undefined
+        }
+      >
+        {tasksVisible ? 'Explore optional cards in Tasks' : 'Open Settings'}
+      </a>
+    </aside>
+  )
 }

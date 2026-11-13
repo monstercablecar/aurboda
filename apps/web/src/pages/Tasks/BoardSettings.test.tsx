@@ -72,3 +72,30 @@ test('background settings changes cannot replace a draft version until explicit 
   act(() => button('Save columns').click())
   expect(save).toHaveBeenLastCalledWith(expect.any(Array), fresh.updated_at)
 })
+
+test('preserves a full custom board while allowing one additional onboarding column', () => {
+  const save = vi.fn()
+  const fullBoard = {
+    ...settings,
+    columns: [
+      ...settings.columns,
+      ...Array.from({ length: 17 }, (_, index) => ({
+        ...settings.columns[0],
+        id: `custom-${index}`,
+        title: `Custom ${index + 1}`,
+      })),
+    ],
+  }
+  act(() =>
+    render(<BoardSettings settings={fullBoard} busy={false} save={save} close={vi.fn()} />, container),
+  )
+  expect(button('Add column').disabled).toBe(false)
+  act(() => button('Add column').click())
+  expect(button('Add column').disabled).toBe(true)
+  input('input[aria-label="Column 21 title"]', 'Onboarding')
+  act(() => button('Save columns').click())
+  const savedColumns = save.mock.calls[0][0]
+  expect(savedColumns).toHaveLength(21)
+  expect(savedColumns.slice(0, 20)).toEqual(fullBoard.columns)
+  expect(savedColumns[20]).toMatchObject({ title: 'Onboarding', status: 'todo' })
+})

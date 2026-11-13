@@ -119,6 +119,7 @@ describe('private task contracts', () => {
   test('registered tasks schema and OpenAPI are independent from the paused Kitchen', () => {
     expect(Object.keys(nativeTaskTables)).toEqual([
       'task_board_settings',
+      'task_onboarding_seed',
       'task_projects',
       'task_items',
       'task_items_indexes',

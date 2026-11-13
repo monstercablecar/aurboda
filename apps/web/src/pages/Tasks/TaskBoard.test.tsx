@@ -563,3 +563,29 @@ test('completion stays checked throughout a delayed write and reconciles the ser
   await wait()
   expect(element<HTMLInputElement>('[aria-label="Reopen Book a service"]').checked).toBe(true)
 })
+
+test('board descriptions render complete safe relative links without changing ordinary task actions', async () => {
+  const label = `Settings and ${'personal preferences '.repeat(12)}`
+  api.listTasks.mockImplementation(async (params) => ({
+    success: true,
+    data:
+      params.column_id === 'todo'
+        ? [
+            {
+              ...item,
+              description: `Open [${label}](/settings?section=feature-control) to choose pages.\n\nDone when you like your selection. [unsafe](javascript:alert%281%29)`,
+            },
+          ]
+        : [],
+    total: params.column_id === 'todo' ? 1 : 0,
+  }))
+  await mount()
+  const preview = element('.task-board-description')
+  const link = preview.querySelector<HTMLAnchorElement>('a[href="/settings?section=feature-control"]')
+  expect(link?.textContent).toBe(label)
+  expect(preview.textContent).not.toContain('[Settings')
+  expect(preview.querySelector('a[href^="javascript:"]')).toBeNull()
+  expect(element('[aria-label="Complete Book a service"]')).toBeTruthy()
+  expect(element('[aria-label="Move Book a service to"]')).toBeTruthy()
+  expect(api.updateTask).not.toHaveBeenCalled()
+})

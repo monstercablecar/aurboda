@@ -525,3 +525,53 @@ test('validation reveals a collapsed section containing an invalid field', async
   })
   expect(details.open).toBe(true)
 })
+
+test('ordinary task details render safe links and retain the editable source when saved', async () => {
+  const description =
+    'Open [Settings](/settings) to choose pages.\n\nDone when you are happy with your selection.'
+  api.updateTask.mockResolvedValue({})
+  const saved = vi.fn()
+  await mount(<TaskEditor item={{ ...item, description }} projects={[]} close={vi.fn()} saved={saved} />)
+  expect(container.querySelector('[aria-label="Details"] a')?.getAttribute('href')).toBe('/settings')
+  expect(container.querySelector('[aria-label="Details"]')?.textContent).not.toContain('[Settings]')
+  expect(container.querySelector('.task-description-editor textarea')).toBeNull()
+  await act(async () => {
+    Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Edit details')!
+      .click()
+  })
+  const textarea = control<HTMLTextAreaElement>('Details', 'textarea')
+  expect(textarea.value).toBe(description)
+  const edited = `${description}\n\nKeep [Resources](/resources) nearby.`
+  await act(async () => {
+    textarea.value = edited
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Read details')!
+      .click()
+  })
+  expect(container.querySelector('a[href="/resources"]')).not.toBeNull()
+  await submitEditor()
+  expect(api.updateTask).toHaveBeenCalledWith(item.id, expect.objectContaining({ description: edited }))
+  expect(saved).toHaveBeenCalledOnce()
+})
+
+test('task list descriptions keep useful links and sanitize executable content', async () => {
+  api.listTasks.mockResolvedValue({
+    success: true,
+    data: [
+      {
+        ...item,
+        description:
+          '[Tasks](/goals?view=board) and [reference](https://example.com/guide).\n\n[unsafe](javascript:alert%281%29) [data](data:text/html,test) <img src="x" onerror="alert(1)"><script>alert(1)</script>',
+      },
+    ],
+    total: 1,
+  })
+  await mount(<Tasks />)
+  await tick()
+  const description = container.querySelector('.task-description')!
+  expect(description.querySelector('a[href="/goals?view=board"]')).not.toBeNull()
+  expect(description.querySelector('a[href="https://example.com/guide"]')).not.toBeNull()
+  expect(description.querySelector('[href^="javascript:"], [href^="data:"], [onerror], script')).toBeNull()
+})

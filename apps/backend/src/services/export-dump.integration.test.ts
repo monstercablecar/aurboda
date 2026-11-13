@@ -97,6 +97,7 @@ const savedTables = [
   'journal_revisions',
   'journal_attachments',
   'task_board_settings',
+  'task_onboarding_seed',
   'task_projects',
   'task_items',
   'uploaded_icons',
@@ -636,7 +637,13 @@ describe('database export', () => {
       (await restored.query('SELECT columns FROM task_board_settings WHERE id=1')).rows[0].columns.map(
         (column: { id: string }) => column.id,
       ),
-    ).toEqual(['todo', 'in_progress', 'done', 'review'])
+    ).toEqual([
+      'todo',
+      'in_progress',
+      'done',
+      (await restored.query('SELECT column_id FROM task_onboarding_seed WHERE id=1')).rows[0].column_id,
+      'review',
+    ])
 
     expect(
       (await restored.query("SELECT payload FROM task_items WHERE payload->>'title'='Plan weekend walk'"))
@@ -651,13 +658,32 @@ describe('database export', () => {
       blocked_reason: 'Weather',
     })
     expect(
-      (await restored.query('SELECT columns FROM task_board_settings WHERE id=1')).rows[0].columns[3],
+      (await restored.query('SELECT columns FROM task_board_settings WHERE id=1')).rows[0].columns[4],
     ).toEqual({ id: 'review', title: 'Review', status: 'in_progress', color: '#123456', wip_limit: 3 })
     const owners = await restored.query<{ tableowner: string }>(
       `SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'spatial_ref_sys'`,
     )
     expect(owners.rows.map((row) => row.tableowner)).toEqual([target])
 
+    const seed = (await restored.query('SELECT * FROM task_onboarding_seed')).rows
+    expect(seed).toHaveLength(1)
+    expect(seed[0].catalog_key).toBe('optional-kanban-onboarding')
+    const seeded = await restored.query(
+      "SELECT payload->>'description' AS description FROM task_items WHERE payload->>'column_id'=$1 ORDER BY id",
+      [seed[0].column_id],
+    )
+    expect(seeded.rows.length).toBeGreaterThan(0)
+    expect(seeded.rows.every(({ description }) => description.length > 0)).toBe(true)
+    expect(seeded.rows).toEqual(
+      (
+        await pools[0].query(
+          "SELECT payload->>'description' AS description FROM task_items WHERE payload->>'column_id'=$1 ORDER BY id",
+          [seed[0].column_id],
+        )
+      ).rows,
+    )
     await expect(migrateSchemaIfNeeded(target)).resolves.toBeUndefined()
+    expect((await restored.query('SELECT * FROM task_onboarding_seed')).rows).toEqual(seed)
+    expect(await savedRows(restored)).toEqual(expected)
   }, 120_000)
 })

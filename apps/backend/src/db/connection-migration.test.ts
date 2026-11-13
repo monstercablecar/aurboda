@@ -32,6 +32,9 @@ vi.mock('pg', () => {
     if (mocks.state.failOn && sql.includes(mocks.state.failOn)) {
       throw new Error('sweep failed midway')
     }
+    if (sql === 'SELECT 1 FROM task_onboarding_seed WHERE id=1') {
+      return { rowCount: 1, rows: [{ '?column?': 1 }] }
+    }
     if (sql.includes('FROM schema_migrations WHERE name = $1')) {
       return mocks.state.fingerprintRecorded
         ? { rowCount: 1, rows: [{ '?column?': 1 }] }
