@@ -149,6 +149,7 @@ describe('getSettingsResponse', () => {
     expect(result.onboarding_dismissed_at).toBeNull()
     expect(result.onboarding_manual_done).toEqual([])
     expect(result.onboarding_progress).toEqual({})
+    expect(result.hidden_pages).toEqual([])
   })
 
   test('passes stored get-started guide state through', async () => {
@@ -350,6 +351,39 @@ describe('validateAndUpdateSettings', () => {
       'timeline_show_replies',
     ])
   })
+
+  test('stores hidden pages for the authenticated user and clears with null', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue({ hidden_pages: ['/cpap', '/future-page'] })
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({ hidden_pages: ['/cpap', '/future-page'] })
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    const result = await validateAndUpdateSettings('testuser', {
+      hidden_pages: ['/cpap', '/future-page'],
+      onboarding_progress: { feature_control: 'completed' },
+    })
+    expect(result.hidden_pages).toEqual(['/cpap', '/future-page'])
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith(
+      'testuser',
+      {
+        hidden_pages: ['/cpap', '/future-page'],
+        onboarding_progress: { feature_control: 'completed' },
+      },
+      [],
+    )
+    await validateAndUpdateSettings('testuser', { hidden_pages: null })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['hidden_pages'])
+    await validateAndUpdateSettings('testuser', { hidden_pages: [] })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', { hidden_pages: [] }, [])
+  })
+
+  test.each([['relative'], ['https://example.com'], ['//example.com'], ['/data?query'], ['/white space']])(
+    'rejects invalid hidden menu paths: %s',
+    async (path) => {
+      vi.mocked(db.upsertUserSettings).mockClear()
+      const result = await validateAndUpdateSettings('testuser', { hidden_pages: [path] })
+      expect(result.success).toBe(false)
+      expect(db.upsertUserSettings).not.toHaveBeenCalled()
+    },
+  )
 
   test('stores maf_hr and clears it with null', async () => {
     vi.mocked(db.getUserSettings).mockResolvedValue({})

@@ -18,6 +18,7 @@ export interface OnboardingFlowProps {
   error?: string
   copied?: boolean
   computerSetup?: ComponentChildren
+  featureControl?: ComponentChildren
   onChapter: (chapter: number) => void
   onSelect: (id: OnboardingStepId) => void
   onStatus: (id: OnboardingStepId, status: StepStatus) => void
@@ -115,6 +116,7 @@ export function OnboardingFlow(props: OnboardingFlowProps) {
                       {step.signal}
                     </p>
                   )}
+                  {step.id === 'feature_control' && props.featureControl}
                   {step.id === 'computer_time' && step.status === 'pending' && props.computerSetup}
                   <StepActions step={step} busy={busy} onStatus={onStatus} onNavigate={props.onNavigate} />
                   {step.manualLabel === "I've explored this" && (

@@ -12,6 +12,7 @@ import {
   pageTitleForPath,
   SHARING_LINKS,
 } from './nav-links'
+import { usePageVisibility } from './usePageVisibility'
 
 // eslint-disable-next-line complexity -- navigation component with many branches
 export function Header() {
@@ -19,6 +20,11 @@ export function Header() {
   const isLoggedIn = auth.value.token
   const brand = brandForRoute(url, Boolean(isLoggedIn))
   const isAdmin = auth.value.is_admin
+  const visible = usePageVisibility()
+  const primaryLinks = NAV_LINKS_PRIMARY.filter((link) => visible(link.href))
+  const sharingLinks = SHARING_LINKS.filter((link) => visible(link.href))
+  const secondaryLinks = NAV_LINKS_SECONDARY.filter((link) => visible(link.href))
+  const dataSourceLinks = DATA_SOURCE_LINKS.filter((link) => visible(link.path))
   const canSignup = signupMode.value === 'open'
 
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -88,28 +94,34 @@ export function Header() {
         </div>
         {isLoggedIn ? (
           <>
-            <a href="/" class={url === '/' ? 'active' : undefined} onClick={closeDrawer}>
-              Home
-            </a>
-            {NAV_LINKS_PRIMARY.filter((l) => l.href !== '/').map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                class={url === link.href ? 'active' : undefined}
-                onClick={closeDrawer}
-              >
-                {link.label}
+            {visible('/') && (
+              <a href="/" class={url === '/' ? 'active' : undefined} onClick={closeDrawer}>
+                Home
               </a>
-            ))}
-            <button
-              class={`drawer-section-toggle${sharingActive ? ' active' : ''}`}
-              onClick={() => setSharingExpandedInDrawer((v) => !v)}
-              type="button"
-            >
-              Sharing <span class="dropdown-arrow">{sharingExpandedInDrawer ? '▴' : '▾'}</span>
-            </button>
+            )}
+            {primaryLinks
+              .filter((l) => l.href !== '/')
+              .map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  class={url === link.href ? 'active' : undefined}
+                  onClick={closeDrawer}
+                >
+                  {link.label}
+                </a>
+              ))}
+            {sharingLinks.length > 0 && (
+              <button
+                class={`drawer-section-toggle${sharingActive ? ' active' : ''}`}
+                onClick={() => setSharingExpandedInDrawer((v) => !v)}
+                type="button"
+              >
+                Sharing <span class="dropdown-arrow">{sharingExpandedInDrawer ? '▴' : '▾'}</span>
+              </button>
+            )}
             {sharingExpandedInDrawer &&
-              SHARING_LINKS.map((link) => (
+              sharingLinks.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
@@ -119,7 +131,7 @@ export function Header() {
                   {link.label}
                 </a>
               ))}
-            {NAV_LINKS_SECONDARY.map((link) => (
+            {secondaryLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
@@ -129,15 +141,17 @@ export function Header() {
                 {link.label}
               </a>
             ))}
-            <button
-              class={`drawer-section-toggle${isDataSourcesActive ? ' active' : ''}`}
-              onClick={() => setDsExpandedInDrawer((v) => !v)}
-              type="button"
-            >
-              Data Sources <span class="dropdown-arrow">{dsExpandedInDrawer ? '\u25B4' : '\u25BE'}</span>
-            </button>
+            {dataSourceLinks.length > 0 && (
+              <button
+                class={`drawer-section-toggle${isDataSourcesActive ? ' active' : ''}`}
+                onClick={() => setDsExpandedInDrawer((v) => !v)}
+                type="button"
+              >
+                Data Sources <span class="dropdown-arrow">{dsExpandedInDrawer ? '\u25B4' : '\u25BE'}</span>
+              </button>
+            )}
             {dsExpandedInDrawer &&
-              DATA_SOURCE_LINKS.map((link) => (
+              dataSourceLinks.map((link) => (
                 <a
                   key={link.path}
                   href={link.path}
@@ -147,19 +161,21 @@ export function Header() {
                   {link.label}
                 </a>
               ))}
-            {isAdmin && (
+            {isAdmin && visible('/admin') && (
               <a href="/admin" class={url === '/admin' ? 'active' : undefined} onClick={closeDrawer}>
                 Admin
               </a>
             )}
             <div class="drawer-spacer" />
-            <a
-              href={HELP_LINK.href}
-              class={url === HELP_LINK.href ? 'active' : undefined}
-              onClick={closeDrawer}
-            >
-              {HELP_LINK.label}
-            </a>
+            {visible(HELP_LINK.href) && (
+              <a
+                href={HELP_LINK.href}
+                class={url === HELP_LINK.href ? 'active' : undefined}
+                onClick={closeDrawer}
+              >
+                {HELP_LINK.label}
+              </a>
+            )}
             <a
               href="/settings"
               class={url === '/settings' ? 'active user-link' : 'user-link'}

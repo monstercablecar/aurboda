@@ -18,6 +18,7 @@ import { currentSessionGeneration } from '../state/sessionBoundary'
 import { ActivityWatchInstall } from './ActivityWatchInstall'
 import { Celebration } from './Celebration'
 import { nextCelebration, type CelebrationEvent } from './celebration-catalog'
+import { FeatureControl } from './FeatureControl'
 import { onboardingCounts, onboardingSteps, FOGHOUSE_URL, type StepStatus } from './onboarding-model'
 import { OnboardingFlow } from './OnboardingFlow'
 
@@ -90,8 +91,9 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
   const settings = settingsQuery.data
   const [hidden, setHidden] = useState(false)
   const [chapter, setChapter] = useState(0)
-  const [selectedId, setSelectedId] = useState<OnboardingStepId>('browser_basics')
+  const [selectedId, setSelectedId] = useState<OnboardingStepId>('feature_control')
   const [busy, setBusy] = useState(false)
+  const [featureBusy, setFeatureBusy] = useState(false)
   const [retry, setRetry] = useState(0)
   const session = useRef(currentSessionGeneration())
   const [error, setError] = useState('')
@@ -151,7 +153,7 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
     }
   }
   useEffect(() => {
-    if (!active) return
+    if (!active || featureBusy) return
     for (const signal of signals) {
       if (!signal.query.isSuccess) continue
       const isInitial = baseline.current[signal.id] === undefined
@@ -168,6 +170,7 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
     }
   }, [
     active,
+    featureBusy,
     settings,
     health.data,
     health.isSuccess,
@@ -206,7 +209,7 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
         steps={onboardingSteps(settings.onboarding_progress, settings.onboarding_manual_done, signalCopy)}
         chapter={chapter}
         selectedId={selectedId}
-        busy={busy}
+        busy={[busy, featureBusy].some(Boolean)}
         error={
           error ||
           (signals.some((s) => s.query.isError)
@@ -230,6 +233,7 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
           setRetry((value) => value + 1)
           for (const s of signals) if (needs(s.id)) void s.query.refetch()
         }}
+        featureControl={<FeatureControl inline disabled={busy} onBusyChange={setFeatureBusy} />}
         computerSetup={<ActivityWatchInstall manualHref="/data-sources/activitywatch-desktop" />}
       />
       {celebration && <Celebration {...celebration} onDone={() => setCelebration(null)} />}

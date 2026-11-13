@@ -146,6 +146,7 @@ export const onboardingStepIds = [
   'social',
   'ask_ai',
   'browser_basics',
+  'feature_control',
   'treatments',
   'cpap',
   'mental_assessments',
@@ -177,6 +178,21 @@ export const onboardingProgressSchema = z
 
 export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>
 
+export const hiddenPagesSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^\/(?!\/)[^?#\s]*$/),
+  )
+  .max(500)
+  .meta({
+    id: 'HiddenPages',
+    description:
+      'Menu page paths hidden by this user. Unknown paths are retained for future pages; this does not restrict access or stop tracking.',
+  })
+
 export const updateSettingsInputSchema = z
   .object({
     birth_date: birthDateSchema.nullable().optional().meta({
@@ -194,6 +210,9 @@ export const updateSettingsInputSchema = z
     }),
     goals: goalsSchema.nullable().optional().meta({
       description: 'Goals (set to null to reset to defaults, empty array to clear all)',
+    }),
+    hidden_pages: hiddenPagesSchema.nullable().optional().meta({
+      description: 'Hidden menu page paths (set to null or [] to show all pages)',
     }),
     hr_zone_start: hrZoneThresholdsSchema.nullable().optional().meta({
       description: 'Custom HR zone thresholds (set to null to clear)',
@@ -311,6 +330,7 @@ export const userSettingsResponseSchema = baseResponseSchema
       .default([])
       .meta({ description: 'Garmin data types currently disabled for sync' }),
     goals: goalsSchema.meta({ description: 'User goals for tracking metrics' }),
+    hidden_pages: hiddenPagesSchema.default([]),
     hr_zone_start: hrZoneThresholdsSchema.meta({ description: 'Effective HR zone thresholds' }),
     hr_zone_start_source: hrZoneSourceSchema.default('default').meta({
       description: 'Source of HR zone thresholds',

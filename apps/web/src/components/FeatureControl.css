@@ -1,0 +1,78 @@
+.feature-control-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 0.5rem 1rem;
+}
+.feature-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border-color, #8885);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.feature-control-page {
+  flex: 1;
+  min-width: 0;
+}
+.feature-control-page small {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  margin-top: 0.3rem;
+}
+.feature-control-row input[role='switch'] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 20px;
+  background: #777;
+  cursor: pointer;
+  position: relative;
+  transition: background 120ms;
+}
+.feature-control-row input[role='switch']::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 3px;
+  left: 3px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 120ms;
+}
+.feature-control-row input[role='switch']:checked {
+  background: var(--accent-color, #357f8f);
+}
+.feature-control-row input[role='switch']:checked::after {
+  transform: translateX(16px);
+}
+.feature-control-row input[role='switch']:focus-visible {
+  outline: 3px solid var(--accent-color, #357f8f);
+  outline-offset: 3px;
+}
+.feature-control-row input[role='switch']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.feature-control-status {
+  min-height: 1.5em;
+}
+@media (hover: hover) and (pointer: fine) {
+  .feature-control-page small {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    margin-top: 0;
+  }
+  .feature-control-row:hover .feature-control-page small,
+  .feature-control-row:focus-within .feature-control-page small {
+    max-height: 8em;
+    opacity: 0.75;
+    margin-top: 0.3rem;
+  }
+}

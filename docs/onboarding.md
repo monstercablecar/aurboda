@@ -4,6 +4,10 @@ The dashboard setup guide has three chapters: Start here, Connect your data, and
 
 The browser at https://stats.foghouse.org is recommended for full dashboards, detailed history, longer questionnaires, Work, People and bigger forms. Aurboda Android is the companion for Health Connect/device integrations, background syncing and quick checks; supported features remain accessible inside its embedded browser. Public upstream APKs may still have an upstream server default. Users must set Server URL to https://stats.foghouse.org, sign in, grant Health Connect read permissions in Sync, permit background access and battery exemption, then use Sync Now. Existing saved server choices are never overwritten.
 
+## Feature selection
+
+Start here begins with “What would you like to track?” and the shared [Feature Control](feature-control.md) switch list. Choices save to the account’s existing settings; completing or skipping this step is explicit. Hidden pages can be restored in Settings. Previously dismissed guides remain dismissed. Hiding affects navigation only; it does not delete records, stop integrations, or revoke access.
+
 ## Progress and verification
 
 `onboarding_progress` is a per-step map of `completed`, `skipped` or `pending`. PATCH merges individual entries; `null` clears the map. The UI never clears progress to reopen. Explicit map entries override legacy `onboarding_manual_done` entries. Completion persists when data ages out or a provider disconnects.

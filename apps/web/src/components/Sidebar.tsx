@@ -11,6 +11,7 @@ import {
   NAV_LINKS_SECONDARY,
   SHARING_LINKS,
 } from './nav-links'
+import { usePageVisibility } from './usePageVisibility'
 import './Sidebar.css'
 
 const COLLAPSED_KEY = 'sidebar-collapsed'
@@ -21,6 +22,11 @@ export function Sidebar() {
   const isLoggedIn = auth.value.token
   const brand = brandForRoute(url, Boolean(isLoggedIn))
   const isAdmin = auth.value.is_admin
+  const visible = usePageVisibility()
+  const primaryLinks = NAV_LINKS_PRIMARY.filter((link) => visible(link.href))
+  const sharingLinks = SHARING_LINKS.filter((link) => visible(link.href))
+  const secondaryLinks = NAV_LINKS_SECONDARY.filter((link) => visible(link.href))
+  const dataSourceLinks = DATA_SOURCE_LINKS.filter((link) => visible(link.path))
   const canSignup = signupMode.value === 'open'
 
   useEffect(() => {
@@ -68,7 +74,7 @@ export function Sidebar() {
       <nav class="sidebar-nav">
         {isLoggedIn ? (
           <>
-            {NAV_LINKS_PRIMARY.map((link) => (
+            {primaryLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
@@ -80,95 +86,100 @@ export function Sidebar() {
               </a>
             ))}
 
-            {collapsed ? (
-              SHARING_LINKS.map((link) => (
+            {sharingLinks.length > 0 &&
+              (collapsed ? (
+                sharingLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    class={`sidebar-link${url === link.href ? ' active' : ''}`}
+                    title={link.label}
+                  >
+                    <span class="sidebar-icon">{link.icon}</span>
+                    <span class="sidebar-label">{link.label}</span>
+                  </a>
+                ))
+              ) : (
+                <>
+                  <button
+                    class={`sidebar-section-btn${sharingActive ? ' active' : ''}`}
+                    onClick={() => setSharingExpanded((v) => !v)}
+                    type="button"
+                  >
+                    <span class="sidebar-icon">🌐</span>
+                    <span class="sidebar-label">Sharing</span>
+                    <span class="sidebar-section-arrow">{sharingExpanded ? '▴' : '▾'}</span>
+                  </button>
+                  {sharingExpanded && (
+                    <div class="sidebar-sub-links">
+                      {sharingLinks.map((link) => (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          class={`sidebar-link${url === link.href ? ' active' : ''}`}
+                        >
+                          <span class="sidebar-icon">{link.icon}</span>
+                          <span class="sidebar-label">{link.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ))}
+
+            {secondaryLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                class={`sidebar-link${url === link.href ? ' active' : ''}`}
+                title={collapsed ? link.label : undefined}
+              >
+                <span class="sidebar-icon">{link.icon}</span>
+                <span class="sidebar-label">{link.label}</span>
+              </a>
+            ))}
+
+            {dataSourceLinks.length > 0 &&
+              (collapsed ? (
                 <a
-                  key={link.href}
-                  href={link.href}
-                  class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                  title={link.label}
-                >
-                  <span class="sidebar-icon">{link.icon}</span>
-                  <span class="sidebar-label">{link.label}</span>
-                </a>
-              ))
-            ) : (
-              <>
-                <button
-                  class={`sidebar-section-btn${sharingActive ? ' active' : ''}`}
-                  onClick={() => setSharingExpanded((v) => !v)}
-                  type="button"
-                >
-                  <span class="sidebar-icon">🌐</span>
-                  <span class="sidebar-label">Sharing</span>
-                  <span class="sidebar-section-arrow">{sharingExpanded ? '▴' : '▾'}</span>
-                </button>
-                {sharingExpanded && (
-                  <div class="sidebar-sub-links">
-                    {SHARING_LINKS.map((link) => (
-                      <a
-                        key={link.href}
-                        href={link.href}
-                        class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                      >
-                        <span class="sidebar-icon">{link.icon}</span>
-                        <span class="sidebar-label">{link.label}</span>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {NAV_LINKS_SECONDARY.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                title={collapsed ? link.label : undefined}
-              >
-                <span class="sidebar-icon">{link.icon}</span>
-                <span class="sidebar-label">{link.label}</span>
-              </a>
-            ))}
-
-            {collapsed ? (
-              <a
-                href="/data-sources"
-                class={`sidebar-link${isDataSourcesActive ? ' active' : ''}`}
-                title="Data Sources"
-              >
-                <span class="sidebar-icon">📡</span>
-                <span class="sidebar-label">Data Sources</span>
-              </a>
-            ) : (
-              <>
-                <button
-                  class={`sidebar-section-btn${isDataSourcesActive ? ' active' : ''}`}
-                  onClick={() => setDsExpanded((v) => !v)}
-                  type="button"
+                  href={
+                    dataSourceLinks.find((link) => link.path === '/data-sources')?.path ??
+                    dataSourceLinks[0].path
+                  }
+                  class={`sidebar-link${isDataSourcesActive ? ' active' : ''}`}
+                  title="Data Sources"
                 >
                   <span class="sidebar-icon">📡</span>
                   <span class="sidebar-label">Data Sources</span>
-                  <span class="sidebar-section-arrow">{dsExpanded ? '▴' : '▾'}</span>
-                </button>
-                {dsExpanded && (
-                  <div class="sidebar-sub-links">
-                    {DATA_SOURCE_LINKS.map((link) => (
-                      <a
-                        key={link.path}
-                        href={link.path}
-                        class={`sidebar-link${url === link.path ? ' active' : ''}`}
-                      >
-                        <span class="sidebar-label">{link.label}</span>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+                </a>
+              ) : (
+                <>
+                  <button
+                    class={`sidebar-section-btn${isDataSourcesActive ? ' active' : ''}`}
+                    onClick={() => setDsExpanded((v) => !v)}
+                    type="button"
+                  >
+                    <span class="sidebar-icon">📡</span>
+                    <span class="sidebar-label">Data Sources</span>
+                    <span class="sidebar-section-arrow">{dsExpanded ? '▴' : '▾'}</span>
+                  </button>
+                  {dsExpanded && (
+                    <div class="sidebar-sub-links">
+                      {dataSourceLinks.map((link) => (
+                        <a
+                          key={link.path}
+                          href={link.path}
+                          class={`sidebar-link${url === link.path ? ' active' : ''}`}
+                        >
+                          <span class="sidebar-label">{link.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ))}
 
-            {isAdmin && (
+            {isAdmin && visible('/admin') && (
               <a
                 href="/admin"
                 class={`sidebar-link${url === '/admin' ? ' active' : ''}`}
@@ -205,14 +216,16 @@ export function Sidebar() {
 
       {isLoggedIn && (
         <div class="sidebar-footer">
-          <a
-            href={HELP_LINK.href}
-            class={`sidebar-link${url === HELP_LINK.href ? ' active' : ''}`}
-            title={collapsed ? HELP_LINK.label : undefined}
-          >
-            <span class="sidebar-icon">{HELP_LINK.icon}</span>
-            <span class="sidebar-label">{HELP_LINK.label}</span>
-          </a>
+          {visible(HELP_LINK.href) && (
+            <a
+              href={HELP_LINK.href}
+              class={`sidebar-link${url === HELP_LINK.href ? ' active' : ''}`}
+              title={collapsed ? HELP_LINK.label : undefined}
+            >
+              <span class="sidebar-icon">{HELP_LINK.icon}</span>
+              <span class="sidebar-label">{HELP_LINK.label}</span>
+            </a>
+          )}
           <a
             href="/settings"
             class={`sidebar-link${url === '/settings' ? ' active' : ''}`}

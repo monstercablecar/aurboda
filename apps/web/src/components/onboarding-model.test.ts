@@ -10,7 +10,7 @@ it('keeps durable and legacy completion without live signals, with explicit over
   expect(steps.find((s) => s.id === 'wearable')?.status).toBe('completed')
   expect(steps.find((s) => s.id === 'computer_time')?.status).toBe('completed')
   expect(steps.find((s) => s.id === 'ask_ai')?.status).toBe('pending')
-  expect(onboardingCounts(steps)).toEqual({ completed: 2, skipped: 1, remaining: 9 })
+  expect(onboardingCounts(steps)).toEqual({ completed: 2, skipped: 1, remaining: 10 })
 })
 it('does not turn connected or detected status text into completion', () => {
   expect(
@@ -29,5 +29,5 @@ it('links feature tours to their actual workspaces and labels them as exploratio
     '/work',
     '/people',
   ])
-  expect(onboardingSteps().map((s) => s.id)).toHaveLength(12)
+  expect(onboardingSteps().map((s) => s.id)).toHaveLength(13)
 })
