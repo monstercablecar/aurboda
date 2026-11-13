@@ -255,8 +255,9 @@ function Editor({
                     !confirm(
                       'Changing sections will discard unsaved recordings in this section. Download or save them first, or continue anyway?',
                     )
-                  )
+                  ) {
                     return
+                  }
                   edit({ workbook: { ...workbook, current_section: s.id } })
                 }}
               >
