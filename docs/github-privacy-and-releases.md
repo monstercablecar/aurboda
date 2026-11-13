@@ -18,6 +18,8 @@ A local pattern scan inspected 2,665 distinct blobs across the initial Foghouse 
 
 The fork had no releases or release assets, one PR and no inline PR review comments at inspection. The PR body contains implementation and validation notes. Documentation and examples include contributor attribution, a local username/path and the public server hostname. Those identifiers remain public, including in commit history. No claim is made that the repository is anonymous or that all possible sensitive data can be detected automatically.
 
+The first full-history Gitleaks run flagged 13 candidates. Each was inspected at its original commit: five public assessment catalog keys, one public exercise key, five UUID fixture references, and two uses of a synthetic test signing key. `.gitleaksignore` records only those exact commit/file/rule/line fingerprints with explanations. No file, rule or broad historical baseline is excluded. The scan must pass again after these exceptions are applied.
+
 ## Live update boundary
 
 The tested application tree is the merge from PR #1, commit `b01a01c244790b52e06ef05c652f4c02e0bb9fde`. Its backend, web and Android CI passed. The server update is authorized but was not executed in the audit session: local service-manager and network-socket access were denied. Do not describe it as deployed until exact-version health checks succeed.

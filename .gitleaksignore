@@ -1,0 +1,28 @@
+# Reviewed historical false positives, November 13, 2026.
+# Each exception is an exact commit/file/rule/line fingerprint; no file or rule is disabled.
+# Public assessment catalog identifiers, not authentication keys.
+5f74a01dacae244bd1184649126c8d07936e2448:apps/web/src/pages/Assessments/catalog.ts:generic-api-key:67
+# Public assessment catalog identifiers, not authentication keys.
+5f74a01dacae244bd1184649126c8d07936e2448:apps/web/src/pages/Assessments/catalog.ts:generic-api-key:106
+# Public assessment catalog identifiers, not authentication keys.
+5f74a01dacae244bd1184649126c8d07936e2448:apps/web/src/pages/Assessments/catalog.ts:generic-api-key:135
+# Public assessment catalog identifiers, not authentication keys.
+5f74a01dacae244bd1184649126c8d07936e2448:apps/web/src/pages/Assessments/catalog.ts:generic-api-key:150
+# Public assessment catalog identifiers, not authentication keys.
+5f74a01dacae244bd1184649126c8d07936e2448:apps/web/src/pages/Assessments/catalog.ts:generic-api-key:177
+# Public exercise identifier: landmine_180_s.
+0a7665524d486b500d1a97306c0f4e1a0a21200e:apps/backend/src/catalog/exercises/exercise-catalog.json:generic-api-key:8017
+# Synthetic repeated hexadecimal test signing key; scoped to this historical finding.
+3e7002a217b180ef9202b8adf8ab299fef286c0c:apps/backend/src/routes/export-router.test.ts:generic-api-key:13
+# Synthetic repeated hexadecimal test signing key; scoped to this historical finding.
+3e7002a217b180ef9202b8adf8ab299fef286c0c:apps/backend/src/services/export-token.test.ts:generic-api-key:5
+# UUID identifying a synthetic workout fixture.
+71985a0d1320a6cc2295685b91b39d1c1378e28f:apps/backend/src/services/source-enrich-queue.test.ts:generic-api-key:14
+# UUID identifying a synthetic workout fixture.
+71985a0d1320a6cc2295685b91b39d1c1378e28f:apps/backend/src/services/source-identity.test.ts:generic-api-key:28
+# UUID identifying a tag fixture in a disposable test database.
+451737914176738eac224c9f81d1d94ca02b7089:apps/backend/src/db/tags.integration.test.ts:generic-api-key:94
+# UUID identifying a tag fixture in a disposable test database.
+451737914176738eac224c9f81d1d94ca02b7089:apps/backend/src/db/tags.integration.test.ts:generic-api-key:112
+# UUID identifying a tag fixture in a disposable test database.
+451737914176738eac224c9f81d1d94ca02b7089:apps/backend/src/db/tags.integration.test.ts:generic-api-key:405
