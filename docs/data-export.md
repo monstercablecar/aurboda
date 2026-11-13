@@ -126,3 +126,32 @@ The backend's integration test (`apps/backend/src/services/export-dump.integrati
 database with the real `pg_dump` and restores it with exactly these steps;
 `exported-shared-food.integration.test.ts` does the same with shared food items in the data and
 checks the matching against libraries that have them under the same id, under another id, or not at all.
+
+## Foghouse integration checkpoint (November 13, 2026)
+
+The SQL stream now starts with comments identifying `aurboda_export_format: private_postgresql`
+and `aurboda_export_version: 1`. These do not change the gzip filename, SQL restore commands,
+full-schema contents or referenced shared-food trailer. The schema and saved feature versions
+remain in the SQL; the format number is not a promise of compatibility with every application build.
+
+Journal storage from `feat/foghouse-journal` (`37637a5f`) was integrated during this task. All six
+Journal tables, including original audio/image BYTEA, live in the private database and are included
+by this full dump. This covers saved entries/content/dates, areas/tags/favorites/pins, personal
+areas/templates, workbook answers/progress/status and immutable prompt/version definitions, record
+links, recoverable revisions, trash and still-retained attachments. Browser-only drafts and unsaved
+recordings are excluded. Permanently removed attachment bytes are no longer recoverable from a new
+export. See [Journal integration and verification](ai/journal-data-integration.md).
+
+The existing manual SQL restore path is retained; there is no in-app Journal importer or automatic
+cross-username external-link remapping. Internal Journal UUIDs and relationships are preserved by
+SQL restore. Expanded fixtures compare all Journal tables, original audio/image bytes, workbook
+progress/versions, retained trash/revisions and tenant isolation. **The real Journal round trip has
+not run here** because no container runtime is available. Historical pre-Journal results do not
+verify these newly integrated records.
+
+Export issuance uses the authenticated account even if a request supplies another username.
+Download links are bearer capabilities for that fixed account, so protect them like the exported
+file. Disconnecting an AI connection does not recall a previously issued export link or downloaded
+file; existing links expire after ten minutes and are spent on completion (process-local limits
+above still apply). Analysis-only connectors do not receive database-dump access because dumps
+can contain integration credentials.

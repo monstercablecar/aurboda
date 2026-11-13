@@ -29,6 +29,9 @@ const operation = (
   },
 })
 export const journalPaths = {
+  '/journal/capabilities': {
+    get: operation('Discover Journal readers and media limits', j.journalCapabilitiesResponseSchema),
+  },
   '/journal/catalog': {
     get: operation('List sourced guided journal workbooks', j.journalCatalogResponseSchema),
   },
@@ -159,7 +162,8 @@ export const journalPaths = {
       ),
       responses: {
         200: {
-          description: 'Original private file bytes; no public URL or cookie authentication',
+          description:
+            'Original private file bytes; accepts the account bearer token or an authorized OAuth read token. No public URL or cookie authentication.',
           content: { 'application/octet-stream': { schema: z.string().meta({ format: 'binary' }) } },
         },
         401: { description: 'Authentication required' },

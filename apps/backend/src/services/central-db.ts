@@ -125,7 +125,11 @@ export interface OAuthClient {
   created_at: Date
 }
 
+export type OAuthScope = 'read' | 'read write'
+
 export interface OAuthAuthorizationCode {
+  /** Null/absent marks a legacy full-access grant. */
+  scope?: string | null
   code: string
   client_id: string
   username: string
@@ -137,6 +141,7 @@ export interface OAuthAuthorizationCode {
 }
 
 export interface OAuthToken {
+  scope?: string | null
   token: string
   token_type: 'access' | 'refresh'
   client_id: string
@@ -200,6 +205,11 @@ export interface CentralDb
   saveOAuthToken: (token: OAuthToken) => Promise<void>
   getOAuthToken: (token: string) => Promise<OAuthToken | null>
   revokeOAuthToken: (token: string) => Promise<boolean>
+  revokeOAuthConnection: (username: string, clientId: string) => Promise<void>
+  listOAuthConnections: (
+    username: string,
+  ) => Promise<{ client_id: string; client_name: string; scope: string | null }[]>
+  withOAuthLock: <T>(action: (db: CentralDb) => Promise<T>) => Promise<T>
   cleanupExpiredOAuth: () => Promise<void>
   /**
    * Get or create a stable random WebAuthn user handle for the given username.
@@ -469,6 +479,8 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       await client.query(CREATE_OAUTH_CLIENTS_TABLE)
       await client.query(CREATE_OAUTH_AUTHORIZATION_CODES_TABLE)
       await client.query(CREATE_OAUTH_TOKENS_TABLE)
+      await client.query('ALTER TABLE oauth_authorization_codes ADD COLUMN IF NOT EXISTS scope TEXT')
+      await client.query('ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS scope TEXT')
       await client.query(CREATE_WEBAUTHN_USER_HANDLES_TABLE)
       await client.query(CREATE_SHARED_FOOD_ITEMS_TABLE)
       // Idempotently bring shared_food_items in line with the current
@@ -681,8 +693,8 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
     saveAuthorizationCode: async (code: Omit<OAuthAuthorizationCode, 'used'>): Promise<void> => {
       const client = await getClient()
       await client.query(
-        `INSERT INTO oauth_authorization_codes (code, client_id, username, redirect_uri, code_challenge, code_challenge_method, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO oauth_authorization_codes (code, client_id, username, redirect_uri, code_challenge, code_challenge_method, expires_at, scope)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           code.code,
           code.client_id,
@@ -691,6 +703,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
           code.code_challenge,
           code.code_challenge_method,
           code.expires_at,
+          code.scope ?? null,
         ],
       )
     },
@@ -701,7 +714,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
         `UPDATE oauth_authorization_codes
          SET used = TRUE
          WHERE code = $1 AND used = FALSE AND expires_at > NOW()
-         RETURNING code, client_id, username, redirect_uri, code_challenge, code_challenge_method, expires_at, used`,
+         RETURNING code, client_id, username, redirect_uri, code_challenge, code_challenge_method, expires_at, used, scope`,
         [code],
       )
       if (result.rows.length === 0) return null
@@ -711,8 +724,8 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
     saveOAuthToken: async (token: OAuthToken): Promise<void> => {
       const client = await getClient()
       await client.query(
-        `INSERT INTO oauth_tokens (token, token_type, client_id, username, expires_at, revoked, parent_token)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO oauth_tokens (token, token_type, client_id, username, expires_at, revoked, parent_token, scope)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           token.token,
           token.token_type,
@@ -721,6 +734,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
           token.expires_at,
           token.revoked,
           token.parent_token,
+          token.scope ?? null,
         ],
       )
     },
@@ -728,7 +742,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
     getOAuthToken: async (token: string): Promise<OAuthToken | null> => {
       const client = await getClient()
       const result = await client.query(
-        `SELECT token, token_type, client_id, username, expires_at, revoked, parent_token, created_at
+        `SELECT token, token_type, client_id, username, expires_at, revoked, parent_token, created_at, scope
          FROM oauth_tokens
          WHERE token = $1 AND revoked = FALSE AND expires_at > NOW()`,
         [token],
@@ -741,6 +755,36 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       const client = await getClient()
       const result = await client.query('UPDATE oauth_tokens SET revoked = TRUE WHERE token = $1', [token])
       return (result.rowCount ?? 0) > 0
+    },
+
+    withOAuthLock: (action) =>
+      deps.withTransaction(async (tx) => {
+        await tx.query("SELECT pg_advisory_xact_lock(hashtext('aurboda_oauth_grants'))")
+        const lockedDb = createCentralDb({ getClient: async () => tx, withTransaction: deps.withTransaction })
+        return action(lockedDb)
+      }),
+
+    revokeOAuthConnection: async (username, clientId) => {
+      const client = await getClient()
+      await client.query('UPDATE oauth_tokens SET revoked = TRUE WHERE username = $1 AND client_id = $2', [
+        username,
+        clientId,
+      ])
+      await client.query(
+        'UPDATE oauth_authorization_codes SET used = TRUE WHERE username = $1 AND client_id = $2',
+        [username, clientId],
+      )
+    },
+
+    listOAuthConnections: async (username) => {
+      const client = await getClient()
+      const result = await client.query<{ client_id: string; client_name: string; scope: string | null }>(
+        `SELECT DISTINCT t.client_id, c.client_name, t.scope FROM oauth_tokens t
+         JOIN oauth_clients c ON c.client_id = t.client_id
+         WHERE t.username = $1 AND t.revoked = FALSE AND t.expires_at > NOW()`,
+        [username],
+      )
+      return result.rows
     },
 
     cleanupExpiredOAuth: async (): Promise<void> => {

@@ -124,7 +124,7 @@ describe('private journal persistence', () => {
     ).rejects.toMatchObject({ status: 400 })
   })
   it('preserves binary bytes, validates attachment prompts and isolates another database', async () => {
-    const created = await journal.createJournalEntry(user, body())
+    const created = await journal.createJournalEntry(user, { ...body(), tags: ['synthetic-secret'] })
     const bytes = Buffer.from([0, 255, 1, 128, 0, 10])
     const file = await journal.addJournalAttachment(user, created.id, {
       filename: '../private.png',
@@ -152,6 +152,29 @@ describe('private journal persistence', () => {
       pool = createRolePool({ connectionString: other.uri })
     _setDbForUser('journal-other', pool)
     try {
+      const empty = await journal.listJournalEntries(
+        'journal-other',
+        journalEntriesQuerySchema.parse({ search: 'private', tag: 'synthetic-secret' }),
+      )
+      expect(empty).toEqual({ data: [], total: 0 })
+      expect(await journal.listJournalAreas('journal-other')).not.toEqual(
+        await journal.listJournalAreas(user),
+      )
+      await expect(
+        journal.updateJournalEntry('journal-other', created.id, {
+          expected_updated_at: created.updated_at,
+          title: 'Cross-account edit',
+        }),
+      ).rejects.toMatchObject({ status: 404 })
+      await expect(
+        journal.deleteJournalEntry('journal-other', created.id, created.updated_at),
+      ).rejects.toMatchObject({ status: 404 })
+      await expect(journal.listJournalRevisions('journal-other', created.id)).rejects.toMatchObject({
+        status: 404,
+      })
+      await expect(journal.listJournalAttachments('journal-other', created.id)).rejects.toMatchObject({
+        status: 404,
+      })
       await expect(journal.getJournalEntry('journal-other', created.id)).rejects.toMatchObject({
         status: 404,
       })

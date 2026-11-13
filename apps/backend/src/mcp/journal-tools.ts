@@ -7,6 +7,12 @@ import * as service from '../services/journal.ts'
 import { jsonResponse, type McpServer } from './helpers.ts'
 
 export const registerJournalTools = (server: McpServer, user: string) => {
+  server.tool(
+    'get_journal_capabilities',
+    'Discover authorized Journal readers, search filters, workbook context and original-media limits.',
+    {},
+    async () => jsonResponse({ success: true, data: service.getJournalCapabilities() }),
+  )
   server.tool('get_journal_catalog', 'List sourced guided journal workbooks and exercises.', {}, async () =>
     jsonResponse({ success: true, data: JOURNAL_CATALOG }),
   )
@@ -99,7 +105,7 @@ export const registerJournalTools = (server: McpServer, user: string) => {
   )
   server.tool(
     'list_journal_attachments',
-    'List journal entry attachments. Upload original audio/images using authenticated multipart POST /journal/entries/:id/attachments (file, optional prompt_id; 20 MB). Download original bytes using bearer-authenticated GET /journal/attachments/:id. No public URLs are issued.',
+    'List journal entry attachments. Upload original audio/images using authenticated multipart POST /journal/entries/:id/attachments (file, optional prompt_id; 20 MB). Download original bytes using GET /api/journal/attachments/:id with the same OAuth read token (or account bearer token). No public URLs are issued.',
     { id: z.uuid() },
     async ({ id }) => jsonResponse({ success: true, data: await service.listJournalAttachments(user, id) }),
   )
@@ -117,12 +123,15 @@ export const registerJournalTools = (server: McpServer, user: string) => {
   )
   server.tool(
     'get_journal_attachment',
-    'Download private original attachment bytes as base64 (maximum 1 MiB). Larger files require bearer-authenticated GET /journal/attachments/:id.',
+    'Download private original attachment bytes as base64 (maximum 1 MiB). Larger files require GET /api/journal/attachments/:id with the same OAuth read token (or account bearer token).',
     { id: z.uuid() },
     async ({ id }) => {
       const { metadata, bytes } = await service.getJournalAttachment(user, id)
       if (bytes.length > spec.journalMcpAttachmentBytes) {
-        throw httpError(413, 'Use authenticated REST download for attachments larger than 1 MiB.')
+        throw httpError(
+          413,
+          'Use GET /api/journal/attachments/:id with your OAuth read token for attachments larger than 1 MiB.',
+        )
       }
       return jsonResponse({ success: true, data: metadata, data_base64: bytes.toString('base64') })
     },

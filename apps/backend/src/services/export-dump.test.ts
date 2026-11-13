@@ -9,6 +9,7 @@ import type { ExportTokens } from './export-token.ts'
 import {
   createDumpExporter,
   createDumpLinkIssuer,
+  DUMP_FORMAT_METADATA,
   type DumpExporter,
   type DumpProcess,
   dumpFileName,
@@ -143,7 +144,9 @@ describe('streamUserDump', () => {
     expect(calls[0].command).toBe('pg_dump')
     expect(calls[0].args).toContain('--role=alice')
     expect(calls[0].env).toEqual({ PATH: '/bin', PGPASSWORD: 'secret' })
-    expect(gunzipSync(body()).toString()).toBe('CREATE TABLE t ();\nCOPY t FROM stdin;\n')
+    expect(gunzipSync(body()).toString()).toBe(
+      DUMP_FORMAT_METADATA + 'CREATE TABLE t ();\nCOPY t FROM stdin;\n',
+    )
     expect(result.bytes).toBe(body().length)
     expect(out.writableFinished).toBe(true)
   })
@@ -162,7 +165,9 @@ describe('streamUserDump', () => {
 
     const result = await streamUserDump({ conn: {}, out, spawn, trailer: 'SELECT 1;\n', user: 'alice' })
 
-    expect(gunzipSync(body()).toString()).toBe('CREATE TABLE t ();\n-- dump complete\nSELECT 1;\n')
+    expect(gunzipSync(body()).toString()).toBe(
+      DUMP_FORMAT_METADATA + 'CREATE TABLE t ();\n-- dump complete\nSELECT 1;\n',
+    )
     expect(result.bytes).toBe(body().length)
     expect(out.writableFinished).toBe(true)
   })
@@ -392,8 +397,8 @@ describe('createDumpExporter', () => {
     await run
 
     const sql = gunzipSync(body()).toString()
-    expect(sql.startsWith('-- PostgreSQL database dump complete\n')).toBe(true)
-    const trailer = sql.slice('-- PostgreSQL database dump complete\n'.length)
+    expect(sql.startsWith(DUMP_FORMAT_METADATA + '-- PostgreSQL database dump complete\n')).toBe(true)
+    const trailer = sql.slice(DUMP_FORMAT_METADATA.length + '-- PostgreSQL database dump complete\n'.length)
     expect(trailer).toContain('CREATE TABLE IF NOT EXISTS public.exported_shared_food_items (')
     expect(trailer).toContain('INSERT INTO public.exported_shared_food_items (id, name, name_lower, source')
     expect(trailer).toContain("'11111111-1111-4111-8111-111111111111', 'Bob''s apple', 'bob''s apple'")
@@ -404,7 +409,9 @@ describe('createDumpExporter', () => {
   test('writes no trailer when the data references no shared food items', async () => {
     const { body, run } = await exportWithShared(async () => [])
     await run
-    expect(gunzipSync(body()).toString()).toBe('-- PostgreSQL database dump complete\n')
+    expect(gunzipSync(body()).toString()).toBe(
+      DUMP_FORMAT_METADATA + '-- PostgreSQL database dump complete\n',
+    )
   })
 
   test('a failed shared food lookup fails the export and destroys out', async () => {

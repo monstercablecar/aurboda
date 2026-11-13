@@ -4,7 +4,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 
-import type { CentralDb } from './central-db.ts'
+import type { CentralDb, OAuthScope } from './central-db.ts'
 
 export interface OAuthDeps {
   centralDb: CentralDb
@@ -24,6 +24,7 @@ export interface RegisterClientResult {
 }
 
 export interface CreateAuthCodeParams {
+  scope?: OAuthScope
   client_id: string
   username: string
   redirect_uri: string
@@ -41,6 +42,7 @@ export interface ExchangeCodeParams {
 export interface TokenResult {
   access_token: string
   token_type: 'bearer'
+  scope: string
   expires_in: number
   refresh_token: string
 }
@@ -111,6 +113,7 @@ export const createAuthorizationCode = async (
   const expiresAt = new Date(Date.now() + AUTH_CODE_LIFETIME_SECONDS * 1000)
 
   await deps.centralDb.saveAuthorizationCode({
+    scope: params.scope ?? 'read',
     code,
     client_id: params.client_id,
     username: params.username,
@@ -123,7 +126,7 @@ export const createAuthorizationCode = async (
   return code
 }
 
-export const exchangeAuthorizationCode = async (
+const exchangeAuthorizationCodeUnlocked = async (
   deps: OAuthDeps,
   params: ExchangeCodeParams,
 ): Promise<TokenResult> => {
@@ -149,6 +152,7 @@ export const exchangeAuthorizationCode = async (
   const now = Date.now()
 
   await deps.centralDb.saveOAuthToken({
+    scope: authCode.scope ?? null,
     token: accessToken,
     token_type: 'access',
     client_id: authCode.client_id,
@@ -160,6 +164,7 @@ export const exchangeAuthorizationCode = async (
   })
 
   await deps.centralDb.saveOAuthToken({
+    scope: authCode.scope ?? null,
     token: refreshToken,
     token_type: 'refresh',
     client_id: authCode.client_id,
@@ -173,12 +178,13 @@ export const exchangeAuthorizationCode = async (
   return {
     access_token: accessToken,
     token_type: 'bearer',
+    scope: authCode.scope ?? 'read write',
     expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
     refresh_token: refreshToken,
   }
 }
 
-export const refreshAccessToken = async (
+const refreshAccessTokenUnlocked = async (
   deps: OAuthDeps,
   params: RefreshTokenParams,
 ): Promise<TokenResult> => {
@@ -202,6 +208,7 @@ export const refreshAccessToken = async (
   const now = Date.now()
 
   await deps.centralDb.saveOAuthToken({
+    scope: oldRefresh.scope ?? null,
     token: accessToken,
     token_type: 'access',
     client_id: oldRefresh.client_id,
@@ -213,6 +220,7 @@ export const refreshAccessToken = async (
   })
 
   await deps.centralDb.saveOAuthToken({
+    scope: oldRefresh.scope ?? null,
     token: refreshToken,
     token_type: 'refresh',
     client_id: oldRefresh.client_id,
@@ -226,17 +234,49 @@ export const refreshAccessToken = async (
   return {
     access_token: accessToken,
     token_type: 'bearer',
+    scope: oldRefresh.scope ?? 'read write',
     expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
     refresh_token: refreshToken,
   }
 }
 
-export const validateAccessToken = async (deps: OAuthDeps, token: string): Promise<string | null> => {
-  const oauthToken = await deps.centralDb.getOAuthToken(token)
-  if (!oauthToken || oauthToken.token_type !== 'access') {
-    return null
-  }
-  return oauthToken.username
-}
+export const validateAccessToken = async (deps: OAuthDeps, token: string): Promise<string | null> =>
+  (await validateAccessIdentity(deps, token))?.username ?? null
 
 export const isOAuthAccessToken = (token: string): boolean => token.startsWith(ACCESS_TOKEN_PREFIX)
+
+export const exchangeAuthorizationCode = (
+  deps: OAuthDeps,
+  params: ExchangeCodeParams,
+): Promise<TokenResult> =>
+  deps.centralDb.withOAuthLock((centralDb) => exchangeAuthorizationCodeUnlocked({ centralDb }, params))
+
+export const refreshAccessToken = (deps: OAuthDeps, params: RefreshTokenParams): Promise<TokenResult> =>
+  deps.centralDb.withOAuthLock((centralDb) => refreshAccessTokenUnlocked({ centralDb }, params))
+
+export const revokeConnection = (deps: OAuthDeps, username: string, clientId: string): Promise<void> =>
+  deps.centralDb.withOAuthLock((centralDb) => centralDb.revokeOAuthConnection(username, clientId))
+
+export const revokeConnectionByToken = (deps: OAuthDeps, token: string, clientId: string): Promise<void> =>
+  deps.centralDb.withOAuthLock(async (centralDb) => {
+    const grant = await centralDb.getOAuthToken(token)
+    if (grant && grant.client_id === clientId) await centralDb.revokeOAuthConnection(grant.username, clientId)
+  })
+
+export interface OAuthIdentity {
+  username: string
+  scope: OAuthScope
+}
+
+export const validateAccessIdentity = async (
+  deps: OAuthDeps,
+  token: string,
+): Promise<OAuthIdentity | null> => {
+  const grant = await deps.centralDb.getOAuthToken(token)
+  if (!grant || grant.token_type !== 'access' || grant.revoked || grant.expires_at.getTime() <= Date.now()) {
+    return null
+  }
+  const scope = grant.scope ?? 'read write'
+  if (scope !== 'read' && scope !== 'read write') return null
+  return { username: grant.username, scope }
+}

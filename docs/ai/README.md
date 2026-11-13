@@ -96,3 +96,8 @@ For account downloads and migration claims, read [account export coverage and te
 For the Home arcade, read [Foghouse games](foghouse-games.md): memory/reaction protocols, private assessment saves, limitations, software licenses and verification.
 
 Deployment history: [release log](release-log.md), including backup evidence, failed attempts and operational follow-ups.
+
+Privacy/integration reference: [data access](../data-access.md), [Foghouse policy](../foghouse-privacy.md),
+and [Journal integration and remaining verification](journal-data-integration.md). Journal storage is integrated; its real database restore tests remain unexecuted in this environment.
+
+Current privacy/Journal integration checks and blockers: [verification record](privacy-integration-verification.md).

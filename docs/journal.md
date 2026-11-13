@@ -45,3 +45,24 @@ Android source adds an embedded Journal menu entry. Existing Android WebView mic
 The page links existing People profiles and saved mental-assessment results into new unsaved reflections. Other event/entry references can be added as metadata in the editor. Links do not copy source notes or grant access to another account's data.
 
 Use synthetic data only for future verification. No live deployment or production-user inspection is part of this implementation.
+
+## Privacy/export integration follow-up
+
+The separate privacy/integration branch now reuses these exact Journal services and database tables.
+Its read-only OAuth allowlist includes Journal discovery, filtered/paginated search, complete entry
+and workbook-snapshot reads, areas/templates/revisions and attachment metadata/original bytes.
+`get_journal_capabilities` / `GET /journal/capabilities` reports supported filters and transfer limits;
+`workbook_id` narrows attempts without a separate workbook storage model.
+
+Valid OAuth read tokens can also use the existing Journal REST GET/HEAD paths, including original
+media over the 1 MiB MCP response limit. Journal REST writes retain account-token authentication;
+write-authorized MCP clients retain the existing mutating tools. Read grants do not gain edits,
+deletions, credential-bearing exports or connection administration. Revocation is available in
+Settings → AI and MCP connections. See [data access](data-access.md), [MCP permissions](mcp-server.md)
+and [Journal export/verification](ai/journal-data-integration.md).
+
+The combined-image nginx configuration allows 21 MiB for Journal multipart requests (20 MiB file
+limit) and disables proxy disk buffering and Journal access logging. Outer proxy/provider behavior
+and device recording remain separate operational checks. The expanded real SQL roundtrip fixture
+is still unexecuted here because no container runtime is available. Focused synthetic HTTP tests
+can bind in this integration environment; that does not establish production or device behavior.

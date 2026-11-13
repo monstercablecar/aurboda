@@ -563,7 +563,7 @@ const main = async () => {
   httpd.use(cors({ origin: true }))
 
   // Mount OAuth endpoints BEFORE body-parser (uses its own parsers)
-  httpd.use(createOAuthRouter({ centralDb, loginToUserDb, webHost }))
+  httpd.use(createOAuthRouter({ auth, centralDb, loginToUserDb, webHost }))
 
   // Live home-timeline updates: one in-process hub fans Postgres NOTIFY pings out
   // to a user's open SSE streams. Injected into the feed router (SSE endpoint) and

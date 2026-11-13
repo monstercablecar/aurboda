@@ -563,7 +563,7 @@ describe('central-db', () => {
 
       expect(mockClient.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO oauth_authorization_codes'),
-        ['test-code', 'aur_test', 'testuser', 'https://example.com/cb', 'challenge', 'S256', expiresAt],
+        ['test-code', 'aur_test', 'testuser', 'https://example.com/cb', 'challenge', 'S256', expiresAt, null],
       )
     })
   })
@@ -623,6 +623,7 @@ describe('central-db', () => {
         'testuser',
         now,
         false,
+        null,
         null,
       ])
     })
@@ -685,6 +686,49 @@ describe('central-db', () => {
       )
       expect(mockClient.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM oauth_tokens'))
     })
+  })
+  test('migrates old OAuth rows without granting new explicit scopes', async () => {
+    mockClient.query.mockResolvedValue({ rows: [] })
+    await centralDb.initializeCentralDb()
+    expect(mockClient.query).toHaveBeenCalledWith(
+      'ALTER TABLE oauth_authorization_codes ADD COLUMN IF NOT EXISTS scope TEXT',
+    )
+    expect(mockClient.query).toHaveBeenCalledWith(
+      'ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS scope TEXT',
+    )
+  })
+
+  test('revokes only the selected account and client, including unused codes', async () => {
+    mockClient.query.mockResolvedValue({ rows: [] })
+    await centralDb.revokeOAuthConnection('alice', 'client')
+    expect(mockClient.query.mock.calls).toEqual([
+      ['UPDATE oauth_tokens SET revoked = TRUE WHERE username = $1 AND client_id = $2', ['alice', 'client']],
+      [
+        'UPDATE oauth_authorization_codes SET used = TRUE WHERE username = $1 AND client_id = $2',
+        ['alice', 'client'],
+      ],
+    ])
+  })
+
+  test('serializes token exchange, refresh and revocation in a transaction', async () => {
+    await centralDb.withOAuthLock(async (locked) => locked.revokeOAuthConnection('alice', 'client'))
+    expect(withTransaction).toHaveBeenCalledTimes(1)
+    expect(transactionClient.query.mock.calls[0][0]).toContain('pg_advisory_xact_lock')
+    expect(transactionClient.query.mock.calls[1][1]).toEqual(['alice', 'client'])
+    expect(mockClient.query).not.toHaveBeenCalled()
+  })
+
+  test('connection listing filters active tokens to the signed-in account', async () => {
+    mockClient.query.mockResolvedValue({
+      rows: [{ client_id: 'client', client_name: 'Assistant', scope: 'read' }],
+    })
+    expect(await centralDb.listOAuthConnections('alice')).toEqual([
+      { client_id: 'client', client_name: 'Assistant', scope: 'read' },
+    ])
+    expect(mockClient.query).toHaveBeenCalledWith(
+      expect.stringContaining('t.username = $1 AND t.revoked = FALSE'),
+      ['alice'],
+    )
   })
 })
 

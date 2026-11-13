@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string
+  readonly VITE_FOGHOUSE_PRIVACY_ENABLED?: string
 }
 
 interface ImportMeta {

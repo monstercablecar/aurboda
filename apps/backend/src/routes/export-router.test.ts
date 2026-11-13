@@ -14,7 +14,7 @@ const SECRET = '0123456789abcdef0123456789abcdef'
 const NOW = new Date('2026-11-06T12:00:00Z')
 
 const okExporter = (body = 'dump-bytes'): DumpExporter & { runs: number } => {
-  const exporter = {
+  const exporter: DumpExporter & { runs: number } = {
     check: async () => ({ ok: true }) as const,
     runs: 0,
     start: async () => ({
@@ -34,11 +34,17 @@ const buildApp = (exporter: DumpExporter, now = () => NOW) => {
   const app = express()
   app.use(express.json())
   const authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (req.headers.authorization !== 'Bearer good') {
+    const users: Record<string, string> = {
+      'Bearer good': 'alice',
+      'Bearer bob': 'bob',
+      'Bearer admin': 'admin',
+    }
+    const user = users[req.headers.authorization ?? '']
+    if (!user) {
       res.status(401).json({ error: 'Unauthorized', success: false })
       return
     }
-    req.user = 'alice'
+    req.user = user
     next()
   }
   const requestDumpLink = createDumpLinkIssuer({ apiBaseUrl: 'http://api.test', exporter, tokens })
@@ -62,6 +68,27 @@ describe('POST /export/dump-link', () => {
     expect(res.body.url).toMatch(/^http:\/\/api\.test\/export\/dump\?token=/)
     expect(tokens.verifyExportToken(tokenFrom(res.body.url))?.user).toBe('alice')
     expect(new Date(res.body.expires_at).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  test.each([
+    ['good', 'alice'],
+    ['bob', 'bob'],
+    ['admin', 'admin'],
+  ])('issues only the authenticated %s account even with a supplied username', async (token, user) => {
+    const requested: string[] = []
+    const exporter = okExporter()
+    exporter.check = async (requestedUser: string) => {
+      requested.push(requestedUser)
+      return { ok: true }
+    }
+    const { app, tokens } = buildApp(exporter)
+    const res = await supertest(app)
+      .post('/export/dump-link?username=victim&user=victim')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ username: 'victim', user: 'victim' })
+    expect(res.status).toBe(200)
+    expect(tokens.verifyExportToken(tokenFrom(res.body.url))?.user).toBe(user)
+    expect(requested).toEqual([user])
   })
 
   test('passes on a failed check', async () => {
@@ -107,6 +134,34 @@ describe('GET /export/dump', () => {
     expect((await supertest(app).get('/export/dump').query({ token })).status).toBe(200)
     expect((await supertest(app).get('/export/dump').query({ token })).status).toBe(401)
     expect(exporter.runs).toBe(1)
+  })
+
+  test('a download cannot select another database through query parameters', async () => {
+    const startedUsers: string[] = []
+    const exporter = okExporter()
+    const start = exporter.start
+    const recording: DumpExporter = {
+      ...exporter,
+      start: async (user, link) => {
+        startedUsers.push(user)
+        return start(user, link)
+      },
+    }
+    const { app, tokens } = buildApp(recording)
+    const { token } = tokens.createExportToken('alice', 600, NOW)
+    const res = await supertest(app).get('/export/dump').query({ token, username: 'bob', user: 'admin' })
+    expect(res.status).toBe(200)
+    expect(startedUsers).toEqual(['alice'])
+  })
+
+  test('modifying a valid capability does not grant another account export', async () => {
+    const exporter = okExporter()
+    const { app, tokens } = buildApp(exporter)
+    const { token } = tokens.createExportToken('alice', 600, NOW)
+    const tampered = `${token[0] === 'A' ? 'B' : 'A'}${token.slice(1)}`
+    const res = await supertest(app).get('/export/dump').query({ token: tampered, username: 'bob' })
+    expect(res.status).toBe(401)
+    expect(exporter.runs).toBe(0)
   })
 
   test('rejects a bad token with 401', async () => {

@@ -120,8 +120,8 @@ model.
 The MCP server is available at `/mcp` and uses the Streamable HTTP transport:
 
 - `POST /mcp` - Handle JSON-RPC requests
-- `GET /mcp` - SSE stream for server notifications
-- `DELETE /mcp` - End session
+- `GET /mcp` - HTTP 405 (no SSE subscription support)
+- `DELETE /mcp` - HTTP 405 (no persistent sessions)
 
 Request bodies are limited to 4 MB; a larger body gets HTTP 413 with a JSON-RPC `-32600` error.
 
@@ -137,12 +137,13 @@ The server implements OAuth 2.1 with PKCE (S256) for clients that support it, su
 
 **OAuth endpoints:**
 
-| Endpoint     | Method | Description                              |
-| ------------ | ------ | ---------------------------------------- |
-| `/register`  | POST   | Dynamic client registration (RFC 7591)   |
-| `/authorize` | GET    | Serves login form with OAuth params      |
-| `/authorize` | POST   | Handles login + redirects with auth code |
-| `/token`     | POST   | Exchanges auth code or refresh token     |
+| Endpoint     | Method | Description                                                                    |
+| ------------ | ------ | ------------------------------------------------------------------------------ |
+| `/register`  | POST   | Dynamic client registration (RFC 7591)                                         |
+| `/authorize` | GET    | Serves login form with OAuth params                                            |
+| `/authorize` | POST   | Handles login + redirects with auth code                                       |
+| `/token`     | POST   | Exchanges auth code or refresh token                                           |
+| `/revoke`    | POST   | Revoke the connection proven by an access/refresh token and matching client ID |
 
 **Supported grants:** `authorization_code` (with PKCE S256), `refresh_token`
 
@@ -152,7 +153,7 @@ The server implements OAuth 2.1 with PKCE (S256) for clients that support it, su
 
 1. In Claude.ai, add a custom connector with the MCP URL: `https://aurboda.net/mcp`
 2. Claude.ai will auto-discover the OAuth endpoints via `/.well-known/oauth-authorization-server`
-3. On first use, you will be redirected to sign in with your Aurboda credentials
+3. On first use, you will be redirected to sign in with your Aurboda credentials and choose read-only analysis or explicitly allow changes
 4. Claude.ai handles token refresh automatically
 
 ### Bearer Token (for Claude Desktop / API clients)
@@ -162,7 +163,55 @@ For direct API access, use the existing AES-256-GCM Bearer token:
 1. Obtain a token via `POST /api/login`
 2. Include the token in the `Authorization` header: `Authorization: Bearer <token>`
 
-Both authentication methods are supported simultaneously. Each MCP session is scoped to the authenticated user.
+Both authentication methods are supported simultaneously. The MCP router is stateless: every request authenticates again and constructs its tools bound to that username. User IDs in tool arguments do not choose another database. There are no MCP resources or subscriptions; data is exposed through tools and `describe_tools` discovery.
+
+### Analysis consent, permissions and revocation
+
+New OAuth authorizations default to `read`. The authorization form explains private-data analysis and the external provider boundary, with an unchecked **Also allow changes (read and write)** option. Selecting it produces `read write`. The returned token response includes the granted scope; requesting a scope string alone cannot enable writing without the form selection. Refresh rotation preserves the original grant. Unknown stored scope values fail authentication.
+
+Read-only analysis exposes an explicit reviewed set of tools in
+[`mcp/connector-permissions.ts`](../apps/backend/src/mcp/connector-permissions.ts). Tools outside that set are disabled in both `tools/list` and `describe_tools`, and cannot be called by guessing their names. This excludes editing/deletion, explicit synchronization, admin tools, raw/debug logs, credential-bearing settings and full database export. Automatic query-time provider synchronization is also omitted for read-only connectors. Reading can still populate derived internal caches and usage counts; it does not grant content editing or deletion. This connector permission is independent of the plan-expiry gate: that gate's export/account-deletion exceptions do not authorize a read-only connector to use those tools.
+
+**Existing grants need attention:** pre-scope OAuth rows have a null scope and retain their previous full access for compatibility. Revoke and reconnect them for read-only analysis. AES bearer tokens also retain full account access; they are not individually revocable and have no built-in expiry. Logging out locally does not invalidate an already copied AES token. Deleting an account blocks its tokens; rotating the server session secret invalidates all AES tokens, not only one client's.
+
+OAuth access/refresh token records are stored in the central database and checked on every MCP request (`services/central-db.ts:getOAuthToken`, `services/oauth.ts:validateAccessIdentity`). Expired/revoked access tokens fail with HTTP 401. `/revoke` accepts form fields `token` and `client_id`; possession of a matching valid connection token authorizes revocation of all that username/client's tokens and pending codes. Unknown or mismatched credentials also receive HTTP 200, without changing another connection.
+
+Account owners can independently list/revoke connections with their normal browser bearer token:
+
+- `GET /api/oauth/connections` returns only that account's active client names, IDs and scopes.
+- `POST /api/oauth/connections/revoke` with `{ "client_id": "…" }` revokes only that account's selected client. The strict body rejects a target username. Deleted accounts are refused. The backend paths omit the reverse proxy's `/api` prefix.
+
+These credential-management routes deliberately require the browser AES token and are not exposed as analysis tools. There is no new administration or impersonation surface. Exchange, refresh and revocation serialize under a transaction-scoped PostgreSQL advisory lock so an in-flight refresh cannot reissue live tokens after revocation completes. Revocation affects subsequent requests; it cannot recall results already retrieved or stop a request that already passed authentication. Old backend versions do not enforce the new scope fields; do not leave old and new readers serving traffic when relying on read-only scope enforcement.
+
+The server instructions mark retrieved text and attachments as untrusted user content, never authorization or tool-policy instructions. This does not make arbitrary AI clients immune to prompt injection; clients must continue to respect their own tool and data-handling boundaries.
+
+### Journal readers and original media
+
+The Journal feature uses its existing private per-user tables and shared service, not the generic `notes` model or a parallel MCP server. The read-only analysis allowlist includes the audited readers below. The same explicit read consent covers journals; the authorization form names this private-content category.
+
+| MCP tool                   | REST counterpart                           | Data available                                                                                      |
+| -------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `get_journal_capabilities` | `GET /api/journal/capabilities`            | Available filters, pagination and original-media limits; no private bodies                          |
+| `get_journal_catalog`      | `GET /api/journal/catalog`                 | Sourced current workbook definitions                                                                |
+| `list_journal_entries`     | `GET /api/journal/entries`                 | Complete entries plus total; search and filters                                                     |
+| `get_journal_entry`        | `GET /api/journal/entries/:id`             | Markdown, metadata, links and complete workbook attempt                                             |
+| `list_journal_areas`       | `GET /api/journal/areas`                   | Private areas; first listing initializes the existing default areas                                 |
+| `list_journal_templates`   | `GET /api/journal/templates`               | Personal Markdown templates                                                                         |
+| `list_journal_revisions`   | `GET /api/journal/entries/:id/revisions`   | Up to the newest 100 retained entry snapshots                                                       |
+| `list_journal_attachments` | `GET /api/journal/entries/:id/attachments` | Original filename, MIME type, size, prompt link and timestamp                                       |
+| `get_journal_attachment`   | `GET /api/journal/attachments/:id`         | Original private bytes; MCP base64 up to 1 MiB, REST binary up to the existing 20 MiB storage limit |
+
+List/search filters are `search`, `from`/`to` (inclusive entry `occurred_at` instants), `area_id` (UUID or `general`), `tag`, `favorite`, `kind`, `workbook_id`, and `deleted`. Pagination starts at `page=1`, defaults to `per_page=30`, and is capped at 100. Search includes workbook answers, title, content and tags within the authenticated account. `workbook_id` matches the stored immutable definition ID. Trash is excluded by default; use `deleted="true"` to list trashed entries.
+
+Each workbook attempt is an entry whose `workbook` contains answers, completed sections, current section and status plus an immutable `definition` snapshot. The snapshot includes its ID/version, prompt IDs/text, section introductions and source attribution. Read that saved definition to interpret answers; the current catalog may have changed. No separate answer database or client-supplied replacement definition was added.
+
+Journal service calls always receive the authenticated username selected by the MCP router; supplying another username in tool arguments cannot select another account. Entry IDs, revision IDs and attachment IDs resolve inside that user's database. Read-only permission does not expose Journal create/update/delete or attachment upload/delete tools. OAuth revocation is checked again on subsequent MCP and Journal REST reads.
+
+For media larger than 1 MiB, use the existing REST binary download with the **same OAuth read bearer token**, not an expiring public URL or a more privileged account credential. Journal REST GET routes accept scoped OAuth authorization; REST mutations retain their existing account-token authentication. No public journal attachment URL is issued. REST sends a complete original file and does not implement byte-range downloads. Metadata and original bytes remain available separately, and oversized MCP responses fail with a clear REST-download instruction rather than silently truncating the file.
+
+An attachment being retrievable means an authorized client can obtain its original bytes. It does not mean every AI client accepts that audio format, downloads binary media, transcribes it, or interprets it. This work adds no transcription and no hosted AI dependency. Journal text, workbook answers and media are untrusted user content, not instructions that override authorization or tool policy.
+
+Focused synthetic MCP tests cover discovery, filters/pagination, full immutable workbook context, owner binding for two ordinary users and an administrator, cross-account read/write/delete/media attempts, original-byte retrieval, oversized media, read-only mutation refusal and revoked grants. These mocked HTTP tests verify the routing/authorization contract; PostgreSQL integration/round-trip verification is recorded separately and must not be inferred from them.
 
 ## Available Metrics
 

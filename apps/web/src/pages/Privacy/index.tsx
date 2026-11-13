@@ -1,7 +1,21 @@
 import { StaticPageContact } from '../../components/AdminContact'
+import { foghousePrivacyEnabled } from '../../foghouse-privacy'
 import '../../components/StaticPage.css'
 
 export function Privacy() {
+  if (foghousePrivacyEnabled()) {
+    return (
+      <div class="static-page">
+        <h1>Privacy Policy</h1>
+        <p>
+          This is the Foghouse-operated instance. Read <a href="/foghouse-privacy">Foghouse Privacy</a> for
+          its data access, integrations, export, deletion and infrastructure disclosures.
+        </p>
+        <p>The generic upstream policy does not describe this instance's operation.</p>
+      </div>
+    )
+  }
+
   return (
     <div class="static-page">
       <h1>Privacy Policy</h1>
