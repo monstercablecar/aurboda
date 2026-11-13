@@ -1,0 +1,218 @@
+.onboarding-flow {
+  --onboard-accent: var(--color-accent, #297d78);
+  max-width: 960px;
+  margin: 1.5rem auto;
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid var(--color-border, #d9dedb);
+  border-radius: 22px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #273c3b);
+  box-shadow: 0 12px 45px #173e3510;
+}
+.onboarding-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.onboarding-eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.15em;
+  color: var(--onboard-accent);
+  font-weight: 700;
+}
+.onboarding-heading h2 {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  margin: 0.5rem 0;
+}
+.onboarding-heading p {
+  margin: 0.5rem 0 1.3rem;
+  color: var(--color-text-muted, #64716e);
+}
+.onboarding-flow button,
+.onboarding-actions a {
+  font: inherit;
+  border: 1px solid var(--color-border, #d9dedb);
+  background: transparent;
+  color: inherit;
+  border-radius: 9px;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.onboarding-flow button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.onboarding-flow button:focus-visible,
+.onboarding-flow a:focus-visible {
+  outline: 3px solid #50b5a9;
+  outline-offset: 3px;
+}
+.onboarding-progress {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64716e);
+}
+.onboarding-flow progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--onboard-accent);
+  margin: 0.65rem 0 1.3rem;
+}
+.onboarding-chapters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+.onboarding-chapters button {
+  flex: 1;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+}
+.onboarding-chapters button[aria-current] {
+  background: #297d7818;
+  border-color: #297d78;
+}
+.onboarding-chapters span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #297d7818;
+}
+.onboarding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.onboarding-step {
+  border: 1px solid var(--color-border, #d9dedb);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.onboarding-step.expanded {
+  border-color: #297d7870;
+  background: #297d7805;
+}
+.onboarding-flow .onboarding-step-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  padding: 1rem;
+}
+.onboarding-step-heading strong {
+  flex: 1;
+  font-size: 0.95rem;
+}
+.onboarding-step-icon {
+  color: var(--onboard-accent);
+  font-size: 1.2rem;
+}
+.onboarding-step-state {
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #64716e);
+}
+.onboarding-step-body {
+  padding: 0 1rem 1.2rem 3rem;
+}
+.onboarding-step-body p {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  margin-top: 0;
+  max-width: 72ch;
+}
+.onboarding-address {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  background: #297d780b;
+  border-radius: 8px;
+  padding: 0.6rem;
+  margin: 1rem 0;
+}
+.onboarding-address code {
+  overflow-wrap: anywhere;
+}
+.onboarding-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0.5rem;
+}
+.onboarding-flow .onboarding-primary {
+  background: var(--color-primary, #17707a);
+  color: white;
+  border-color: var(--color-primary, #17707a);
+}
+.onboarding-step-body small {
+  color: var(--color-text-muted, #64716e);
+}
+.onboarding-signal {
+  color: var(--onboard-accent);
+}
+.onboarding-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+  font-size: 0.8rem;
+  gap: 0.5rem;
+}
+.onboarding-summary {
+  padding: 1rem;
+  background: #8a72ac15;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+.onboarding-error {
+  color: #b14130;
+}
+.onboarding-summary h3 {
+  margin-top: 0;
+}
+@media (max-width: 560px) {
+  .onboarding-heading {
+    display: block;
+  }
+  .onboarding-heading > button {
+    margin-bottom: 1rem;
+  }
+  .onboarding-chapters {
+    gap: 0.3rem;
+  }
+  .onboarding-chapters button {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.6rem;
+    font-size: 0.75rem;
+  }
+  .onboarding-step-body {
+    padding-left: 1rem;
+  }
+  .onboarding-footer span {
+    display: none;
+  }
+}
+.onboarding-android-steps {
+  padding-left: 1.2rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 1rem 0;
+}
+.onboarding-android-steps li {
+  padding: 0.3rem 0;
+}
+.onboarding-android-steps a {
+  color: var(--onboard-accent);
+}

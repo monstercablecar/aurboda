@@ -1,3 +1,4 @@
+import { registerNativeTasksTools } from './mcp/native-tasks-tools.ts'
 /**
  * Each request creates a fresh McpServer + transport pair. No session tracking
  * is needed since the server only exposes tools (no resources, subscriptions,
@@ -54,9 +55,12 @@ import { registerMealTools } from './mcp/meal-tools.ts'
 import { registerMetricTools } from './mcp/metric-tools.ts'
 import { registerNoteTools } from './mcp/note-tools.ts'
 import { registerNutrientRecommendationTools } from './mcp/nutrient-recommendation-tools.ts'
+import { registerPeopleTools } from './mcp/people-tools.ts'
+import { registerPharmacologyTools } from './mcp/pharmacology-tools.ts'
 import { registerQueryTools } from './mcp/query-tools.ts'
 import { refuseMutatingTools } from './mcp/read-only-gate.ts'
 import { registerReportTools } from './mcp/report-tools.ts'
+import { registerResourcesTools } from './mcp/resources-tools.ts'
 import { registerRouteTools } from './mcp/route-tools.ts'
 import { registerScreentimeCategoryTools } from './mcp/screentime-category-tools.ts'
 import { registerSensitivityTools } from './mcp/sensitivity-tools.ts'
@@ -67,6 +71,7 @@ import { registerSyncTools } from './mcp/sync-tools.ts'
 import { installToolCatalogue } from './mcp/tool-catalogue.ts'
 import { registerTrainingLoadTools } from './mcp/training-load-tools.ts'
 import { registerTrendTools } from './mcp/trend-tools.ts'
+import { registerWorkTools } from './mcp/work-tools.ts'
 import { type AccountGate, safeRefusal } from './services/account-gate.ts'
 import { createDefaultEngineDeps } from './services/deduction-deps.ts'
 import { isOAuthAccessToken, validateAccessToken } from './services/oauth.ts'
@@ -180,6 +185,10 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerTrainingLoadTools(server, user)
   registerTrendTools(server, user)
   registerChartTools(server, user)
+  registerWorkTools(server, user, deps.onActivityMutated)
+  registerPeopleTools(server, user)
+  registerNativeTasksTools(server, user)
+  registerResourcesTools(server, user, deps.centralDb)
   registerNoteTools(server, user)
   registerMealTools(server, user)
   registerNutrientRecommendationTools(server, user)
@@ -193,6 +202,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
     registerAccountEmailTools(server, user, deps.centralDb)
   }
   registerReportTools(server, user)
+  registerPharmacologyTools(server, user)
   registerRouteTools(server, user)
   registerSharedDashboardTools(server, user)
   registerSharedExerciseTools(server, user, deps.webHost)

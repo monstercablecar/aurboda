@@ -1,0 +1,414 @@
+.celebration-overlay {
+  --celebration-accent: #f59e0b;
+  --celebration-accent-soft: rgb(245 158 11 / 24%);
+  container-type: size;
+  position: fixed;
+  z-index: 1400;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 1rem;
+  pointer-events: none;
+}
+
+.celebration-treatment {
+  --celebration-accent: #8b5cf6;
+  --celebration-accent-soft: rgb(139 92 246 / 24%);
+}
+
+.celebration-glow {
+  position: absolute;
+  width: min(40rem, 95vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--celebration-accent-soft), transparent 65%);
+  animation: celebration-glow 1.4s ease-out both;
+}
+
+.celebration-card {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: min(29rem, calc(100vw - 2rem));
+  max-width: 100%;
+  padding: 1rem 1.2rem;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--celebration-accent) 45%, var(--color-border));
+  border-radius: 1.2rem;
+  background: color-mix(in srgb, var(--color-surface) 94%, var(--celebration-accent));
+  box-shadow:
+    0 24px 80px rgb(0 0 0 / 24%),
+    0 0 0 8px var(--celebration-accent-soft);
+  color: var(--color-text);
+  animation: celebration-card-in var(--celebration-duration, 3.4s) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celebration-card > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.celebration-card strong {
+  color: var(--celebration-accent);
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.celebration-card span:not(.celebration-icon) {
+  color: var(--color-text-muted);
+  font-size: 0.94rem;
+}
+
+.celebration-icon {
+  display: grid;
+  width: 3.3rem;
+  height: 3.3rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 1rem;
+  background: var(--celebration-accent-soft);
+  font-size: 1.8rem;
+  animation: celebration-icon-bounce 900ms 120ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.celebration-confetti {
+  position: absolute;
+  inset: 0;
+}
+
+.celebration-confetti i {
+  position: absolute;
+  top: -2rem;
+  left: var(--confetti-x);
+  width: 0.65rem;
+  height: 1rem;
+  border-radius: 0.15rem;
+  background: var(--confetti-color);
+  opacity: 0;
+  animation: celebration-confetti-fall var(--confetti-duration) var(--confetti-delay)
+    cubic-bezier(0.18, 0.8, 0.28, 1) both;
+}
+
+@keyframes celebration-card-in {
+  0% {
+    opacity: 0;
+    transform: translateY(1.5rem) scale(0.78) rotate(-2deg);
+  }
+  12%,
+  82% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-0.75rem) scale(0.96);
+  }
+}
+
+@keyframes celebration-icon-bounce {
+  0% {
+    transform: scale(0.25) rotate(-18deg);
+  }
+  55% {
+    transform: scale(1.18) rotate(8deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes celebration-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.25);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes celebration-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--confetti-drift), 110cqh, 0) rotate(calc(var(--confetti-rotation) * 8));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celebration-glow,
+  .celebration-confetti {
+    display: none;
+  }
+
+  .celebration-card,
+  .celebration-icon {
+    animation: none;
+  }
+}
+
+.celebration-dismiss {
+  pointer-events: auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.25rem 0.5rem;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+.celebration-dismiss:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+:is(.celebration-cpap, .celebration-import),
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step) {
+  --celebration-accent: #0d9488;
+  --celebration-accent-soft: rgb(13 148 136 / 20%);
+}
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete),
+.celebration-check-in {
+  --celebration-accent: #8b5cf6;
+  --celebration-accent-soft: rgb(139 92 246 / 20%);
+}
+.celebration-reasoning {
+  --celebration-accent: #d97706;
+  --celebration-accent-soft: rgb(217 119 6 / 20%);
+}
+.celebration-overlay:not(.celebration-work):not(.celebration-treatment) strong {
+  color: var(--color-text);
+}
+:is(.celebration-cpap, .celebration-import) .celebration-card,
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete) .celebration-card {
+  width: min(39rem, calc(100vw - 2rem));
+  padding: 1.6rem;
+}
+:is(.celebration-cpap, .celebration-import) .celebration-icon,
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete) .celebration-icon {
+  width: 4rem;
+  height: 4rem;
+  font-size: 2.8rem;
+}
+:is(.celebration-cpap, .celebration-import) .celebration-card {
+  animation-name: celebration-moonrise;
+}
+:is(.celebration-cpap, .celebration-import) .celebration-icon {
+  border-radius: 50%;
+  animation-name: celebration-rise;
+}
+:is(.celebration-cpap, .celebration-import) .celebration-confetti i,
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete)
+  .celebration-confetti
+  i {
+  top: 35%;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--celebration-accent);
+  animation-name: celebration-star;
+}
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete) .celebration-card {
+  animation-name: celebration-unfold;
+}
+:is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete)
+  .celebration-confetti
+  i {
+  top: calc(25% + var(--confetti-x) / 3);
+  width: 0.65rem;
+  height: 0.65rem;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+}
+.celebration-reasoning .celebration-card {
+  animation-name: celebration-unfold;
+}
+.celebration-reasoning .celebration-confetti i {
+  top: 50%;
+  background: var(--celebration-accent);
+  animation-name: celebration-spark;
+}
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step) {
+  place-items: end;
+}
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step)
+  .celebration-card {
+  width: min(23rem, calc(100vw - 2rem));
+  padding: 0.85rem;
+  animation-name: celebration-slide;
+}
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step)
+  .celebration-card
+  strong {
+  font-size: 1.05rem;
+}
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step)
+  .celebration-confetti,
+:is(.celebration-quick, .celebration-nutrition-daily, .celebration-workday, .celebration-onboarding-step)
+  .celebration-glow {
+  display: none;
+}
+@keyframes celebration-moonrise {
+  0% {
+    opacity: 0;
+    transform: translateY(4rem);
+  }
+  16%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+@keyframes celebration-rise {
+  from {
+    transform: translateY(1rem) rotate(-30deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+}
+@keyframes celebration-unfold {
+  0% {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  18%,
+  88% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+}
+@keyframes celebration-star {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) translateY(2rem);
+  }
+  45% {
+    opacity: 0.85;
+    transform: scale(1.3) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5) translateY(-2rem);
+  }
+}
+@keyframes celebration-spark {
+  0% {
+    opacity: 0;
+    transform: translateX(0) rotate(45deg) scale(0.2);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(var(--confetti-drift)) rotate(225deg) scale(1);
+  }
+}
+@keyframes celebration-slide {
+  0% {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+  12%,
+  88% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .celebration-overlay .celebration-card,
+  .celebration-overlay .celebration-icon {
+    animation: none;
+  }
+}
+
+@media (max-width: 420px) {
+  :is(.celebration-cpap, .celebration-import) .celebration-card,
+  :is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete)
+    .celebration-card {
+    padding: 1rem;
+    gap: 0.6rem;
+  }
+  :is(.celebration-cpap, .celebration-import) .celebration-icon,
+  :is(.celebration-big-five, .celebration-nutrition-assessment, .celebration-goal-complete)
+    .celebration-icon {
+    width: 2.3rem;
+    height: 2.3rem;
+    font-size: 1.8rem;
+  }
+  .celebration-card strong {
+    font-size: 1.1rem;
+  }
+}
+
+.celebration-workday,
+.celebration-nutrition-assessment {
+  --celebration-accent: #d97706;
+  --celebration-accent-soft: rgb(217 119 6 / 20%);
+}
+.celebration-goal-complete .celebration-card,
+.celebration-import .celebration-card {
+  width: min(29rem, calc(100vw - 2rem));
+  padding: 1rem 1.2rem;
+}
+.celebration-goal-complete .celebration-icon,
+.celebration-import .celebration-icon {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.8rem;
+}
+@media (max-width: 420px) {
+  .celebration-goal-complete .celebration-icon,
+  .celebration-import .celebration-icon {
+    width: 2.3rem;
+    height: 2.3rem;
+  }
+}
+
+.celebration-onboarding-step {
+  --celebration-accent: #16847d;
+  --celebration-accent-soft: rgb(22 132 125 / 18%);
+}
+.celebration-onboarding-step .celebration-card {
+  width: min(27rem, calc(100vw - 2rem));
+  padding: 0.9rem 1.1rem;
+}
+.celebration-onboarding-step .celebration-icon {
+  width: 2.8rem;
+  height: 2.8rem;
+  font-size: 1.6rem;
+}
+.celebration-onboarding-finish {
+  --celebration-accent: #9870b7;
+  --celebration-accent-soft: rgb(215 162 113 / 24%);
+}

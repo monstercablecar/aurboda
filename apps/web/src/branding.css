@@ -1,0 +1,18 @@
+.app-content.login-theme {
+  color-scheme: dark;
+  --color-bg: #12161c;
+  --color-surface: #1b222b;
+  --color-text: #e6e9ee;
+  --color-text-muted: #9aa6b4;
+  --color-border: #2a333f;
+  --color-accent: #70ced6;
+  --color-accent-hover: #a0e3e8;
+  --color-primary: #17707a;
+  --color-primary-hover: #0f5a62;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.login-theme .login-form .error {
+  color: #ff8585;
+}

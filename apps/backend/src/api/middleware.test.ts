@@ -38,7 +38,8 @@ const db = await import('../db/index.ts')
 const backfill = await import('../services/backfill-screentime-activities.ts')
 const retype = await import('../services/retype-legacy-screentime.ts')
 const redact = await import('../services/redact-garmin-login-audit.ts')
-const { createAuthMiddleware } = await import('./middleware.ts')
+const audit = await import('../services/audit-log.ts')
+const { createAuthMiddleware, createAuditLogMiddleware } = await import('./middleware.ts')
 
 /** Tokens are `token-<user>`; anything else is rejected, as a bad token is. */
 const auth: Auth = {
@@ -57,7 +58,7 @@ const buildApp = (isDeletedUser?: (user: string) => boolean) => {
     res.json({ user: req.user })
   })
   httpd.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    res.status(401).json({ error: err.message })
+    res.status('status' in err ? Number(err.status) : 500).json({ error: err.message })
   })
   return httpd
 }
@@ -135,14 +136,13 @@ describe('createAuthMiddleware', () => {
     await vi.waitFor(() => expect(redact.redactGarminLoginAudit).toHaveBeenCalledWith('alice'))
   })
 
-  test('still serves the request when the schema check fails', async () => {
-    // A user whose database is broken should see the real failure from their
-    // actual query, not a blanket 401 from the middleware.
+  test('rejects the request when the schema check fails', async () => {
     vi.mocked(db.migrateSchemaIfNeeded).mockRejectedValue(new Error('disk full'))
 
     const response = await get(buildApp(), 'alice')
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
+    expect(response.body.error).not.toContain('disk full')
     expect(backfill.backfillScreentimeActivities).not.toHaveBeenCalled()
     expect(retype.retypeLegacyScreentime).not.toHaveBeenCalled()
   })
@@ -236,5 +236,94 @@ describe('createAuthMiddleware with an account gate', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect((await supertest(buildGatedApp()).post('/activities').set(as('expired'))).status).toBe(200)
     errorSpy.mockRestore()
+  })
+})
+
+test('concurrent schema checks share rejection, retry once, and cache only success', async () => {
+  let rejectCheck!: (error: Error) => void
+  vi.mocked(db.migrateSchemaIfNeeded).mockImplementationOnce(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectCheck = reject
+      }),
+  )
+  const middleware = createAuthMiddleware(auth, httpError(401, 'Unauthorized'))
+  const request = () =>
+    ({
+      headers: { authorization: 'Bearer token-alice' },
+      method: 'GET',
+      baseUrl: '',
+      path: '/who',
+    }) as express.Request
+  const firstNext = vi.fn(),
+    secondNext = vi.fn()
+  const first = middleware(request(), {} as express.Response, firstNext)
+  const second = middleware(request(), {} as express.Response, secondNext)
+  expect(db.migrateSchemaIfNeeded).toHaveBeenCalledTimes(1)
+  expect(firstNext).not.toHaveBeenCalled()
+  expect(secondNext).not.toHaveBeenCalled()
+  rejectCheck(new Error('private SQL error'))
+  await Promise.all([first, second])
+  for (const next of [firstNext, secondNext]) {
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 503 }))
+  }
+  expect(backfill.backfillScreentimeActivities).not.toHaveBeenCalled()
+  const retryNext = vi.fn()
+  await middleware(request(), {} as express.Response, retryNext)
+  await middleware(request(), {} as express.Response, vi.fn())
+  expect(retryNext).toHaveBeenCalledWith()
+  expect(db.migrateSchemaIfNeeded).toHaveBeenCalledTimes(2)
+})
+
+describe('audit middleware privacy', () => {
+  test.each([200, 400, 500])('retains operational status without body contents for %i', async (status) => {
+    const app = express()
+    app.use(express.json())
+    app.use(createAuditLogMiddleware(auth))
+    app.post('/private', (_req, res) =>
+      res
+        .status(status)
+        .json({ error: 'private echo', nested: { token: 'secret' }, ['private dynamic key']: 'answer' }),
+    )
+    await supertest(app)
+      .post('/private')
+      .set('Authorization', 'Bearer token-alice')
+      .send({ notes: 'sensitive note', password: 'secret', answers: [{ value: 'medical detail' }] })
+    const logger = status >= 500 ? audit.auditError : status >= 400 ? audit.auditWarn : audit.auditInfo
+    expect(logger).toHaveBeenCalledWith(
+      'alice',
+      'data',
+      'POST /private',
+      status >= 400
+        ? { body_type: 'object', field_count: 3, status, response: { body_type: 'object', field_count: 3 } }
+        : { body_type: 'object', field_count: 3 },
+    )
+  })
+  test('scalar error echoes are summarized too', async () => {
+    const app = express()
+    app.use(createAuditLogMiddleware(auth))
+    app.post('/private', (_req, res) => res.status(400).json('sensitive echo'))
+    await supertest(app).post('/private').set('Authorization', 'Bearer token-alice')
+    expect(audit.auditWarn).toHaveBeenCalledWith('alice', 'data', 'POST /private', {
+      status: 400,
+      response: { body_type: 'string' },
+    })
+  })
+})
+
+test('audit operations retain static route templates, never dynamic paths or unmatched URLs', async () => {
+  const app = express()
+  app.use(createAuditLogMiddleware(auth))
+  app.post('/people/:personId', (_req, res) => res.sendStatus(204))
+  await supertest(app)
+    .post('/people/private-person-name?token=secret')
+    .set('Authorization', 'Bearer token-alice')
+  expect(audit.auditInfo).toHaveBeenCalledWith('alice', 'data', 'POST /people/:personId', undefined)
+  await supertest(app)
+    .post('/secret-token-in-unknown-path?notes=medical')
+    .set('Authorization', 'Bearer token-alice')
+  expect(audit.auditWarn).toHaveBeenCalledWith('alice', 'data', 'POST unmatched route', {
+    status: 404,
+    response: undefined,
   })
 })

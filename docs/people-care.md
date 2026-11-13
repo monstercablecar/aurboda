@@ -1,0 +1,105 @@
+# People: temporary care contexts and Help Tree
+
+This is the implementation guide for temporary status episodes, care observations and the explorable Help Tree. Start with [People](people.md) for profiles, private storage, child guidance, calendar dates and ordinary events. [Care evidence and empathy review](people-care-evidence.md) records the authored content review; passing software tests does not establish clinical validity or humane wording.
+
+## Code map
+
+| Concern                                                             | Source                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared contracts and generated API                                  | [People schemas](../packages/api-spec/src/schemas/people.ts), [OpenAPI paths](../packages/api-spec/src/people-paths.ts)                                                                                                                                                                                                     |
+| Status/metric definitions, clock, validation, predicates, summaries | [people-status.ts](../apps/backend/src/services/people-status.ts): `peopleStatusDefinitions`, `peopleCareMetricDefinitions`, `statusContexts`, `validateStatusEpisodes`, `validateCareEvent`, `statusRuleReasons`, `careMetrics`, `careMilestones`                                                                          |
+| Existing age/relationship matching and precedence                   | [people-rules.ts](../apps/backend/src/services/people-rules.ts): `matchGuidance`, `evaluatePeopleGuidance`                                                                                                                                                                                                                  |
+| Transactions, dashboard and Help Tree composition                   | [people.ts](../apps/backend/src/services/people.ts): `createPerson`, `updatePerson`, `createEvent`, `updateEvent`, `getDashboard`, `getPeopleHelpTree`                                                                                                                                                                      |
+| Local authored content and evidence                                 | [catalog aggregation](../apps/backend/src/services/people-catalog.ts), [care.ts](../apps/backend/src/services/people-catalog/care.ts), [pregnancy.ts](../apps/backend/src/services/people-catalog/pregnancy.ts)                                                                                                             |
+| Private persistence                                                 | [db/people.ts](../apps/backend/src/db/people.ts), [schema/people.ts](../apps/backend/src/schema/people.ts)                                                                                                                                                                                                                  |
+| REST and MCP                                                        | [people-router.ts](../apps/backend/src/routes/people-router.ts), [people-tools.ts](../apps/backend/src/mcp/people-tools.ts)                                                                                                                                                                                                 |
+| User interface                                                      | [StatusEpisodes](../apps/web/src/pages/People/StatusEpisodes.tsx), [StatusEpisodeForm](../apps/web/src/pages/People/StatusEpisodeForm.tsx), [StatusSupport](../apps/web/src/pages/People/StatusSupport.tsx), [EventForm](../apps/web/src/pages/People/EventForm.tsx), [HelpTree](../apps/web/src/pages/People/HelpTree.tsx) |
+
+## Episodes are optional context, not identity or diagnosis
+
+Profiles retain their existing `statuses` strings for relationship context. The additive `status_episodes` array holds illness, depressive symptoms/depression, anxiety/stress, outpatient surgery, hospital surgery/recovery, pregnancy, mourning and postpartum contexts. Multiple episodes may coexist, including repeated episodes of the same kind. Selecting a status is an explicit user-supplied circumstance; the application does not infer a diagnosis, reproductive capacity or anatomy from gender, age, relationship or logs.
+
+Each episode has its own UUID, kind, lifecycle, start date, information source and optional phase, intensity, preferences, end estimates, agreement and pregnancy timing. Phase options come from server definitions. In particular, grief phases are support contexts rather than a prescribed sequence of grieving stages. Relationship `child` means the user's child, including an adult child; it does not reverse who is pregnant or create a sibling/family link.
+
+Lifecycle changes among active, resolved and archived are explicit profile edits. Estimated end dates and due dates do not resolve episodes, create children, create postpartum statuses, record outcomes, schedule appointments or send reminders. Pregnancy outcome is optional and explicit; an active pregnancy cannot carry a resolution/outcome. A separate postpartum or mourning episode can reference a previous episode, but its creation remains a user action.
+
+The service preserves server-owned `transition_history`, appending lifecycle changes with a date and, where available, the previous outcome/resolution date. Client-forged history is rejected. Editing an existing episode's kind is rejected; create a new episode instead. Removing any existing episode is rejected with an instruction to archive it, even when it has no events. A stale array patch that omits a concurrently added episode is rejected rather than silently dropping that episode; reload the profile before retrying. Explicit permanent profile deletion remains the way to delete the profile and its owned records. Ordinary profile patches preserve omitted episodes and metric preferences. The representation uses existing JSONB profile/event storage and requires no new table or destructive migration.
+
+## Pregnancy timing and calendar semantics
+
+`statusContexts` captures the account's calendar date using its timezone, with the existing timezone service's UTC fallback. Duration is calendar days since start, not hours divided by 24. Pregnancy accepts either an estimated due date or paired gestational age in days and reference date. Both anchors together are rejected; having neither is allowed.
+
+The due-date calculation uses a 280-day anchor; a dated gestational estimate adds calendar-day differences. These are estimates from supplied information, not dating scans or clinical determinations. Computed values outside 0–315 days become unavailable with an explanation instead of being clamped. Missing timing leaves general pregnancy support available but does not satisfy gestational-window conditions.
+
+Derived pregnancy phases use half-open boundaries: before day 98 first trimester, days 98–195 second trimester, days 196–258 third trimester, and day 259 onward birth preparation. This is the application's 14/28/37-week presentation convention, not a universal scheduling rule. A dated estimate takes precedence over a contradictory saved phase and the context explains that precedence. Without an anchor, an explicit phase can guide non-timed content. Postpartum elapsed-day phase defaults apply only when no explicit phase is supplied: immediate before day 7, early before day 42, then ongoing.
+
+A resolved episode with a resolution date freezes its contextual timing at that date. An inactive episode without a resolution date is labelled as an inactive reference estimate, not an ongoing pregnancy. Neither calculation silently modifies lifecycle or outcome.
+
+## Optional care observations and consent
+
+Care observations reuse existing `observation` events with `status_episode_id`, either `care_metric` or `milestone_id`, and explicit `information_source`. Appointments and goals can link an episode without becoming measurements. The service validates that referenced episodes belong to the current person and definitions belong to the episode's kind; REST and MCP share these checks.
+
+Definitions include check-ins, practical help, explicitly shared support needs, symptom notes, energy, mood, stress, discomfort, mobility and preparation. Count entries may record firsthand practical actions. Sensitive entries require agreement for new collection and a voluntarily shared or clinically shared source. A status itself is not consent to monitor another person. Ratings are informal 0–10 descriptions with explicit scale labels, never diagnostic scores or prediction thresholds. Numeric values are accepted only for the defined rating metrics; this does not open arbitrary numeric observation logging.
+
+New care tracking requires an active episode and cannot predate its start. Existing records remain correctable and deletable after resolution or withdrawal of agreement; this is historical correction, not permission to add new collection. Payload PATCH behavior remains unchanged: omitted payload preserves it, supplied payload replaces it. Clients must retain fields they intend to keep. Journal and memory text is not mined for care metrics or diagnoses.
+
+Each metric ID includes the episode UUID: `care:<episode>:<metric>:7d` for count summaries, or `:latest` for other definitions. Same-kind episodes cannot mix their histories. Metrics are available while active but disabled until their exact IDs are explicitly selected. After resolution/archive, a metric appears only when that episode's retain flag and the metric's enabled ID are both set. Historical events remain accessible regardless of dashboard visibility.
+
+Count windows cover the trailing seven elapsed days and exclude future events. Latest ratings preserve a recorded zero and use null for missing data. State/note summaries use `display_value` rather than inventing a numeric progress score. Private metric points remain in People storage, outside the generally shareable custom-metric registry. Privacy does not mean log erasure: historical audit records and backups may retain earlier write bodies. New request audit entries are minimized; see [privacy hardening](ai/privacy-hardening.md).
+
+## One deterministic advice pipeline
+
+The existing `matchGuidance` combines relationship, chronological/corrected developmental age where appropriate, explicitly selected needs/interests/goals and optional gender context with additive status conditions. Medical/safety content must remain chronological rather than being delayed by corrected developmental age.
+
+`status_conditions` supports required `all`, alternative `any`, and excluded active kinds. Its optional `episode` block applies phase, elapsed-day and gestational bounds to the **same** matching episode. Bounds are inclusive at the minimum and exclusive at the maximum. Archived/resolved episodes do not activate current guidance. An unknown gestational estimate fails a gestational constraint while allowing general status advice.
+
+The narrowly defined `log_condition` reads only explicitly shared support-need states within a bounded recent window. It scopes records to the current person and relevant active episode kinds, excludes records before episode start/future observations, and uses the newest entry per episode. A later refusal therefore supersedes an old request. It does not parse free text, infer concern from missing logging or apply symptom/rating thresholds.
+
+Safety ranks first, followed by contextual status advice before routine material. Explicit `dedupe_key` values suppress equivalent lower-priority cards deterministically; authors must not use them to combine materially different safety instructions. Feedback older than the relevant matching episode is ignored, so a previous episode's dismissal is not automatically a new episode's preference. Feedback remains stored by person/guidance, not as a complete episode-specific feedback ledger. It never completes a clinical milestone.
+
+## Milestones, appointments and reminders
+
+The catalog defines educational milestone discussion windows and evidence, not universally required tests. Dashboard states are upcoming, available, recorded, past-window or timing-unknown. A gestational milestone without a valid anchor has timing-unknown state and an explanatory label; no appointment date is inferred. An explicit past observation produces recorded state even if the observation was unsure or not observed; recorded does not mean clinically completed. The referenced event preserves what was actually recorded.
+
+Milestone observations require tracking agreement and willingly/clinically shared information for new collection. Future observations cannot mark a milestone recorded. A user may plan an appointment and opt into an existing reminder; no reminder or due date is created by eligibility alone. Existing browser-push delivery and limitations are described in [People reminders](people-reminders.md).
+
+## Help Tree and practical scenarios
+
+The People screen's **View Help Tree** opens the actual installed guidance, status/metric/milestone definitions and evidence relationships. Authenticated `GET /people/help-tree` and MCP `get_people_help_tree` expose the same metadata. Optional `person_id` loads only the authenticated owner's profile and returns per-guidance applicability/reasons from the same evaluator. The global metadata response includes no private profile. UI browsing facets navigate authored metadata; they do not replace server eligibility calculations.
+
+- A pregnant spouse who explicitly also reports anxiety can receive pregnancy timing content, anxiety support, and authored interaction advice. No gender-based physiology inference or automatic birth/postpartum transition occurs.
+- A child experiencing grief receives age-appropriate support and autonomy guidance; phases do not imply that grief must end on a schedule.
+- A friend recovering from surgery receives optional practical offers and respect for the person's discharge plan, not an invented procedure-specific recovery timeline.
+- Two illness episodes keep separate metric IDs and event references. Resolving one does not erase its history or merge its ratings into the other.
+
+## Extending and validating the feature
+
+Add status kinds to the shared enum and server definitions, then author meaningful conditions/content and sources. Reuse the current event and matcher path rather than adding a parallel tracker. Define any new metric's value kind, source/consent policy, units and display semantics before allowing it through validation. Add milestone definitions only with appropriate evidence and explicit timing limitations. Regenerate shared OpenAPI/TypeScript/Kotlin artifacts after contract edits.
+
+Guidance review records distinguish clinical, developmental, practical and ethical claims and include a scenario-based empathy-review note/date. The implementation agents performed this review; it is not human or clinical approval. Source metadata distinguishes a full-page check from an official indexed excerpt. Recheck sources when changing claims or when publisher guidance changes; do not treat search excerpts as a full clinical source review. Keep scope, individualized judgment and missing evidence visible. The separate evidence document records review coverage and limitations.
+
+Tests cover the shared schema's omitted-patch behavior, clocks/boundaries, overlapping/same-episode rules, consent and source validation, lifecycle retention, history correction, private ownership, real database round trips, REST/MCP parity and legacy People behavior. Frontend tests verify forms, source attribution and Help Tree navigation. The known unrelated experimental Work-schema import can still block the overall backend typecheck; report that separately rather than removing it.
+
+Intentional limits: no medical predictions, automatic diagnosis, automatic family graph updates, automatic pregnancy outcomes, procedure-specific timelines, inferred care preferences or automatic clinical scheduling. Current feedback storage is not a full per-episode ledger. Outcome edits without a lifecycle change are not a separate outcome audit trail. This document describes code behavior, not a claim of deployment or completed external source verification.
+
+Release validation: [care expansion verification](people-verification/care-expansion.md).
+
+## Practical Care Ethics Guide
+
+The People list (including the empty state) and individual profile offer **Care Ethics Guide** beside **View Help Tree**. This concise authored guide covers asking, bounded offers, permission, follow-through, paternalism, children and dependence, repairing oversteps, and a quick reflection checklist. Expandable examples keep the first view compact. It links the Internet Encyclopedia of Philosophy for further reading and distinguishes practical interpretations from clinical or legal directives. Opening it preserves the underlying profile draft; closing it restores focus to its button. No tracking, notifications or backend state changes are introduced.
+
+Guide release `f1d8fd1` was deployed November 12, 2026. Existing People tests (40), web typecheck, scoped lint and production image build passed. Standard backup validation succeeded; local and public status returned this version. Previous image: `localhost/foghouse-aurboda:before-ethics-f1d8fd1`. Restart warned that service configuration on disk had changed; no unrelated configuration was reloaded, and both health checks succeeded.
+
+## Help Tree graph atlas
+
+Help Tree opens in **Graph view**, a bounded, keyboard-navigable atlas of actual catalog topics, guidance and evidence. Authored age ranges appear across the top; relationship and circumstance branches run along the side. The age rail orders exact ranges by unit and numeric bounds; minimums are inclusive and maximums exclusive. **No temporary status** selects records without positive temporary-status predicates, retaining legacy relationship context and exclusion-only rules. Browsing never establishes personal applicability; the optional server evaluation filter and inspector reasons remain separate.
+
+HTML button nodes sit above aligned SVG arrow connectors. Arrows represent metadata connections, not prerequisites, achievement levels or required care steps. Six guidance records appear per overview page. Selecting guidance focuses its conditions, optional metric references and sources; milestone connections explicitly mean shared evidence, not a requirement. Focused references are bounded too; the inspector and **List view** retain full details. Filter changes reset selection so unrelated advice cannot remain in the inspector. Source nodes identify excerpt-only verification where applicable.
+
+Search includes practical actions and source names. Progressive filters, graph paging, a reset-position button and native scrolling avoid mandatory dragging or tiny scaled text. Mobile users can scroll the graph or switch to the equivalent List view. Native focus indicators and reduced-motion styling support keyboard and motion-sensitive use. The graph does not introduce a second rule dataset, dependency, backend write or change to profile draft preservation.
+
+Graph validation (`0acf375`, November 12, 2026): 43 People UI tests, web typecheck, scoped lint and production web build passed. Desktop browser review confirmed connectors, no-status filtering and focused nodes; a 390px review caught and verified the corrected rail width. Existing large-chunk build warning remains. No backend contract or database change was required.
+
+Graph deployment verified November 12, 2026: image `localhost/foghouse-aurboda:tech-tree-0acf375` built successfully; the existing backup script completed with archive validation before restart. Local and public `/api/status` returned `0acf375`, service was active, and unauthenticated `/api/people/help-tree` returned 401. Rollback image: `localhost/foghouse-aurboda:before-tech-tree-0acf375`. The service reported changed unit files on disk; no daemon reload was performed because separate configuration work is pending. Only the graph release patch and its documentation were copied into the customized source checkout.
+
+Marriage relationship contexts and optimistic profile updates are documented in [spouse guidance](people-marriage.md). These explicit relationship contexts are separate from the dated care episodes described above.

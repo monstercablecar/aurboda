@@ -1,0 +1,55 @@
+# What I've changed in Foghouse
+
+I wanted Aurboda to cover more of the things I do every day: work, relationships, tasks, check-ins, and keeping useful information in one place. This is the source for those additions. It's still a work in progress, and I don't expect every part of it to belong upstream.
+
+Fredrik Liljegren built Aurboda. The integrations, Android companion, data platform and much of the interface are his work. The original history, license and notices stay intact. My aim is to keep useful changes understandable enough that individual pieces can be discussed and contributed back.
+
+## Starting point
+
+This snapshot starts at upstream release `feae57c68351927f33e322d2c61841b4fed0132d` (November 9, 2026). It collects the existing customized deployment source, with publication-only documentation cleanup. It does not merge newer upstream development or change the running server.
+
+The local development history also has a separate root snapshot. Its feature guides and historical commit references are retained as context, but those hashes are not ancestors of this publication branch. The public branch keeps the real upstream ancestry instead of inventing a series of historical feature commits. One missing recurring-task release note was recovered from that development copy. Unregistered celebration previews from that copy are not production features and are not included.
+
+The [file inventory](fork-file-inventory.md) lists every changed, added and deleted file relative to that baseline. The following table explains the purpose of the changes; the linked guides cover behavior, storage, setup and limits.
+
+## Additions and changes
+
+| Area | What changed | Where to start |
+| --- | --- | --- |
+| Work | Profile-driven daily tracking, configurable grids, history, weekly analysis and atomic day saves with REST/MCP support. Uses existing generic metrics alongside a canonical day record. | [Work saves](work-day-saving.md), `apps/web/src/pages/WorkMetrics/`, `apps/backend/src/services/work-day.ts` |
+| People | Private relationship profiles, observations, important dates, goals, relationship-state history, temporary care contexts and deterministic guidance. Includes child/pregnancy guidance and a Help Tree. | [People](people.md), [care](people-care.md), [evidence](people-care-evidence.md), [coverage limits](people-catalog-coverage.md), [relationships](people-marriage.md) |
+| Treatments and check-ins | Substance/regimen tracking, intake history, questionnaires, assessments, context events and exploratory exposure analysis. Separate nutrition and mental-assessment entry points share this infrastructure. | [Treatments](features/treatments-recovery.md), `apps/backend/src/services/pharmacology.ts`, `apps/web/src/pages/Treatments/` |
+| Simple Food | A lighter nutrition check-in workflow built on managed questionnaire resources. | `apps/web/src/pages/SimpleFood/`, [feature map](ai/frontend-and-features.md) |
+| Mental Assessments | Questionnaire catalogs, score entry and results through the shared assessment APIs. These are tracking tools, not diagnoses. | [Assessments](mental-assessments.md), `apps/web/src/pages/Assessments/` |
+| CPAP | Manual myAir CSV preview/import and metric review. No direct device connection or automatic sync is claimed. | [CPAP](cpap.md), `apps/web/src/pages/CPAP/` |
+| Tasks | Private task lists and Kanban boards, configurable columns, rich details, filtering, ordering, archive/restore, bulk actions and recurrence. | [Tasks](native-tasks.md), [board workflows](ai/kanban-workflows.md), [appearance](ai/kanban-appearance.md) |
+| Resources | Shared authenticated file/link library with folders, admin uploads/management, and user browsing/downloads. Metadata is central; it is not stored in individual People databases. | [Resources](resources.md) |
+| Dashboards | Optional private presets using the existing renderer and an idempotent installer. | [Dashboard presets](custom-dashboards.md), `scripts/custom-dashboards/` |
+| Onboarding and branding | Guided optional setup, durable completion/skip state, Foghouse navigation/branding and small completion celebrations. | [Onboarding](onboarding.md), [branding](foghouse-branding.md), [celebrations](celebrations.md) |
+| Home games | Optional memory and reaction games with explicit result saving and separate assessment metrics. No clinical equivalence claim. | [Games, protocols and licenses](ai/foghouse-games.md) |
+| Browser notifications | Existing browser subscription/test plumbing and opt-in People event reminders. Requires configured Web Push and a supported browser; does not add APK notification delivery. | [Browser pilot](browser-push-pilot.md), [People reminders](people-reminders.md) |
+| Timeline and calendars | Private People date projections and associated navigation/display work; documented calendar-source semantics. | [Calendars](calendars.md), `apps/web/src/pages/Timeline/` |
+| Privacy and sessions | Reduced request-audit payloads, schema-failure handling, account-scoped caches and fencing of stale asynchronous work. | [Audit privacy](ai/privacy-hardening.md), [account isolation](ai/account-isolation.md) |
+| Export and restore | Coverage and tests for custom account data, plus clearer download/restore boundaries. Shared Resources storage has its own backup needs. | [Export](data-export.md), [coverage](ai/account-export.md) |
+| Operations | Reviewed release labels, source manifests, backup/build checks and exact-version health checks for the local deployment. | [Release procedure](ai/foghouse-release-traceability.md), [historical releases](ai/release-log.md) |
+| Android source | Existing local edits add embedded destinations and a Foghouse default server with related tests. These source edits have not been distributed as a Foghouse APK. | `apps/android/app/src/main/java/net/aurboda/ui/screens/MoreScreen.kt`, `LoginScreen.kt` |
+
+The disconnected configurable Work engine and archived schema fragment remain explicitly experimental. Their presence is not evidence of active routes or tables. See [known issues](ai/technical-debt.md).
+
+## Android and notification boundary
+
+I intend to keep using the official APK and its integration updates. This publication does not build, sign or distribute an APK. The inherited Android and Docker publishing jobs are guarded to run only in `fiddur/aurboda`, preventing accidental fork releases or attempts to publish to the author's Docker namespace. Ordinary validation CI is retained.
+
+On November 13, current upstream `develop` documentation was checked through GitHub. It now has a central notification store and preferences, newer than this snapshot. Its Android guide explicitly says the phone does not yet consume `GET /notifications?push_only=true`. We are waiting for the developer's response before doing notification work. See [upstream notifications](https://github.com/fiddur/aurboda/blob/develop/docs/features/notifications.md) and [Android delivery status](https://github.com/fiddur/aurboda/blob/develop/docs/android-app.md). These links can change; this is a dated observation, not a promise about a future APK.
+
+## Publication cleanup
+
+Private dashboard links and personal tracking summaries were removed from the public documentation. Runtime environment files, database dumps, agent worktrees/settings, generated output, raw verification logs and the local verification screenshot are excluded. Test summaries remain clearly historical. No user database was exported for this repository.
+
+The original AGPL license, package authorship and third-party notices remain. `AGENTS.md` adds a fork-specific note so new contributors use their own identity rather than copying Fredrik's cloud-session author settings. Local paths in historical deployment guides are examples of that installation, not portable defaults; set `FOGHOUSE_INSTALL_ROOT` before using its release script.
+
+## Working with upstream
+
+This initial branch is a source publication, not a request to merge the whole fork. `main` and `develop` are left unchanged. For a contribution, agree on a narrow issue first, start from current upstream `develop`, bring over the relevant change, run the documented checks, and open a draft PR. Use merges rather than rebasing published history, preserve REST/MCP and native/web parity, and follow the author's review gates. The upstream review bot is not assumed to be configured here.
+
+Validation results and remaining limits for this snapshot are in [fork validation](fork-validation.md). Publishing the source is not a claim that it is ready to merge upstream or deploy elsewhere without setup.

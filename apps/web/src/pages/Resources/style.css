@@ -1,0 +1,391 @@
+.resources-page {
+  max-width: 1260px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 42px 36px 72px;
+  color: var(--color-text);
+}
+.resources-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+.resources-heading h1 {
+  font-size: 2.4rem;
+  letter-spacing: -0.045em;
+  margin: 4px 0 10px;
+}
+.resource-eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.resource-muted {
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+}
+.resource-actions,
+.resource-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.resources-page button,
+.resource-dialog button,
+.resource-download {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 9px 13px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  text-decoration: none;
+}
+.resources-page button:hover,
+.resource-dialog button:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.resources-page .resource-primary,
+.resource-dialog .resource-primary,
+.resource-download {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+.resources-page button:disabled,
+.resource-dialog button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.resources-page :focus-visible,
+.resource-dialog :focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.resource-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--color-text-muted);
+  margin-bottom: 18px;
+}
+.resource-breadcrumbs button {
+  border: 0;
+  padding: 5px 8px;
+  background: transparent;
+}
+.resource-toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+.resource-search {
+  flex: 1;
+}
+.resource-toolbar input,
+.resource-toolbar select,
+.resource-dialog input,
+.resource-dialog select,
+.resource-dialog textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.resource-section-label {
+  display: flex;
+  justify-content: space-between;
+  margin: 32px 0 16px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.resource-section-label span {
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 20px;
+}
+.resource-card {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--color-surface);
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+  min-width: 0;
+}
+.resource-card:hover {
+  border-color: var(--color-accent-border);
+  transform: translateY(-2px);
+}
+.resource-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.resource-card-body {
+  padding: 20px;
+}
+.resource-cover {
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+.resource-cover > span:first-child {
+  font-size: 3.6rem;
+  font-weight: 300;
+  line-height: 1;
+}
+.resource-kind-pdf {
+  background: color-mix(in srgb, #ba765b 10%, var(--color-surface));
+  color: #b47157;
+}
+.resource-kind-image {
+  background: color-mix(in srgb, #5e9170 10%, var(--color-surface));
+  color: #5e9170;
+}
+.resource-kind-video {
+  background: color-mix(in srgb, #8174b2 10%, var(--color-surface));
+  color: #8174b2;
+}
+.resource-kind-label {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.resource-description {
+  font-size: 0.84rem;
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  min-height: 2.5em;
+}
+.resource-meta {
+  font-size: 0.72rem;
+}
+.resource-card-actions {
+  margin-top: 18px;
+}
+.resource-card-actions button,
+.resource-card-actions a {
+  border: 0;
+  padding: 3px 0;
+  font-size: 0.76rem;
+  background: transparent;
+  color: var(--color-accent);
+  margin-right: 8px;
+}
+.resource-card-actions button:last-child:not(:first-child) {
+  color: var(--color-text-muted);
+}
+.resources-page .resource-card-open {
+  text-align: left;
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 22px;
+}
+.resource-icon {
+  display: block;
+  color: var(--color-accent);
+  font-size: 2.2rem;
+  margin-bottom: 18px;
+}
+.resource-folder .resource-card-actions {
+  margin: 0;
+  padding: 0 22px 18px;
+}
+.resource-empty {
+  text-align: center;
+  padding: 65px 20px;
+  color: var(--color-text-muted);
+}
+.resource-empty > span {
+  font-size: 3rem;
+  color: var(--color-accent);
+}
+.resource-empty h2 {
+  color: var(--color-text);
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+.resource-drop-hint {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin: 30px 0;
+  font-size: 0.76rem;
+}
+.resources-dragging {
+  outline: 3px dashed var(--color-accent);
+  outline-offset: -12px;
+  background: var(--color-accent-soft);
+}
+.resource-error {
+  color: #c34d48;
+  overflow-wrap: anywhere;
+}
+.resource-upload-status {
+  padding: 14px;
+  background: var(--color-accent-soft);
+  border-radius: 8px;
+}
+.resource-dialog {
+  width: min(760px, calc(100vw - 48px));
+  max-height: 88%;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 26px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 18px 70px #0004;
+}
+.resource-dialog::backdrop {
+  background: #07132399;
+  backdrop-filter: blur(3px);
+}
+.resource-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+.resource-dialog h2 {
+  font-size: 1.25rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.resource-dialog label {
+  display: block;
+  margin: 18px 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+.resource-dialog label input,
+.resource-dialog label select,
+.resource-dialog label textarea {
+  display: block;
+  margin-top: 7px;
+}
+.resource-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+.resource-dialog .resource-danger {
+  background: #a93732;
+  color: white;
+}
+.resource-preview img,
+.resource-preview video {
+  display: block;
+  max-width: 100%;
+  max-height: 560px;
+  margin: auto;
+}
+.resource-preview iframe {
+  width: 100%;
+  height: 460px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.resources-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 700px) {
+  .resources-page {
+    padding: 25px 16px 50px;
+  }
+  .resources-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .resources-heading h1 {
+    font-size: 2rem;
+  }
+  .resource-toolbar {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .resource-search {
+    flex-basis: 100%;
+  }
+  .resource-toolbar > label:not(.resource-search) {
+    flex: 1;
+  }
+  .resource-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .resource-dialog {
+    padding: 18px;
+  }
+  .resource-dialog footer {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .resource-card {
+    transition: none;
+  }
+}
+/* The shell gives direct main children flex:1 to fill chart screens. A library
+   is content-sized, so rows and cards must never compete for viewport height. */
+main.resources-page {
+  display: block;
+  min-height: auto;
+}
+.resources-page > div {
+  flex: none;
+  min-height: auto;
+  width: auto;
+}
+.resources-page > .resource-toolbar {
+  flex-direction: row;
+}

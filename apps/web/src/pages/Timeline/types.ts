@@ -10,6 +10,7 @@ export type Column =
 export type Orientation = 'horizontal' | 'vertical'
 
 export interface TooltipContent {
+  date?: string
   title: string
   time: string
   details: string[]

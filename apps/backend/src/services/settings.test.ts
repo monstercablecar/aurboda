@@ -148,12 +148,14 @@ describe('getSettingsResponse', () => {
 
     expect(result.onboarding_dismissed_at).toBeNull()
     expect(result.onboarding_manual_done).toEqual([])
+    expect(result.onboarding_progress).toEqual({})
   })
 
   test('passes stored get-started guide state through', async () => {
     vi.mocked(db.getUserSettings).mockResolvedValue({
       onboarding_dismissed_at: '2026-11-01T10:00:00.000Z',
       onboarding_manual_done: ['ask_ai'],
+      onboarding_progress: { work: 'completed', people: 'skipped' },
     })
     vi.mocked(db.getOAuthToken).mockResolvedValue(null)
 
@@ -161,6 +163,7 @@ describe('getSettingsResponse', () => {
 
     expect(result.onboarding_dismissed_at).toBe('2026-11-01T10:00:00.000Z')
     expect(result.onboarding_manual_done).toEqual(['ask_ai'])
+    expect(result.onboarding_progress).toEqual({ work: 'completed', people: 'skipped' })
   })
 
   test('returns formatted response with custom zones', async () => {
@@ -385,8 +388,31 @@ describe('validateAndUpdateSettings', () => {
     ])
   })
 
+  test('accepts persistent progress, leaves omitted progress alone, and clears with null', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue({ onboarding_progress: { work: 'completed' } })
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({ onboarding_progress: { work: 'completed' } })
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    const progress = {
+      browser_basics: 'completed',
+      treatments: 'skipped',
+      cpap: 'pending',
+      mental_assessments: 'completed',
+      simple_food: 'skipped',
+      work: 'completed',
+      people: 'pending',
+    } as const
+    await validateAndUpdateSettings('testuser', { onboarding_progress: progress })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', { onboarding_progress: progress }, [])
+    await validateAndUpdateSettings('testuser', { sex: 'male' })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', { sex: 'male' }, [])
+    await validateAndUpdateSettings('testuser', { onboarding_progress: null })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['onboarding_progress'])
+  })
+
   test.each([
     ['a dismissal that is not a date-time', { onboarding_dismissed_at: 'yesterday' }],
+    ['an unknown progress key', { onboarding_progress: { unknown: 'completed' } }],
+    ['an invalid progress status', { onboarding_progress: { work: 'done' } }],
     ['an unknown step id', { onboarding_manual_done: ['learn_to_fly'] }],
   ])('rejects %s', async (_name, input) => {
     vi.mocked(db.upsertUserSettings).mockClear()

@@ -24,6 +24,8 @@ import {
   selectItemIcons,
 } from '../../state/api'
 import { browserTz } from '../../state/api/client'
+import { fetchPeopleCalendar } from '../../state/api/people'
+import { auth } from '../../state/auth'
 import { parseBucketedResponse } from '../../utils/chart'
 import { packLanes } from '../../utils/lanePacking'
 import {
@@ -53,6 +55,12 @@ import {
   type LegendCategory,
   type ScreentimeSubEntry,
 } from './legendCategories'
+import {
+  buildPeopleCalendarItems,
+  peopleCalendarQueryKey,
+  peopleCalendarRangeError,
+  peopleCalendarWindow,
+} from './peopleCalendar'
 import { TIMELINE_METRICS, TIMELINE_SLEEP_METRICS } from './timelineMetrics'
 import { buildSleepDetails, type SleepMetricsByDate } from './tooltipBuilder'
 
@@ -90,6 +98,8 @@ export interface TimelineData {
 
 export interface UseTimelineDataOptions {
   fetchStart: Date
+  viewStart: Date
+  viewEnd: Date
   fetchEnd: Date
   fromDateKey: string
   toDateKey: string
@@ -108,6 +118,8 @@ export interface UseTimelineDataOptions {
 export const useTimelineData = ({
   fetchStart,
   fetchEnd,
+  viewStart,
+  viewEnd,
   fromDateKey,
   toDateKey,
   hiddenCategories,
@@ -131,6 +143,23 @@ export const useTimelineData = ({
     queryKey: ['timeline-activities', fromDateKey, toDateKey],
     staleTime: 5 * 60 * 1000,
   })
+
+  const { from: calendarFrom, to: calendarTo } = peopleCalendarWindow(viewStart, viewEnd)
+  const calendarRangeError = peopleCalendarRangeError(calendarFrom, calendarTo)
+  const calendarUser = auth.value.user
+  const calendarToken = auth.value.token
+  const showCalendar =
+    Boolean(calendarToken) && !hiddenCategories.has('activity') && !hiddenCategories.has('calendar')
+  const peopleCalendarQuery = useQuery({
+    enabled: showCalendar && !calendarRangeError,
+    queryFn: () => fetchPeopleCalendar({ from: calendarFrom, to: calendarTo }, calendarToken),
+    queryKey: peopleCalendarQueryKey(calendarUser, calendarToken, calendarFrom, calendarTo),
+    staleTime: 60_000,
+  })
+  const peopleCalendarItems = useMemo(
+    () => buildPeopleCalendarItems(peopleCalendarQuery.data ?? []),
+    [peopleCalendarQuery.data],
+  )
 
   const mealsQuery = useQuery({
     enabled: !hiddenCategories.has('activity') && !hiddenCategories.has('meal'),
@@ -445,6 +474,7 @@ export const useTimelineData = ({
       ...musicItems,
       ...mealItems,
       ...commentItems,
+      ...peopleCalendarItems,
     ],
     [
       activityItems,
@@ -459,6 +489,7 @@ export const useTimelineData = ({
       musicItems,
       mealItems,
       commentItems,
+      peopleCalendarItems,
     ],
   )
 
@@ -496,11 +527,19 @@ export const useTimelineData = ({
     [columns, itemsByColumn],
   )
 
-  const isFetching = activitiesQuery.isFetching || mealsQuery.isFetching || bucketedMetricsQuery.isFetching
+  const isFetching =
+    activitiesQuery.isFetching ||
+    mealsQuery.isFetching ||
+    bucketedMetricsQuery.isFetching ||
+    peopleCalendarQuery.isFetching
 
   const isInitialLoad = activitiesQuery.isLoading
 
-  const errorSources = [activitiesQuery.isError && 'activities'].filter(Boolean) as string[]
+  const errorSources = [
+    activitiesQuery.isError && 'activities',
+    peopleCalendarQuery.isError && 'People calendar dates',
+    showCalendar && calendarRangeError,
+  ].filter(Boolean) as string[]
 
   return {
     activities,

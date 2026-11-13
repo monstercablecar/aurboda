@@ -1,3 +1,4 @@
+import { createNativeTasksRouter } from '../routes/native-tasks-router.ts'
 /**
  * Mounts the per-domain REST routers under the Express app. Each router lives
  * in `routes/` and is instantiated with the auth middleware (and any service
@@ -49,6 +50,7 @@ import { createAdminRouter } from '../routes/admin-router.ts'
 import { createAgentsRouter } from '../routes/agents-router.ts'
 import { createAuditLogRouter } from '../routes/audit-log-router.ts'
 import { createAutoshareRulesRouter } from '../routes/autoshare-rules-router.ts'
+import { createBrowserPushRouter } from '../routes/browser-push-router.ts'
 import { createChallengeDataRouter } from '../routes/challenge-data-router.ts'
 import { createChallengeQuantpubRouter } from '../routes/challenge-quantpub-router.ts'
 import { createChallengesRouter } from '../routes/challenges-router.ts'
@@ -73,6 +75,8 @@ import { createNotesRouter } from '../routes/notes-router.ts'
 import { createNutrientRecommendationsRouter } from '../routes/nutrient-recommendations-router.ts'
 import { createOEmbedRouter } from '../routes/oembed-router.ts'
 import { createOgImageRouter } from '../routes/og-image-router.ts'
+import { createPeopleRouter } from '../routes/people-router.ts'
+import { createPharmacologyRouter } from '../routes/pharmacology-router.ts'
 import { createProductivityRouter } from '../routes/productivity-router.ts'
 import { createProfileRouter } from '../routes/profile-router.ts'
 import { createPublicAvatarRouter } from '../routes/public-avatar-router.ts'
@@ -80,6 +84,7 @@ import { createPublicBannerRouter } from '../routes/public-banner-router.ts'
 import { createPublicSharesRouter } from '../routes/public-shares-router.ts'
 import { createRawRecordsRouter } from '../routes/raw-records-router.ts'
 import { createReportsRouter } from '../routes/reports-router.ts'
+import { createResourcesRouter } from '../routes/resources-router.ts'
 import { createRoutesRouter } from '../routes/routes-router.ts'
 import { createScreentimeCategoriesRouter } from '../routes/screentime-categories-router.ts'
 import { createSensitivityFlagsRouter } from '../routes/sensitivity-flags-router.ts'
@@ -92,6 +97,7 @@ import { createTrainingLoadRouter } from '../routes/training-load-router.ts'
 import { createTrendsRouter } from '../routes/trends-router.ts'
 import { createWebAuthnRouter } from '../routes/webauthn-router.ts'
 import { createWellKnownRouter, type WellKnownConfig } from '../routes/well-known-router.ts'
+import { createWorkRouter } from '../routes/work-router.ts'
 import {
   renderChartPng,
   renderRaceChartPng,
@@ -200,6 +206,10 @@ export const mountRestRouters = ({
   httpd.use(createMetricsRouter(authMiddleware, syncProvider))
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))
+  httpd.use('/resources', createResourcesRouter(authMiddleware, centralDb, apiBaseUrl))
+  httpd.use('/work', createWorkRouter(authMiddleware, activityNotifier))
+  httpd.use('/people', createPeopleRouter(authMiddleware))
+  httpd.use('/tasks', createNativeTasksRouter(authMiddleware))
   httpd.use('/notes', createNotesRouter(authMiddleware))
   httpd.use('/media', createMediaRouter(authMiddleware))
   httpd.use('/meals', createMealsRouter(authMiddleware))
@@ -208,6 +218,7 @@ export const mountRestRouters = ({
   httpd.use('/nutrient-recommendations', createNutrientRecommendationsRouter(authMiddleware))
   httpd.use('/admin/imports', createImportsRouter(authMiddleware, adminMiddleware, centralDb))
   httpd.use('/reports', createReportsRouter(authMiddleware))
+  httpd.use('/pharmacology', createPharmacologyRouter(authMiddleware))
   httpd.use(
     createActivitiesRouter(
       authMiddleware,
@@ -235,6 +246,7 @@ export const mountRestRouters = ({
   )
   httpd.use('/autoshare-rules', createAutoshareRulesRouter(authMiddleware, autosharePreviewDeps))
   httpd.use('/locations', createLocationsRouter(authMiddleware, onNamedLocationsChanged))
+  httpd.use('/notifications/web-push', createBrowserPushRouter(authMiddleware))
   httpd.use(createSettingsRouter(authMiddleware, onHrSettingsChanged, onProfileChanged))
   httpd.use(createAuditLogRouter(authMiddleware))
   httpd.use('/export', createExportRouter({ authMiddleware, ...dataExport }))

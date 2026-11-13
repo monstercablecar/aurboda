@@ -1,0 +1,134 @@
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #08121e;
+  color: #cff9f3;
+  font-family: system-ui, sans-serif;
+}
+body {
+  background-image:
+    radial-gradient(ellipse at center, #13414a33, transparent 70%),
+    linear-gradient(#65ffe907 1px, transparent 1px), linear-gradient(90deg, #65ffe907 1px, transparent 1px);
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px;
+}
+#experiment {
+  min-height: 420px;
+  padding: 12px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+#clock {
+  text-align: left;
+  padding: 16px 20px 4px;
+  min-height: 20px;
+  font-size: 0.7rem;
+  color: #7396a8;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.jspsych-content-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+.jspsych-content {
+  max-width: 100%;
+  text-align: center;
+  margin: 0 auto;
+}
+.jspsych-display-element:focus {
+  outline: none;
+}
+.jspsych-btn-group-grid,
+.jspsych-btn-group-flex {
+  display: flex;
+  justify-content: center;
+}
+#jspsych-corsi-stimulus {
+  margin: 0 auto 44px;
+}
+#jspsych-corsi-prompt {
+  line-height: 1.2;
+}
+.jspsych-corsi-block {
+  touch-action: manipulation;
+  border: 1px solid #459eab;
+  border-radius: 7px;
+  box-shadow:
+    0 0 13px #50dddb25,
+    inset 0 0 10px #52dacf18;
+  box-sizing: border-box;
+}
+.phase {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: #8cc7d2;
+}
+.round-feedback {
+  font-size: 80px;
+  line-height: 1;
+  color: #8be9e1;
+  text-shadow: 0 0 25px #66f7ec33;
+}
+.round-feedback span {
+  display: block;
+  font-size: 10px;
+  margin-top: 20px;
+  color: #a6b5d8;
+  letter-spacing: 0.2em;
+}
+.reactor {
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-sizing: border-box;
+  width: min(58vw, 240px);
+  height: min(58vw, 240px);
+  margin: 30px auto 50px;
+  border: 2px solid #6d6098;
+  border-radius: 50%;
+  color: #a394bf;
+  background: #111c2d;
+  box-shadow:
+    0 0 26px #8e6ddf16,
+    inset 0 0 28px #8e6ddf12;
+  font-family: inherit;
+}
+.reactor::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1px solid #78669b66;
+  border-radius: 50%;
+}
+.reactor span {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  padding-left: 0.2em;
+}
+.reactor.go {
+  border-color: #69fff0;
+  background: #123c43;
+  color: #b3fff5;
+  box-shadow:
+    0 0 38px #69fff02b,
+    inset 0 0 45px #69fff018;
+}
+.reactor.go::before {
+  border-color: #69fff066;
+}
+button.reactor {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button.reactor:focus-visible {
+  outline: 2px solid #b8a0ff;
+  outline-offset: 6px;
+}

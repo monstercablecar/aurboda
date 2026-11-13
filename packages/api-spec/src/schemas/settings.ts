@@ -8,6 +8,7 @@ import { goalsSchema } from './goals.ts'
 import { displayNameInputSchema } from './profile.ts'
 import { garminDataTypeSchema } from './sync.ts'
 import { trainingLoadSettingsSchema } from './training-load.ts'
+import { workSettingsSchema } from './work.ts'
 
 const hrZoneThresholdSchema = z.number().int().positive()
 
@@ -138,7 +139,20 @@ export const foodSensitivityMapSchema = z.record(z.string(), z.array(z.string())
 
 const mafHrSchema = z.number().int().min(80).max(220)
 
-export const onboardingStepIds = ['android_app', 'wearable', 'computer_time', 'social', 'ask_ai'] as const
+export const onboardingStepIds = [
+  'android_app',
+  'wearable',
+  'computer_time',
+  'social',
+  'ask_ai',
+  'browser_basics',
+  'treatments',
+  'cpap',
+  'mental_assessments',
+  'simple_food',
+  'work',
+  'people',
+] as const
 
 export const onboardingStepIdSchema = z.enum(onboardingStepIds).meta({
   description: 'A step of the dashboard "Get started" guide',
@@ -146,6 +160,22 @@ export const onboardingStepIdSchema = z.enum(onboardingStepIds).meta({
 })
 
 export type OnboardingStepId = z.infer<typeof onboardingStepIdSchema>
+
+export const onboardingStepStatusSchema = z.enum(['completed', 'skipped', 'pending']).meta({
+  id: 'OnboardingStepStatus',
+  description: 'Persistent progress for a get-started step; pending explicitly reopens it',
+})
+
+export type OnboardingStepStatus = z.infer<typeof onboardingStepStatusSchema>
+
+export const onboardingProgressSchema = z
+  .partialRecord(onboardingStepIdSchema, onboardingStepStatusSchema)
+  .meta({
+    id: 'OnboardingProgress',
+    description: 'Persistent per-step onboarding progress, merged per step when updated',
+  })
+
+export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>
 
 export const updateSettingsInputSchema = z
   .object({
@@ -201,6 +231,9 @@ export const updateSettingsInputSchema = z
       description:
         'When the dashboard "Get started" guide was hidden; the guide stays hidden while set (set to null to show it again)',
     }),
+    onboarding_progress: onboardingProgressSchema.nullable().optional().meta({
+      description: 'Per-step progress changes; omitted steps stay unchanged, null clears all progress',
+    }),
     onboarding_manual_done: z.array(onboardingStepIdSchema).nullable().optional().meta({
       description:
         'Get-started steps the user marked as done by hand, for steps Aurboda cannot detect by itself (set to null to clear)',
@@ -237,6 +270,9 @@ export const updateSettingsInputSchema = z
     sync_intervals: syncIntervalsSchema.nullable().optional().meta({
       description:
         'Background sync poll intervals in minutes per provider (set to null to reset to server defaults)',
+    }),
+    work: workSettingsSchema.nullable().optional().meta({
+      description: 'Optional Work tracker overrides (set to null to clear)',
     }),
   })
   .meta({ id: 'UpdateSettingsInput' })
@@ -302,6 +338,7 @@ export const userSettingsResponseSchema = baseResponseSchema
     onboarding_dismissed_at: z.string().nullable().default(null).meta({
       description: 'When the dashboard "Get started" guide was hidden (ISO 8601), or null while it shows',
     }),
+    onboarding_progress: onboardingProgressSchema.default({}),
     onboarding_manual_done: z.array(onboardingStepIdSchema).default([]).meta({
       description: 'Get-started steps the user marked as done by hand',
     }),
@@ -330,6 +367,9 @@ export const userSettingsResponseSchema = baseResponseSchema
       .meta({ description: 'Sensitivity areas to track in meals' }),
     sync_intervals: syncIntervalsSchema.default({}).meta({
       description: 'Background sync poll intervals in minutes per provider (empty = server defaults)',
+    }),
+    work: workSettingsSchema.nullable().default(null).meta({
+      description: 'Optional Work tracker overrides (null = use the built-in defaults)',
     }),
     sex: biologicalSexSchema
       .nullable()

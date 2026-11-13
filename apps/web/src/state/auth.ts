@@ -8,6 +8,8 @@ import { API_URL } from '../config'
 import { readNativeAuth } from '../embed'
 import { apiErrorText } from '../utils/profile'
 import { clearCachedDashboards } from './dashboardCache'
+import { resetQuerySession } from './queryClient'
+import { currentSessionGeneration, installSessionResponseFence } from './sessionBoundary'
 
 export type SignupMode = 'open' | 'invite_only' | 'closed'
 
@@ -16,10 +18,40 @@ export type SignupMode = 'open' | 'invite_only' | 'closed'
 // to browser-stored credentials.
 const nativeAuth = readNativeAuth()
 const savedAuth = localStorage.getItem('auth')
+if (nativeAuth && savedAuth && savedAuth !== JSON.stringify(nativeAuth)) {
+  clearCachedDashboards(() => localStorage)
+}
 export const auth = signal<{ user?: string; token?: string; is_admin?: boolean }>(
   nativeAuth ?? (savedAuth ? JSON.parse(savedAuth) : {}),
 )
-auth.subscribe((value) => localStorage.setItem('auth', JSON.stringify(value)))
+installSessionResponseFence(axios)
+let sessionIdentity = JSON.stringify([auth.value.user, auth.value.token])
+auth.subscribe((value) => {
+  const identity = JSON.stringify([value.user, value.token])
+  if (identity !== sessionIdentity) {
+    sessionIdentity = identity
+    resetQuerySession()
+    clearCachedDashboards(() => localStorage)
+  }
+  localStorage.setItem('auth', JSON.stringify(value))
+})
+
+window.addEventListener('storage', (event) => {
+  if (event.key !== 'auth' && event.key !== null) return
+  try {
+    const stored: unknown = event.newValue ? JSON.parse(event.newValue) : {}
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+      const value = stored as { user?: unknown; token?: unknown; is_admin?: unknown }
+      auth.value = {
+        user: typeof value.user === 'string' ? value.user : undefined,
+        token: typeof value.token === 'string' ? value.token : undefined,
+        is_admin: typeof value.is_admin === 'boolean' ? value.is_admin : undefined,
+      }
+    } else auth.value = {}
+  } catch {
+    auth.value = {}
+  }
+})
 
 // Keep signupAllowed for backwards compatibility
 export const signupAllowed = signal<boolean | undefined>(undefined)
@@ -62,12 +94,16 @@ export const fetchStatus = async () => {
 export const ensureStatusLoaded = () => fetchStatus()
 
 export const login = async (user: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+  const generation = currentSessionGeneration()
   try {
     const response = await axios.post<{ token: string; is_admin?: boolean }>(`${API_URL}/login`, {
       password: pass,
       username: user,
     })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     if (response.data.token) {
       auth.value = { is_admin: response.data.is_admin, token: response.data.token, user }
       return { success: true }
@@ -87,6 +123,7 @@ export const signup = async (
   invitation?: string,
   profile: SignupProfile = {},
 ): Promise<{ success: boolean; error?: string }> => {
+  const generation = currentSessionGeneration()
   try {
     const response = await axios.post<{ token: string; is_admin?: boolean }>(`${API_URL}/signup`, {
       ...profile,
@@ -95,6 +132,9 @@ export const signup = async (
       username: user,
     })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     if (response.data.token) {
       auth.value = { is_admin: response.data.is_admin, token: response.data.token, user }
       return { success: true }
@@ -109,6 +149,8 @@ export const signup = async (
 }
 
 export const logout = () => {
+  // Clear the narrowly scoped resource-media cookie as well as browser credentials.
+  void axios.delete(`${API_URL}/resources/session`, { withCredentials: true }).catch(() => undefined)
   clearCachedDashboards(() => localStorage)
   auth.value = {}
 }
@@ -143,6 +185,7 @@ export const signupWithPasskey = async (
   invitation?: string,
   profile: SignupProfile = {},
 ): Promise<{ success: boolean; error?: string }> => {
+  const generation = currentSessionGeneration()
   try {
     const { startRegistration } = await import('@simplewebauthn/browser')
 
@@ -155,6 +198,9 @@ export const signupWithPasskey = async (
     >[0]['optionsJSON']
     const attestation = await startRegistration({ optionsJSON })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     const verifyResp = await axios.post<{
       token?: string
       is_admin?: boolean
@@ -167,6 +213,9 @@ export const signupWithPasskey = async (
       username: user,
     })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     if (verifyResp.data.verified && verifyResp.data.token && verifyResp.data.username) {
       auth.value = {
         is_admin: verifyResp.data.is_admin,
@@ -188,6 +237,7 @@ export const signupWithPasskey = async (
 }
 
 export const loginWithPasskey = async (): Promise<{ success: boolean; error?: string }> => {
+  const generation = currentSessionGeneration()
   try {
     // Lazy-import to keep the WebAuthn dep out of the bundle for users who never use passkeys.
     const { startAuthentication } = await import('@simplewebauthn/browser')
@@ -201,6 +251,9 @@ export const loginWithPasskey = async (): Promise<{ success: boolean; error?: st
     >[0]['optionsJSON']
     const assertion = await startAuthentication({ optionsJSON })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     const verifyResp = await axios.post<{
       token?: string
       is_admin?: boolean
@@ -209,6 +262,9 @@ export const loginWithPasskey = async (): Promise<{ success: boolean; error?: st
       error?: string
     }>(`${API_URL}/webauthn/auth/verify`, { response_json: JSON.stringify(assertion) })
 
+    if (generation !== currentSessionGeneration()) {
+      return { success: false, error: 'Session changed; please try again.' }
+    }
     if (verifyResp.data.verified && verifyResp.data.token && verifyResp.data.username) {
       auth.value = {
         is_admin: verifyResp.data.is_admin,

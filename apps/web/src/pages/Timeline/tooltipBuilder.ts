@@ -52,7 +52,7 @@ export const buildHrZoneBarHtml = (zones: Record<number, number>): string => {
 }
 
 export const buildTooltipHtml = (item: ChartItem, music: string[], activities: Activity[]): string => {
-  const datePrefix = format(item.start, 'EEE d MMM')
+  const datePrefix = item.tooltip.date ?? format(item.start, 'EEE d MMM')
   let html = `<div class="tooltip-title">${escapeHtml(item.tooltip.title)}</div>`
   html += `<div class="tooltip-time">${escapeHtml(datePrefix)} · ${escapeHtml(item.tooltip.time)}</div>`
   for (const d of item.tooltip.details) {

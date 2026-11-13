@@ -5,6 +5,7 @@ import { Client } from 'pg'
 
 import type { FeedDeliver } from './routes/feed-router.ts'
 
+import { auditOperation, summarizeAuditError } from './api/audit-body.ts'
 import { registerAuthRoutes } from './api/auth-routes.ts'
 import { gateFederation } from './api/federation-gate.ts'
 import { createAdminMiddleware, createAuditLogMiddleware, createAuthMiddleware } from './api/middleware.ts'
@@ -144,6 +145,7 @@ import { type FollowActions, followActor, unfollowActor } from './services/follo
 import { createGeocodeQueue } from './services/geocode-queue.ts'
 import { createInvitationAuth } from './services/invitation.ts'
 import { getPlaceVisits, type NamedLocationsChanged } from './services/locations.ts'
+import { createPeopleReminderScheduler } from './services/people-reminders.ts'
 import { createPgBoss } from './services/pg-boss.ts'
 import { installProcessGuards } from './services/process-guards.ts'
 import { safeFetchGet } from './services/safe-fetch.ts'
@@ -816,6 +818,14 @@ const main = async () => {
     }
   }
 
+  if (boss) {
+    try {
+      await createPeopleReminderScheduler(boss, () => listUserNames(userDb))
+    } catch {
+      console.warn('People reminders unavailable: scheduler could not start.')
+    }
+  }
+
   // Challenge completion: a scheduled sweep over every user's hosted challenges
   // that closed (grace period ago) posts the final standings — winners tagged —
   // to the host's feed through the SAME challenge fan-out a manual share uses.
@@ -1099,9 +1109,9 @@ const main = async () => {
     if (status >= 500) console.error(err)
 
     if (req.user) {
-      auditError(req.user, 'system', `${req.method} ${req.path}: ${err.message}`, {
+      auditError(req.user, 'system', auditOperation(req.method, req.route?.path), {
         status,
-        ...(status >= 500 && { stack: err.stack }),
+        ...summarizeAuditError(err),
       })
     }
 

@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'preact/hooks'
 
-import { type ImportJob, listImportJobsApi, startLivsmedelsverketImportApi } from '../state/api'
+import {
+  type ImportJob,
+  getImportJobApi,
+  listImportJobsApi,
+  startLivsmedelsverketImportApi,
+} from '../state/api'
+import { Celebration } from './Celebration'
+import { nextCelebration, type CelebrationEvent } from './celebration-catalog'
 import './ImportPanel.css'
 
 const POLL_INTERVAL_MS = 2_000
@@ -51,27 +59,48 @@ function JobStatus({ job }: { job: ImportJob }) {
 
 export function ImportPanel() {
   const queryClient = useQueryClient()
+  const [startedJobId, setStartedJobId] = useState<string | null>(null)
+  const [celebration, setCelebration] = useState<CelebrationEvent | null>(null)
+  const trackedJob = useQuery({
+    queryKey: ['importJobs', 'tracked', startedJobId],
+    enabled: !!startedJobId,
+    queryFn: () => (startedJobId ? getImportJobApi(startedJobId) : null),
+    refetchInterval: (query) =>
+      query.state.data?.status === 'completed' || query.state.data?.status === 'failed'
+        ? false
+        : POLL_INTERVAL_MS,
+  })
+  useEffect(() => {
+    const job = trackedJob.data
+    if (!startedJobId || job?.id !== startedJobId || (job.status !== 'completed' && job.status !== 'failed'))
+      return
+    setStartedJobId(null)
+    if (job.status === 'completed' && job.processed_items > 0 && job.skipped_items === 0)
+      setCelebration(nextCelebration('import'))
+    void queryClient.invalidateQueries({ queryKey: ['importJobs', 'livsmedelsverket'] })
+  }, [startedJobId, trackedJob.data, queryClient])
 
   const { data: jobs } = useQuery({
     queryFn: () => listImportJobsApi('livsmedelsverket', 1),
     queryKey: ['importJobs', 'livsmedelsverket'],
     refetchInterval: (q) => {
       const latest = q.state.data?.[0]
-      const isActive = latest?.status === 'pending' || latest?.status === 'running'
+      const isActive = !!startedJobId || latest?.status === 'pending' || latest?.status === 'running'
       return isActive ? POLL_INTERVAL_MS : false
     },
   })
 
-  const latest = jobs?.[0]
+  const latest = trackedJob.data ?? jobs?.[0]
 
   const startMutation = useMutation({
     mutationFn: startLivsmedelsverketImportApi,
-    onSuccess: () => {
+    onSuccess: (job) => {
+      setStartedJobId(job.id)
       queryClient.invalidateQueries({ queryKey: ['importJobs', 'livsmedelsverket'] })
     },
   })
 
-  const isActive = latest?.status === 'pending' || latest?.status === 'running'
+  const isActive = !!startedJobId || latest?.status === 'pending' || latest?.status === 'running'
 
   const buttonLabel = startMutation.isPending
     ? 'Starting…'
@@ -81,6 +110,9 @@ export function ImportPanel() {
 
   return (
     <div class="import-panel">
+      {celebration && (
+        <Celebration key={celebration.id} {...celebration} onDone={() => setCelebration(null)} />
+      )}
       <div class="import-panel-header">
         <h3>Import food library</h3>
         <button

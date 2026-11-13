@@ -1,3 +1,26 @@
+## Foghouse fork context
+
+This is Brighton Marcroft's Foghouse fork of Aurboda. Read [fork scope and changes](docs/foghouse-fork.md) and [publication validation](docs/fork-validation.md) before making changes. The upstream instructions below remain the engineering baseline.
+
+- Preserve Fredrik Liljegren's existing authorship and license. New Foghouse commits use the actual contributor's identity, never Fredrik's identity from the upstream cloud-session example.
+- `upstream` is `fiddur/aurboda`; `origin` is this user's fork. Confirm the remote before any write. No upstream PR, message, release or deployment is implied by a fork commit.
+- Keep `main` and `develop` unchanged during the initial publication. Work on `feat/foghouse-customizations`. This is a documented snapshot based on the November 9 release, not a claim that current upstream develop has been merged or reviewed.
+- Future contributions use focused branches and draft PRs into `develop`, merge upstream updates without rebasing, and retain the original review/test gates. Do not claim the upstream review automation is installed on this fork.
+- This fork does not distribute an Android APK. Preserve the upstream-only guards on Android and Docker publication workflows until a separate release setup is explicitly requested.
+- Never publish runtime configuration, account data, private dashboard links, database backups, agent state or raw verification logs. Existing local deployment guides contain historical paths and labels; adapt them rather than running them blindly.
+
+## Local checkout: start here
+
+This is a customized Aurboda checkout. Read [the AI onboarding guide](docs/ai/README.md) first, then only the relevant subsystem map. The existing instructions below are preserved; this navigation section does not replace review, testing, or delegation requirements.
+
+- [Backend architecture and data boundaries](docs/ai/backend-architecture.md)
+- [Frontend, Work, People, and feature status](docs/ai/frontend-and-features.md)
+- [Verified history, commands, testing, and deployment](docs/ai/history-and-operations.md)
+- [Known issues and prioritized next steps](docs/ai/technical-debt.md)
+- [Documentation directory](docs/README.md)
+
+Check `git status` and identify the checkout/deployment target before changing anything. Work has both a routed implementation and unregistered experimental files; People has its own private storage. Do not infer a feature is active merely because a schema or plan exists. Never copy runtime secrets, database dumps, or private user records into documentation.
+
 ## Repository structure
 
 See README.md for general setup. Specific docs in docs/ directory.

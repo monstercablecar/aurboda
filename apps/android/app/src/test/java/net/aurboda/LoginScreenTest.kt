@@ -53,7 +53,7 @@ class LoginScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("https://aurboda.net").assertIsDisplayed()
+        composeTestRule.onNodeWithText("https://stats.foghouse.org").assertIsDisplayed()
     }
 
     @Test
@@ -132,7 +132,7 @@ class LoginScreenTest {
 
         composeTestRule.onNodeWithText("Username").performTextInput("testuser")
         composeTestRule.onNodeWithText("Password").performTextInput("testpass")
-        composeTestRule.onNodeWithText("https://aurboda.net").performTextClearance()
+        composeTestRule.onNodeWithText("https://stats.foghouse.org").performTextClearance()
         composeTestRule.onNodeWithText("Login").assertIsNotEnabled()
     }
 
@@ -165,8 +165,8 @@ class LoginScreenTest {
 
         composeTestRule.waitForIdle()
 
-        coVerify { mockAuthApi.login("https://aurboda.net", "testuser", "testpass") }
-        assertEquals("https://aurboda.net", savedServerUrl)
+        coVerify { mockAuthApi.login("https://stats.foghouse.org", "testuser", "testpass") }
+        assertEquals("https://stats.foghouse.org", savedServerUrl)
         assertEquals("testuser", savedUsername)
         assertEquals("test-token", savedToken)
         assertTrue(loginSuccessCalled)
@@ -194,7 +194,7 @@ class LoginScreenTest {
 
         composeTestRule.waitForIdle()
 
-        coVerify { mockAuthApi.login("https://aurboda.net", "testuser", " testpass ") }
+        coVerify { mockAuthApi.login("https://stats.foghouse.org", "testuser", " testpass ") }
         assertEquals("testuser", savedUsername)
     }
 

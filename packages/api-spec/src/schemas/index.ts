@@ -33,6 +33,7 @@ export * from './nutrient-recommendations.ts'
 export * from './nutrients.ts'
 export * from './outbound-sync.ts'
 export * from './period-summary.ts'
+export * from './pharmacology.ts'
 export * from './plans.ts'
 export * from './productivity.ts'
 export * from './profile.ts'
@@ -53,3 +54,15 @@ export * from './training-load.ts'
 export * from './trends.ts'
 export * from './visibility.ts'
 export * from './webauthn.ts'
+
+export * from './work.ts'
+export * from './web-push.ts'
+
+export * from './people.ts'
+
+export * from './resources.ts'
+
+export * from './work-day.ts'
+
+export * from './native-planning-common.ts'
+export * from './native-tasks.ts'

@@ -70,6 +70,13 @@ describe('nextFetchRange', () => {
     expect(nextFetchRange(future, current, today).to).toBe('2026-09-26')
   })
 
+  it('keeps historical fetch bounds ordered when the visible calendar is entirely in the future', () => {
+    expect(nextFetchRange(day('2030-01-01'), { from: '2026-09-01', to: '2026-09-26' }, today)).toEqual({
+      from: '2026-09-26',
+      to: '2026-09-26',
+    })
+  })
+
   it('returns the current object when the desired range equals it by value', () => {
     const current = { from: '2026-09-22', to: '2026-09-26' }
     const view = { end: addDays(today, 1), start: startOfDay(subDays(today, 1)) }

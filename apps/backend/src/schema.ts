@@ -1,3 +1,4 @@
+import { nativeTaskTables } from './schema/native-tasks.ts'
 /**
  * Per-domain table SQL lives in `schema/`; this file assembles the full
  * `createTableStatements` map and the dependency-respecting
@@ -7,12 +8,14 @@
  */
 
 import { createHash } from 'node:crypto'
+import { peopleTables } from './schema/people.ts'
 
 import { activitiesTables } from './schema/activities.ts'
 import { activityFeaturesTables } from './schema/activity-features.ts'
 import { locationsTables } from './schema/locations.ts'
 import { mealsTables } from './schema/meals.ts'
 import { metricsTables } from './schema/metrics.ts'
+import { pharmacologyTables } from './schema/pharmacology.ts'
 import { productivityTables } from './schema/productivity.ts'
 import { reportsTables } from './schema/reports.ts'
 import { socialTables } from './schema/social.ts'
@@ -49,16 +52,19 @@ export const SCHEMA_VERSION = 1
  * Assembled from per-domain SQL modules under `schema/`.
  */
 export const createTableStatements: Record<string, string> = {
+  ...peopleTables,
   ...activitiesTables,
   ...activityFeaturesTables,
   ...locationsTables,
   ...mealsTables,
   ...metricsTables,
+  ...pharmacologyTables,
   ...productivityTables,
   ...reportsTables,
   ...socialTables,
   ...systemTables,
   ...tracksTables,
+  ...nativeTaskTables,
 }
 
 /**
@@ -73,6 +79,9 @@ export const createTableStatements: Record<string, string> = {
  *  - activities before activity_tracks, routes, activity_routes (FK)
  */
 export const tableCreationOrder = [
+  ...Object.keys(nativeTaskTables),
+  ...Object.keys(peopleTables),
+  'browser_push_subscriptions',
   'raw_records',
   'raw_records_indexes',
   'time_series',
@@ -143,6 +152,42 @@ export const tableCreationOrder = [
   'uploaded_icons',
   'custom_metrics',
   'custom_metrics_indexes',
+  'substances',
+  'substances_indexes',
+  'substance_versions',
+  'substance_versions_indexes',
+  'regimens',
+  'regimens_indexes',
+  'regimen_items',
+  'regimen_items_indexes',
+  'regimen_versions',
+  'regimen_versions_indexes',
+  'treatment_types',
+  'treatment_types_indexes',
+  'treatment_types_seed',
+  'treatment_sessions',
+  'treatment_sessions_indexes',
+  'administration_events',
+  'administration_events_indexes',
+  'administration_event_revisions',
+  'administration_event_revisions_indexes',
+  'questionnaire_templates',
+  'questionnaire_templates_indexes',
+  'questionnaire_templates_seed',
+  'assessment_questions',
+  'assessment_questions_indexes',
+  'assessment_questions_seed',
+  'assessment_question_versions',
+  'assessment_question_versions_indexes',
+  'assessment_question_versions_seed',
+  'assessments',
+  'assessments_indexes',
+  'assessment_responses',
+  'assessment_responses_indexes',
+  'context_event_types',
+  'context_event_types_indexes',
+  'context_events',
+  'context_events_indexes',
   'goals',
   'goals_indexes',
   'user_settings',

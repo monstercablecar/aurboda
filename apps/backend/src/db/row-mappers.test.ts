@@ -416,6 +416,10 @@ describe('mapNoteRow', () => {
     expect(note.source).toBeUndefined()
   })
 
+  test.each(['work_day', 'other_note_origin', 'oura', ''])('preserves note source %j', (source) => {
+    expect(mapNoteRow({ ...baseRow, source }).source).toBe(source)
+  })
+
   test('passes a null entity_id through for a time-anchored note', () => {
     const note = mapNoteRow({
       ...baseRow,

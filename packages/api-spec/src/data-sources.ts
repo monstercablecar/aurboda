@@ -129,10 +129,18 @@ export const dataSources: DataSourceInfo[] = [
   {
     name: 'Calendars (ICS)',
     doc: 'calendars.md',
-    provides: 'Calendar events imported as tags (Google Calendar, Outlook, iCloud, Nextcloud, etc.)',
+    provides: 'Calendar events imported as activities (Google Calendar, Outlook, iCloud, Nextcloud, etc.)',
     how: 'Pull (ICS fetch)',
     adminSetup: 'None',
     userSetup: 'ICS URL(s)',
+  },
+  {
+    name: 'ResMed myAir CPAP',
+    doc: 'cpap.md',
+    provides: 'CPAP usage, AHI, mask leak, mask sessions and myAir scores',
+    how: 'CSV import at /cpap',
+    adminSetup: 'None',
+    userSetup: 'Unzip myAir export and select SLEEP_RECORD.csv',
   },
   {
     name: 'Cronometer',

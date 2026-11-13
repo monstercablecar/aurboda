@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals'
 import { addDays, differenceInCalendarDays, endOfDay, format, formatISO, subDays } from 'date-fns'
-import { useCallback, useMemo } from 'preact/hooks'
+import { useCallback, useEffect, useMemo } from 'preact/hooks'
 
 import {
   collapseDepthForPixelsPerHour,
@@ -23,8 +23,9 @@ if (_initialHash.from) {
   viewEnd.value = _initialHash.to
   const fetchFrom = _initialHash.from
   const fetchTo = _initialHash.to ?? _initialHash.from
-  fromDate.value = formatISO(subDays(fetchFrom, 1), { representation: 'date' })
+  const expandedFrom = formatISO(subDays(fetchFrom, 1), { representation: 'date' })
   const todayStr = formatISO(new Date(), { representation: 'date' })
+  fromDate.value = expandedFrom > todayStr ? todayStr : expandedFrom
   const expandedTo = formatISO(addDays(fetchTo, 1), { representation: 'date' })
   toDate.value = expandedTo > todayStr ? todayStr : expandedTo
 }
@@ -71,6 +72,7 @@ export interface TimelineNavigationOptions {
 
 export const useTimelineNavigation = (options: TimelineNavigationOptions = {}): TimelineNavigation => {
   const { timeAxisPixels = 0 } = options
+  const entryHash = useMemo(parseViewHash, [])
   const effectiveViewStart = viewStart.value ?? getDefaultViewStart()
   const effectiveViewEnd = viewEnd.value ?? getDefaultViewEnd()
 
@@ -134,14 +136,16 @@ export const useTimelineNavigation = (options: TimelineNavigationOptions = {}): 
     }
   }, [])
 
+  useEffect(() => {
+    if (entryHash.from) handleZoom(entryHash.from, entryHash.to ?? endOfDay(entryHash.from))
+  }, [entryHash, handleZoom])
+
   const handleJumpDays = useCallback(
     (days: number) => {
       const currentStart = viewStart.value ?? getDefaultViewStart()
       const currentEnd = viewEnd.value ?? getDefaultViewEnd()
       const newStart = addDays(currentStart, days)
       const newEnd = addDays(currentEnd, days)
-      const todayEnd = endOfDay(new Date())
-      if (newEnd > todayEnd) return
       handleZoom(newStart, newEnd)
     },
     [handleZoom],

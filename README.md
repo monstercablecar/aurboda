@@ -1,5 +1,18 @@
+# Aurboda, Foghouse fork
+
+I'm building this around how I actually use Aurboda: work tracking, relationships, daily check-ins, tasks, and a place to keep useful resources. Some parts are experiments. I'd rather make the useful pieces easy to contribute back than drift away from the original project for no reason.
+
+Aurboda is Fredrik Liljegren's project. This fork keeps its history and AGPL license. His Android app and integration work remain the foundation; this repository does not publish a replacement APK.
+
+Start with [what changed](docs/foghouse-fork.md), the [file-by-file inventory](docs/fork-file-inventory.md), and [what has been checked](docs/fork-validation.md). This branch is an initial source snapshot, not an upstream-approved release. The upstream README follows and describes the original project; its image and release links still point upstream.
+
+---
+
 <p align="center">
-  <img src="apps/web/public/logo.svg" alt="Aurboda" width="200" />
+
+**Coding agents:** start with [AGENTS.md](AGENTS.md) and the [AI onboarding guide](docs/ai/README.md). See the [documentation directory](docs/README.md) for feature-specific references.
+<img src="apps/web/public/logo.svg" alt="Aurboda" width="200" />
+
 </p>
 
 <h1 align="center">Aurboda</h1>
@@ -39,7 +52,8 @@ Aurboda's reach is the point, so here's what it ingests today:
 | [**ActivityWatch**](docs/activitywatch.md)           | App/window usage per device (desktop and Android)                                                                               | Push (agent script)                    |
 | [**Last.fm**](docs/lastfm.md)                        | Music scrobbles with auto-generated tags from configurable rules                                                                | Pull (API)                             |
 | [**Media players (MPRIS)**](docs/media.md)           | Video, music and podcast plays with URL, played time and track length (Linux desktop)                                           | Push (logger script)                   |
-| [**Calendars (ICS)**](docs/calendars.md)             | Calendar events imported as tags (Google Calendar, Outlook, iCloud, Nextcloud, etc.)                                            | Pull (ICS fetch)                       |
+| [**Calendars (ICS)**](docs/calendars.md)             | Calendar events imported as activities (Google Calendar, Outlook, iCloud, Nextcloud, etc.)                                      | Pull (ICS fetch)                       |
+| [**ResMed myAir CPAP**](docs/cpap.md)                | CPAP usage, AHI, mask leak, mask sessions and myAir scores                                                                      | CSV import at /cpap                    |
 | **Cronometer**                                       | Meals with full per-item macros and ~50 micronutrients                                                                          | CSV import                             |
 | [**Livsmedelsverket**](docs/livsmedelsverket.md)     | Canonical food library: 2,500+ Swedish foods with macros + micros (per 100 g)                                                   | One-shot bulk import (UI button)       |
 | **Manual Entry**                                     | Any metric, tag, activity, meal, or note                                                                                        | Web UI, REST API, or MCP               |
@@ -54,7 +68,7 @@ Everything above feeds a common data model, so every feature works across every 
 
 - **Explore** -- [timeline](docs/features/timeline.md), [dashboards](docs/features/dashboard.md), [maps of where you've been](docs/features/places.md), and full-resolution [activity tracks, routes and segments](docs/features/routes-and-segments.md)
 - **Analyze** -- [trends with EMA smoothing](docs/features/trends.md), [correlations](docs/features/correlations.md) (Pearson, chi-squared, relative risk), and [goals](docs/features/goals.md)
-- **Track health** -- [sleep](docs/features/sleep.md), [HR zones](docs/features/hr-zones.md), [training load](docs/features/training-load.md), [lab results](docs/features/lab-reports.md), and [active-calorie computation](docs/features/calories.md)
+- **Track health** -- [sleep](docs/features/sleep.md), [HR zones](docs/features/hr-zones.md), [training load](docs/features/training-load.md), [lab results](docs/features/lab-reports.md), [treatments, medications & recovery](docs/features/treatments-recovery.md), and [active-calorie computation](docs/features/calories.md)
 - **Organize life** -- [activities](docs/features/activity-types.md), [meals & nutrition](docs/features/meals.md), places, and [screen time](docs/features/screentime-categories.md)
 - **Automate** -- [deduction rules](docs/features/deduction-rules.md) that create activities from your data, plus custom activity types
 - **Share** -- read-only [public dashboards and federated challenges](docs/features/sharing.md) across Aurboda instances, plus a [federated activity feed](docs/features/feed.md) followable from Mastodon
@@ -274,6 +288,10 @@ For automatic updates and the details, see [Updating](docs/docker.md#updating) i
 docker-compose.yml to follow every merged PR instead (what the beta channel runs).
 
 ---
+
+## People
+
+The People page provides private profiles, optional observations and relationship tracking, with age-aware guidance selected by deterministic server rules from a locally installed source catalog. See [People](docs/people.md), [catalog coverage](docs/people-catalog-coverage.md) and [optional reminders](docs/people-reminders.md).
 
 ## API Documentation
 

@@ -5,7 +5,14 @@
 
 export const NAV_LINKS_PRIMARY = [
   { href: '/', label: 'Home', icon: '🏠' },
-  { href: '/goals', label: 'Goals', icon: '🎯' },
+  { href: '/goals', label: 'Tasks', icon: '🎯' },
+  { href: '/cpap', label: 'CPAP', icon: '😴' },
+  { href: '/work', label: 'Work', icon: '💼' },
+  { href: '/resources', label: 'Resources', icon: '📚' },
+  { href: '/people', label: 'PEOPLE', icon: '👥' },
+  { href: '/simple-food', label: 'Simple food', icon: '🥗' },
+  { href: '/assessments', label: 'Mental assessments', icon: '🧠' },
+  { href: '/treatments', label: 'Treatments', icon: '💊' },
   { href: '/timeline', label: 'Timeline', icon: '📅' },
   { href: '/data', label: 'Data', icon: '📊' },
   { href: '/meals', label: 'Meals', icon: '🍽' },

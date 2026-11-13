@@ -1,93 +1,73 @@
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
-import { summarizeAuditBody } from './audit-body.ts'
+import { summarizeAuditBody, summarizeAuditError, auditOperation } from './audit-body.ts'
 
-describe('summarizeAuditBody', () => {
-  test('returns undefined for non-object bodies', () => {
+describe('privacy-by-default audit body summaries', () => {
+  test('keeps only fixed type and top-level counts', () => {
     expect(summarizeAuditBody(undefined)).toBeUndefined()
-    expect(summarizeAuditBody(null)).toBeUndefined()
-    expect(summarizeAuditBody('text')).toBeUndefined()
-    expect(summarizeAuditBody(42)).toBeUndefined()
-  })
-
-  test('keeps a small body unchanged', () => {
-    const body = { nested: { a: 1 }, tag: 'coffee', values: [1, 2, 3] }
-    expect(summarizeAuditBody(body)).toEqual(body)
-  })
-
-  test('redacts password in a small body', () => {
-    expect(summarizeAuditBody({ password: 'secret', username: 'u' })).toEqual({
-      password: '[REDACTED]',
-      username: 'u',
+    expect(summarizeAuditBody(null)).toEqual({ body_type: 'null' })
+    expect(summarizeAuditBody('private error echo')).toEqual({ body_type: 'string' })
+    expect(summarizeAuditBody(123456)).toEqual({ body_type: 'number' })
+    expect(summarizeAuditBody(false)).toEqual({ body_type: 'boolean' })
+    expect(summarizeAuditBody([{ secret: 'credential' }, 'private note'])).toEqual({
+      body_type: 'array',
+      item_count: 2,
     })
   })
-
-  test('summarizes a large sync-like body', () => {
-    const records = Array.from({ length: 5000 }, (_, i) => ({ time: i, value: 60 }))
-    expect(summarizeAuditBody({ records, type: 'heart_rate' })).toEqual({
-      _truncated: true,
-      records: { count: 5000 },
-      type: 'heart_rate',
+  test('drops nested credentials, People notes, questionnaire answers and user-controlled keys', () => {
+    const body = {
+      credentials: { password: 'secret', nested: { token: 'private' } },
+      person: { name: 'Private Person', notes: 'medical details' },
+      answers: [{ question: 'sensitive', value: 9 }],
+      ['private-name-as-key']: 'content',
+      status: 500,
+      success: false,
+    }
+    expect(summarizeAuditBody(body)).toEqual({ body_type: 'object', field_count: 6 })
+    expect(summarizeAuditBody({ error: { message: 'echo of medical details', body } })).toEqual({
+      body_type: 'object',
+      field_count: 1,
     })
   })
-
-  test('redacts password in a large body', () => {
-    const result = summarizeAuditBody({ blob: 'x'.repeat(5000), password: 'secret' })
-    expect(result?.password).toBe('[REDACTED]')
-    expect(result?._truncated).toBe(true)
-  })
-
-  test('truncates long strings and counts nested object keys in a large body', () => {
-    const result = summarizeAuditBody({
-      flag: true,
-      meta: { a: 1, b: 2 },
-      n: 3,
-      nothing: null,
-      text: 'y'.repeat(5000),
+  test('does not traverse deep/cyclic bodies or execute nested getters/toJSON', () => {
+    const body: Record<string, unknown> = {}
+    body.self = body
+    Object.defineProperty(body, 'sensitive', {
+      enumerable: true,
+      get() {
+        throw new Error('must not inspect values')
+      },
     })
-    expect(result).toEqual({
-      _truncated: true,
-      flag: true,
-      meta: { keys: 2 },
-      n: 3,
-      nothing: null,
-      text: `${'y'.repeat(200)}…`,
-    })
+    body.toJSON = () => {
+      throw new Error('must not serialize')
+    }
+    expect(summarizeAuditBody(body)).toEqual({ body_type: 'object', field_count: 3 })
+    let deep: unknown = 'private'
+    for (let i = 0; i < 100000; i++) deep = { child: deep }
+    expect(summarizeAuditBody(deep)).toEqual({ body_type: 'object', field_count: 1 })
   })
-
-  test('reduces an array body to its length', () => {
-    expect(summarizeAuditBody([1, 2, 3])).toEqual({ items: 3 })
+  test('large arrays and strings never enter retained details', () => {
+    const sparse: unknown[] = []
+    sparse.length = 1000000
+    expect(summarizeAuditBody(sparse)).toEqual({ body_type: 'array', item_count: 1000000 })
+    expect(summarizeAuditBody({ blob: 'sensitive'.repeat(1000000) })).toEqual({
+      body_type: 'object',
+      field_count: 1,
+    })
+    const body = JSON.parse('{"__proto__":"private","constructor":"secret","patient email":"private"}')
+    expect(summarizeAuditBody(body)).toEqual({ body_type: 'object', field_count: 3 })
   })
 })
 
-describe('summarizeAuditBody early-out', () => {
-  test.each([
-    ['2049 tiny items', { values: Array.from({ length: 2049 }, () => 0) }, { values: { count: 2049 } }],
-    ['a 4097-char string', { text: 'x'.repeat(4097) }, { text: `${'x'.repeat(200)}…` }],
-  ])('skips stringifying for %s, with the summary the full check gives', (_label, body, summary) => {
-    expect(JSON.stringify(body).length).toBeGreaterThan(4096)
-
-    const spy = vi.spyOn(JSON, 'stringify')
-    const result = summarizeAuditBody(body)
-    expect(spy).not.toHaveBeenCalled()
-    spy.mockRestore()
-
-    expect(result).toEqual({ ...summary, _truncated: true })
+test('error diagnostics retain no message, stack, custom name or database properties', () => {
+  const error = Object.assign(new Error('private note in SQL'), {
+    name: 'private-name',
+    detail: 'sensitive detail',
+    constraint: 'person-name',
+    code: 'secret',
   })
-
-  test('the bounds are tight: 2048 tiny items and a 4096-char string still go through the full check', () => {
-    expect(summarizeAuditBody({ values: Array.from({ length: 2048 }, () => 0) })).toEqual({
-      _truncated: true,
-      values: { count: 2048 },
-    })
-    expect(summarizeAuditBody({ text: 'x'.repeat(4096) })).toEqual({
-      _truncated: true,
-      text: `${'x'.repeat(200)}…`,
-    })
-  })
-
-  test('keeps a small body whose array is long but tiny', () => {
-    const body = { values: Array.from({ length: 201 }, () => 0) }
-    expect(summarizeAuditBody(body)).toEqual(body)
-  })
+  expect(summarizeAuditError(error)).toEqual({ error_type: 'error' })
+  expect(summarizeAuditError('private string')).toEqual({ error_type: 'unknown' })
+  expect(auditOperation('POST', '/people/:id')).toBe('POST /people/:id')
+  expect(auditOperation('POST', undefined)).toBe('POST unmatched route')
 })

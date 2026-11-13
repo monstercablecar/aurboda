@@ -135,6 +135,8 @@ describe('createAccountGate', () => {
 
 describe('isAllowedWhenReadOnly', () => {
   test.each([
+    ['POST', '/resources/session'],
+    ['DELETE', '/resources/session'],
     ['GET', '/activities'],
     ['HEAD', '/activities'],
     ['OPTIONS', '/activities'],

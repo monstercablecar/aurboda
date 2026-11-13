@@ -107,6 +107,22 @@ export const cleanTestDb = async (): Promise<void> => {
 
   // Truncate tables in reverse order to handle foreign keys
   const tables = [
+    'assessment_responses',
+    'assessments',
+    'administration_event_revisions',
+    'administration_events',
+    'regimen_versions',
+    'regimen_items',
+    'regimens',
+    'substance_versions',
+    'treatment_sessions',
+    'assessment_question_versions',
+    'assessment_questions',
+    'questionnaire_templates',
+    'context_events',
+    'context_event_types',
+    'treatment_types',
+    'substances',
     'food_item_sensitivities',
     'sensitivity_flags',
     'shared_food_item_overrides',

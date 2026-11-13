@@ -1,0 +1,126 @@
+.cpap-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+.cpap-page h1 {
+  margin: 0.3rem 0;
+}
+.cpap-eyebrow {
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  color: #637575;
+}
+.cpap-page p {
+  line-height: 1.6;
+}
+.cpap-card {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid #ccd6d6;
+  border-radius: 12px;
+}
+.cpap-card h2 {
+  margin-top: 0;
+}
+.cpap-file-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+.cpap-file-label input {
+  max-width: 100%;
+}
+.cpap-preview {
+  background: #e7f2ee;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  color: #183a30;
+}
+.cpap-page button {
+  border: 0;
+  border-radius: 6px;
+  background: #256658;
+  color: white;
+  padding: 0.7rem 1.1rem;
+  cursor: pointer;
+}
+.cpap-page button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.cpap-error {
+  color: #b42318;
+}
+.cpap-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+.cpap-stats a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #ccd6d6;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.cpap-stats strong {
+  font-size: 1.7rem;
+}
+.cpap-table-scroll {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+.cpap-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.cpap-page th,
+.cpap-page td {
+  padding: 0.8rem 0.7rem;
+  text-align: right;
+  border-bottom: 1px solid #d9e0e0;
+  white-space: nowrap;
+}
+.cpap-page th:first-child {
+  text-align: left;
+}
+.cpap-page th small {
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: normal;
+}
+@media (max-width: 800px) {
+  .cpap-page {
+    padding: 1rem;
+  }
+  .cpap-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cpap-card {
+    padding: 1rem;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .cpap-card,
+  .cpap-stats a {
+    border-color: #485353;
+  }
+  .cpap-page th,
+  .cpap-page td {
+    border-color: #485353;
+  }
+  .cpap-error {
+    color: #ff928a;
+  }
+  .cpap-eyebrow {
+    color: #a7bdbd;
+  }
+}

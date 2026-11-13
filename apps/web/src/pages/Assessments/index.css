@@ -1,0 +1,137 @@
+.mental-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 90rem;
+  margin: 0 auto;
+  padding: 2rem clamp(1rem, 3vw, 3rem) 4rem;
+  color: var(--color-text);
+}
+.mental-page * {
+  box-sizing: border-box;
+}
+.mental-page h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin: 0.3rem 0 1rem;
+  letter-spacing: -0.04em;
+}
+.mental-page > header {
+  max-width: 55rem;
+}
+.mental-eyebrow {
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.8rem;
+}
+.mental-toolbar,
+.mental-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.mental-toolbar {
+  margin: 1.5rem 0 0.75rem;
+}
+.mental-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+.mental-card {
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  background: var(--color-surface, var(--color-bg));
+  overflow-wrap: anywhere;
+}
+.mental-card h2 {
+  font-size: 1.3rem;
+  margin: 0.5rem 0 1rem;
+}
+.mental-card p,
+.mental-method p {
+  line-height: 1.55;
+}
+.mental-card small,
+.mental-note,
+.mental-empty {
+  color: var(--color-text-muted);
+}
+.mental-page details {
+  margin: 1rem 0;
+}
+.mental-page summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.35rem 0;
+}
+.mental-page form,
+.mental-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.mental-page form {
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.mental-page input,
+.mental-page textarea,
+.mental-page select,
+.mental-page button {
+  font: inherit;
+  border-radius: 0.4rem;
+  padding: 0.65rem;
+}
+.mental-page input,
+.mental-page textarea,
+.mental-page select {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border, #aaa);
+  min-width: 0;
+}
+.mental-page textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.mental-page button {
+  cursor: pointer;
+}
+.mental-page button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.mental-latest,
+.mental-history {
+  border-top: 1px solid var(--color-border, #ccc);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+.mental-latest p {
+  margin: 0.3rem 0;
+}
+.mental-result dl {
+  font-size: 0.9rem;
+}
+.mental-result dt {
+  font-weight: 600;
+}
+.mental-result dd {
+  margin: 0.25rem 0 1rem;
+  white-space: pre-wrap;
+}
+
+.mental-page fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}

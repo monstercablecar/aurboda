@@ -60,7 +60,7 @@ fun LoginScreen(
   val autofill = LocalAutofill.current
   val autofillTree = LocalAutofillTree.current
 
-  var serverUrl by remember { mutableStateOf(initialServerUrl ?: "https://aurboda.net") }
+  var serverUrl by remember { mutableStateOf(initialServerUrl ?: "https://stats.foghouse.org") }
   var username by remember { mutableStateOf("") }
   var password by remember { mutableStateOf("") }
   var isLoading by remember { mutableStateOf(false) }
@@ -113,7 +113,7 @@ fun LoginScreen(
       value = serverUrl,
       onValueChange = { serverUrl = it },
       label = { Text("Server URL") },
-      placeholder = { Text("https://aurboda.net") },
+      placeholder = { Text("https://stats.foghouse.org") },
       modifier = Modifier.fillMaxWidth(),
       singleLine = true,
       keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),

@@ -1,0 +1,29 @@
+.task-board-settings {
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-bg);
+}
+.task-board-settings h3 {
+  margin: 0 0 0.5rem;
+}
+.task-board-setting-row {
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+}
+.task-board-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  padding: 0.75rem 0;
+  background: var(--color-bg);
+  z-index: 2;
+}
+.task-board-settings input[aria-invalid='true'] {
+  border-color: #d33d4f;
+}

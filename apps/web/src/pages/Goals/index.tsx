@@ -11,6 +11,9 @@ import { GoalsSettings } from '../../components/GoalsSettings'
 import { fetchGoalsProgress, fetchUserSettings, type Goal } from '../../state/api'
 import { auth } from '../../state/auth'
 import { newId } from '../../utils/uuid'
+import { Tasks } from '../Tasks'
+import { showHealthGoals } from './goal-tabs'
+import '../../components/PlanningUI.css'
 import './style.css'
 
 type WindowedGoal = Exclude<Goal, { goal_type: 'trend' }>
@@ -18,7 +21,7 @@ type WindowedGoal = Exclude<Goal, { goal_type: 'trend' }>
 const isWindowed = (goal: Goal): goal is WindowedGoal => goal.goal_type !== 'trend'
 
 // eslint-disable-next-line complexity -- loading, empty and listing states
-export function Goals() {
+export function HealthGoals() {
   const isLoggedIn = auth.value.token
   const { query, route } = useLocation()
   const openGoalId = query.history
@@ -134,6 +137,37 @@ export function Goals() {
       </p>
 
       <GoalsSettings goals={goals} initialGoal={initialGoal} />
+    </div>
+  )
+}
+
+export function Goals() {
+  const { query } = useLocation()
+  const health = showHealthGoals(query)
+  if (query.embed === '1') return <HealthGoals />
+  return (
+    <div class="planning-page">
+      <header class="planning-header">
+        <div>
+          <div class="planning-eyebrow">A little progress, every day</div>
+          <h1>Tasks</h1>
+        </div>
+      </header>
+      <nav class="planning-tabs" aria-label="Goals and tasks">
+        <a
+          href={`/goals?tab=tasks${query.view === 'board' ? '&view=board' : ''}`}
+          aria-current={!health ? 'page' : undefined}
+        >
+          Tasks
+        </a>
+        <a
+          href={`/goals?tab=health${query.view === 'board' ? '&view=board' : ''}`}
+          aria-current={health ? 'page' : undefined}
+        >
+          Health goals
+        </a>
+      </nav>
+      {health ? <HealthGoals /> : <Tasks />}
     </div>
   )
 }

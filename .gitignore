@@ -23,3 +23,18 @@ local.properties
 *.key
 *.mobileprovision
 
+
+# Local agent state, private runtime data and verification output
+.letta/
+**/.letta/
+__pycache__/
+*.pyc
+.env.*
+!.env.example
+runtime.env
+backups/
+releases/
+*.dump
+*.sql.gz
+docs/people-verification/*.txt
+docs/people-verification/*.jpg

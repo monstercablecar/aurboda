@@ -35,4 +35,42 @@ class MoreScreenTest {
         assertEquals(1, allItems.count { it.destination == MoreDestination.Live })
         assertEquals(1, allItems.count { it.destination == MoreDestination.Account })
     }
+
+    @Test
+    fun `Mental assessments opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/assessments"), allItems.single { it.label == "Mental assessments" }.destination)
+    }
+
+    @Test
+    fun `PEOPLE opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/people"), allItems.single { it.label == "PEOPLE" }.destination)
+        assertEquals("https://example.com/people?embed=1", embeddedPageUrl("https://example.com", "/people"))
+    }
+
+    @Test
+    fun `Work opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/work"), allItems.single { it.label == "Work" }.destination)
+    }
+
+    @Test
+    fun `CPAP opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/cpap"), allItems.single { it.label == "CPAP" }.destination)
+    }
+
+    @Test
+    fun `Simple food opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/simple-food"), allItems.single { it.label == "Simple food" }.destination)
+    }
+
+    @Test
+    fun `Treatments is in Log and opens the embedded web route`() {
+        val log = moreGroups.single { it.header == "Log" }
+        val treatments = log.items.single { it.label == "Treatments" }
+
+        assertEquals(MoreDestination.Web("/treatments"), treatments.destination)
+        assertEquals(
+            "https://example.com/treatments?embed=1",
+            embeddedPageUrl("https://example.com", (treatments.destination as MoreDestination.Web).path),
+        )
+    }
 }

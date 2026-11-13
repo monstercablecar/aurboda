@@ -18,6 +18,10 @@ services:
       - WEB_HOST=http://localhost:8080
       - API_BASE_URL=http://localhost:8080/api
       - NODE_ENV=production
+      - RESOURCES_STORAGE_DIR=/data/resources
+      - RESOURCES_MAX_UPLOAD_BYTES=268435456
+    volumes:
+      - resources_data:/data/resources
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,4 +47,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  resources_data:
   postgres_data:

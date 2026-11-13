@@ -1,19 +1,32 @@
-# Exporting all your data
+# Exporting your account data
 
-Your data is yours to take with you. One click in Settings downloads everything Aurboda holds about
-you in a single file, and that file restores into another Aurboda server, including one you run
+Your data is yours to take with you. One click in Settings downloads your saved private account database
+in a single file, which can be restored into a compatible Aurboda server, including one you run
 yourself ([Docker setup](docker.md)). It works on every plan, also after a free trial has ended and
 the account has turned read-only ([plans and billing](admin.md#plans-and-billing)). To leave for good,
 **Settings → Delete account** deletes the account and drops your whole database with it
 ([deleting accounts](admin.md#deleting-accounts)); export first if you want to keep a copy.
 
-Every Aurboda user has their own PostgreSQL database (`aurboda_<username>`). **Settings → Export all
+Every Aurboda user has their own PostgreSQL database (`aurboda_<username>`). **Settings → Export account
 data → Download export** gives you a complete copy of it as a gzipped plain SQL dump,
 `aurboda-<username>-<YYYY-MM-DD>.sql.gz`, made with `pg_dump`. It is the full-fidelity export: every
 metric, activity, location, meal, note, setting, rule and feed post, in a form you can restore into your
 own Aurboda installation (to move servers) or simply read and query with standard PostgreSQL tools.
 
 The dump is plain SQL (`CREATE TABLE …`, `COPY … FROM stdin`), so `gunzip -c` shows exactly what it holds.
+
+## Saved account data included
+
+This is a full copy of the per-user database, not a selection of page summaries or metric projections.
+It includes saved People profiles, observations and history, goals and goal events, important dates
+and care episodes; Work records; CPAP records; treatments, regimens and administration history;
+questionnaire definitions, question versions, assessments and answers; custom metrics and user
+settings; and the other records stored in that database. Questionnaire answers remain native records,
+including their saved definitions and versions, rather than only their derived metric values.
+
+The export contains database schema and saved records, not application page source code. Use the same
+customized Aurboda version or a newer compatible version with these features when restoring; upstream
+Aurboda alone may not expose the customized People, Work, CPAP or treatment records.
 
 ## Keep it safe
 
@@ -23,14 +36,25 @@ password: don't share it or leave it somewhere public.
 
 ## What is not in it
 
-Things the server keeps in its central database, outside yours, are not exported: your login password
-and passkeys, admin status, MCP/OAuth connector grants, and the server's Oura/Strava webhook
-registrations. After a move you sign up (or have an admin create you) on the new server, add passkeys
-again, and reconnect integrations whose tokens belong to the old server's OAuth app.
+- **Shared Resources and server catalogs:** the shared Resources library, its files and metadata, and
+  the shared food catalog are outside your private database. Private meal records and shared-food
+  overrides can still contain references to that excluded catalog; their presence does not make the
+  shared catalog portable. Saved nutrient snapshots remain in your database, but names and icons can depend on the shared
+  catalog. A destination needs the corresponding shared entries for those references to resolve.
+- **Server sign-in and access configuration:** the central account record, login password, admin or
+  billing status, account email and timestamps, server usage records, MCP/OAuth connector grants and server Oura/Strava webhook registrations are not
+  exported. Per-user `webauthn_credentials` records (including public keys and counters) are included,
+  but the central user-handle mapping is not. This does not provide portable passkey sign-in.
+- **Browser-only state:** unsaved forms, local Work drafts, browser caches and other browser storage
+  are not in the server database and are not exported.
+
+After a move, sign up (or have an admin create your account) on the new server, re-register passkeys,
+and reconnect integrations whose tokens belong to the old server's OAuth app. Server account setup
+and shared resources must be handled separately from restoring the private database.
 
 ## Getting the dump
 
-- **Web and Android**: Settings → _Export all data_ → _Download export_. Android saves it to Downloads.
+- **Web and Android**: Settings → _Export account data_ → _Download export_. Android saves it to Downloads.
 - **REST**: `POST /api/export/dump-link` with your bearer token answers `{ success, url, expires_at }`;
   download `url` (it carries its own token and needs no `Authorization` header). The link works for
   ten minutes and is spent once a download completes.
@@ -44,12 +68,14 @@ new as its PostgreSQL server; the Docker image ships a PostgreSQL 16 client to m
 
 ## Restoring into another Aurboda installation
 
-These steps restore into a [Docker Compose install](docker.md) whose database service is `postgres` with
+There is no in-app upload importer. These steps restore into a [Docker Compose install](docker.md) whose database service is `postgres` with
 the superuser `aurboda_service` (as in `docker-compose.yml`). Replace `alice` with your username and the
-file name with yours. Run them from the directory with the compose file.
+file name with yours. Run them from the directory with the compose file. Before changing any target database, verify the downloaded file with `gzip -t aurboda-alice-2026-11-06.sql.gz` and keep a separate backup of any target data. A successful gzip check verifies archive integrity, not feature compatibility.
 
-1. **Sign up** on the target server with the username you want. This creates the role `alice` and the
-   database `aurboda_alice`.
+1. **Sign up** on the target server, preferably with the same username. This creates the role `alice`
+   and the database `aurboda_alice`. SQL can be restored under a different username, but stored links
+   such as `/api/icons/<username>/<id>` can retain the old identity and require repair; restoring does
+   not automatically rewrite those references.
 
 2. **Stop Aurboda** so nothing recreates the tables while the database is empty (a logged-in browser or
    the Android app's background sync would), then **recreate the database empty**, owned by you, with
@@ -67,6 +93,7 @@ file name with yours. Run them from the directory with the compose file.
 3. **Load the dump as your user**, so every restored table is owned by `alice`:
 
    ```sh
+   set -o pipefail
    (echo 'SET ROLE "alice";'; gunzip -c aurboda-alice-2026-11-06.sql.gz \
      | grep -v -e '^COMMENT ON EXTENSION' -e '^SET transaction_timeout') \
      | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aurboda_service -d aurboda_alice
@@ -78,8 +105,7 @@ file name with yours. Run them from the directory with the compose file.
    16 does not know, so `grep -v` drops both; with `ON_ERROR_STOP=1` anything else that fails stops the restore and shows
    the error.
 
-4. **Start Aurboda and log in** (`docker compose start aurboda`). The next request migrates the restored schema to the target server's version, so a dump
-   from an older Aurboda restores into a newer one.
+4. **Start Aurboda and log in** (`docker compose start aurboda`). The next request migrates the restored schema to the target server's version, so use the same customized version or a newer compatible version that supports the exported features.
 
 A restore into a server without Docker works the same way: run the `psql` commands as a superuser
 against that server.

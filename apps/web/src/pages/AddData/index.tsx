@@ -6,6 +6,7 @@ import { useLocation } from 'preact-iso'
 import { useCallback, useState } from 'preact/hooks'
 
 import { ActivityTypePicker } from '../../components/ActivityTypePicker'
+import { useImportCelebration } from '../../components/ImportCelebrationProvider'
 import { ListFieldEditor } from '../../components/ListFieldEditor'
 import { MetricPicker } from '../../components/MetricPicker'
 import { fieldLabel, listFields, scalarFields } from '../../components/sessions/sessionView'
@@ -49,8 +50,9 @@ interface FormProps {
   initialTime?: string
 }
 
-const FitUpload = ({ onCreated }: FormProps) => {
+export const FitUpload = ({ onCreated }: FormProps) => {
   const queryClient = useQueryClient()
+  const celebrateImport = useImportCelebration()
   const [uploading, setUploading] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
@@ -66,9 +68,13 @@ const FitUpload = ({ onCreated }: FormProps) => {
         let lastId: string | undefined
         for (const file of Array.from(files)) {
           const result = await uploadFitFile(file)
-          const data = Array.isArray(result.data) ? result.data[0] : result.data
+          const records = Array.isArray(result.data) ? result.data : result.data ? [result.data] : []
+          if (!result.success || !records.length || records.some((record) => !record.id))
+            throw new Error('The server did not confirm a complete import. Some files may already be saved.')
+          const data = records[0]
           lastId = data?.id
         }
+        celebrateImport()
         queryClient.invalidateQueries({ queryKey: ['dayview-activities'] })
         if (files.length === 1 && lastId) {
           if (onCreated('activity', lastId)) return
@@ -80,7 +86,7 @@ const FitUpload = ({ onCreated }: FormProps) => {
         setUploading(false)
       }
     },
-    [onCreated, queryClient],
+    [onCreated, queryClient, celebrateImport],
   )
 
   return (

@@ -1,6 +1,8 @@
 import type {
   AddMetricBody,
   AddMetricResponse,
+  BulkMetricsBody,
+  BulkMetricsResponse,
   LatestSleep,
   LatestSleepResponse,
   PeriodSummaryQuery,
@@ -226,6 +228,14 @@ export const fetchMetricTimeSeriesWithSource = async (
 export const addMetric = async (body: AddMetricBody): Promise<AddMetricResponse> => {
   const { token } = auth.value
   const response = await axios.post<AddMetricResponse>(`${API_URL}/metrics`, body, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}
+
+export const bulkAddMetrics = async (body: BulkMetricsBody): Promise<BulkMetricsResponse> => {
+  const { token } = auth.value
+  const response = await axios.post<BulkMetricsResponse>(`${API_URL}/metrics/bulk`, body, {
     headers: { Authorization: `Bearer ${token}` },
   })
   return response.data

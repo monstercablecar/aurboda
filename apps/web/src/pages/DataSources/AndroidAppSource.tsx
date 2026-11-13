@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { endOfDay, formatISO, startOfDay, subDays } from 'date-fns'
 
-import { fetchActivities, fetchHeartRate } from '../../state/api'
+import { fetchRawRecordCount } from '../../state/api'
 import { auth } from '../../state/auth'
 import './style.css'
 
@@ -24,34 +23,13 @@ const DATA_TYPES = [
 export function AndroidAppSource() {
   const isLoggedIn = auth.value.token
 
-  const end = endOfDay(new Date())
-  const start7days = startOfDay(subDays(new Date(), 7))
-
-  const heartRateQuery = useQuery({
+  const recordsQuery = useQuery({
     enabled: !!isLoggedIn,
-    queryFn: () => fetchHeartRate(start7days, end),
-    queryKey: ['heartRate7days', formatISO(start7days, { representation: 'date' })],
+    queryFn: () => fetchRawRecordCount({ source: 'health_connect' }),
+    queryKey: ['androidApp', 'healthConnectRecords'],
     staleTime: 5 * 60 * 1000,
   })
-
-  const sleepQuery = useQuery({
-    enabled: !!isLoggedIn,
-    queryFn: () => fetchActivities(start7days, end, ['sleep']),
-    queryKey: ['sleep7days', formatISO(start7days, { representation: 'date' })],
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const exerciseQuery = useQuery({
-    enabled: !!isLoggedIn,
-    queryFn: () => fetchActivities(start7days, end, ['exercise']),
-    queryKey: ['exercise7days', formatISO(start7days, { representation: 'date' })],
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const hasHeartRate = (heartRateQuery.data?.length ?? 0) > 0
-  const hasSleep = (sleepQuery.data?.length ?? 0) > 0
-  const hasExercise = (exerciseQuery.data?.length ?? 0) > 0
-  const hasData = hasHeartRate || hasSleep || hasExercise
+  const hasData = (recordsQuery.data ?? 0) > 0
 
   if (!isLoggedIn) {
     return (
@@ -82,6 +60,13 @@ export function AndroidAppSource() {
           can sync ActivityWatch mobile data.
         </p>
 
+        <p>
+          Android is your companion for device integrations, background syncing and quick checks. Use{' '}
+          <a href="https://stats.foghouse.org">stats.foghouse.org</a> in your browser for full dashboards,
+          detailed history, longer questionnaires, Work, People and bigger forms. These features also remain
+          available embedded in Android where supported.
+        </p>
+
         <div class="data-types-section">
           <h2>Data provided</h2>
           <div class="data-types-list">
@@ -95,7 +80,18 @@ export function AndroidAppSource() {
 
         <div class={`status-banner ${hasData ? 'connected' : 'not-connected'}`}>
           <span class={`status-dot ${hasData ? 'connected' : 'not-connected'}`} />
-          {hasData ? 'Data detected in the last 7 days' : 'No data from the Android app in the last 7 days'}
+          {recordsQuery.isError
+            ? 'Health Connect status unavailable'
+            : recordsQuery.isPending
+              ? 'Checking Health Connect records…'
+              : hasData
+                ? 'Health Connect records received (including historical data)'
+                : 'Waiting for first Health Connect data'}
+          {recordsQuery.isError && (
+            <button type="button" onClick={() => void recordsQuery.refetch()}>
+              Retry
+            </button>
+          )}
         </div>
 
         <div class="links-row">
@@ -115,23 +111,31 @@ export function AndroidAppSource() {
           </a>
         </div>
 
-        {!hasData && (
+        {
           <div class="setup-instructions">
             <h3>Setup</h3>
             <ol>
               <li>Download and install the Aurboda APK on your Android phone.</li>
-              <li>Open the app and log in with your Aurboda credentials.</li>
-              <li>Grant Health Connect permissions when prompted.</li>
+              <li>
+                Set Server URL to <strong>https://stats.foghouse.org</strong>, then sign in with your existing
+                Foghouse account. The public APK may default to the upstream server, so enter this address
+                yourself.
+              </li>
+              <li>
+                Open Sync and grant Health Connect read permissions. Allow background access and battery
+                exemption, then tap Sync Now to verify your first data.
+              </li>
               <li>
                 For real-time heart rate monitoring, connect a Bluetooth heart rate monitor (e.g. Polar H10)
                 from the app&apos;s Live screen.
               </li>
               <li>
-                Workouts recorded in Strava, Garmin, or other apps will sync automatically via Health Connect.
+                In your other health apps, enable sharing to Health Connect where supported. Aurboda can only
+                sync the records those apps share and you allow it to read.
               </li>
             </ol>
           </div>
-        )}
+        }
       </div>
     </div>
   )

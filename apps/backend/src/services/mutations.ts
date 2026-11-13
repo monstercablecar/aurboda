@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type { Activity, MergedActivity } from '../db/types.ts'
 import type { ActivityNotifier } from './deduction-queue.ts'
 
+import { summarizeAuditError } from '../api/audit-body.ts'
 import { mergeOverlappingActivities } from '../db/activities/merge.ts'
 import {
   activityTypeExists,
@@ -207,7 +208,7 @@ export async function addMetric(user: string, input: AddMetricInput): Promise<Ad
       }
     }
   } catch (err) {
-    auditError(user, 'data', 'Failed to enqueue outbound sync for metric', { error: String(err) })
+    auditError(user, 'data', 'Failed to enqueue outbound sync for metric', summarizeAuditError(err))
   }
 
   const storedTime = input.time.toISOString()
@@ -392,7 +393,7 @@ export async function addActivity(
       }
     }
   } catch (err) {
-    auditError(user, 'data', 'Failed to enqueue outbound sync for activity', { error: String(err) })
+    auditError(user, 'data', 'Failed to enqueue outbound sync for activity', summarizeAuditError(err))
   }
 
   return {
@@ -458,7 +459,7 @@ export async function deleteActivity(user: string, id: string): Promise<DeleteAc
       }
     }
   } catch (err) {
-    auditError(user, 'data', 'Failed to enqueue outbound sync for activity delete', { error: String(err) })
+    auditError(user, 'data', 'Failed to enqueue outbound sync for activity delete', summarizeAuditError(err))
   }
 
   return {
@@ -683,7 +684,7 @@ export async function updateActivity(
       updated.start_time,
       updated.end_time ?? undefined,
     ).catch((err) =>
-      auditError(user, 'data', 'Failed to sync note times for activity', { error: String(err) }),
+      auditError(user, 'data', 'Failed to sync note times for activity', summarizeAuditError(err)),
     )
   }
 
@@ -757,7 +758,7 @@ export async function updateActivity(
       }
     }
   } catch (err) {
-    auditError(user, 'data', 'Failed to enqueue outbound sync for activity update', { error: String(err) })
+    auditError(user, 'data', 'Failed to enqueue outbound sync for activity update', summarizeAuditError(err))
   }
 
   return {

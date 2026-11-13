@@ -1,0 +1,43 @@
+.board-appearance .board-appearance-controls {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+.board-appearance .board-appearance-controls summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+  width: fit-content;
+}
+.board-appearance .board-appearance-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+.board-appearance .board-appearance-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+}
+.board-appearance .board-appearance-checkbox input {
+  width: auto;
+}
+.board-appearance[data-density='compact'] .task-board-column {
+  padding: 0.6rem;
+}
+.board-appearance[data-density='compact'] .task-board-cards {
+  gap: 0.55rem;
+}
+.board-appearance[data-density='compact'] .task-board-card {
+  padding: 0.6rem;
+}
+.board-appearance[data-density='compact'] .task-board-column-header {
+  padding-bottom: 0.6rem;
+}
+.board-appearance:not([data-accent='default']) .task-board-column:not(.is-drop-target) {
+  border-top-color: var(--board-appearance-accent);
+}
+.board-appearance[data-descriptions='hide'] .task-board-description {
+  display: none;
+}

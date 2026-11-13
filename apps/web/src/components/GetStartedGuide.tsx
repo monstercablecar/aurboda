@@ -1,8 +1,9 @@
-import type { OnboardingStepId, UpdateSettingsInput } from '@aurboda/api-spec'
+import type { OnboardingStepId, UpdateSettingsInput, UserSettingsResponse } from '@aurboda/api-spec'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { endOfDay, formatISO, startOfDay, subDays } from 'date-fns'
-import { useState } from 'preact/hooks'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { endOfDay, startOfDay, subDays } from 'date-fns'
+import { useLocation } from 'preact-iso'
+import { useEffect, useRef, useState } from 'preact/hooks'
 
 import {
   fetchActivityWatchStatus,
@@ -13,215 +14,250 @@ import {
   listMyChallengeParticipations,
   updateUserSettings,
 } from '../state/api'
+import { currentSessionGeneration } from '../state/sessionBoundary'
 import { ActivityWatchInstall } from './ActivityWatchInstall'
-import {
-  countDone,
-  type GetStartedInput,
-  type GetStartedStep,
-  getStartedSteps,
-  isGetStartedVisible,
-} from './get-started-steps'
-import './GetStartedGuide.css'
+import { Celebration } from './Celebration'
+import { nextCelebration, type CelebrationEvent } from './celebration-catalog'
+import { onboardingCounts, onboardingSteps, FOGHOUSE_URL, type StepStatus } from './onboarding-model'
+import { OnboardingFlow } from './OnboardingFlow'
 
-const SIGNAL_STALE_MS = 10 * 60 * 1000
-
-type DataSignals = Pick<
-  GetStartedInput,
-  'challengeCount' | 'followingCount' | 'hasDesktopScreenTime' | 'hasHealthConnectData'
->
-
-interface Signal<T> {
-  settled: boolean
-  value: T
-}
-
-const useHealthConnectSignal = (active: boolean): Signal<boolean> => {
-  const query = useQuery({
-    enabled: active,
-    queryFn: () =>
-      fetchRawRecordCount({
-        source: 'health_connect',
-        start: startOfDay(subDays(new Date(), 30)).toISOString(),
-      }),
+const staleTime = 10 * 60 * 1000
+function useSetupSignals(
+  settings: UserSettingsResponse | undefined,
+  needs: (id: OnboardingStepId) => boolean,
+  active: boolean,
+) {
+  const health = useQuery({
+    enabled: needs('android_app'),
     queryKey: ['getStarted', 'healthConnectRecords'],
-    staleTime: SIGNAL_STALE_MS,
+    queryFn: () => fetchRawRecordCount({ source: 'health_connect' }),
+    staleTime,
+    refetchInterval: active ? 30000 : false,
   })
-  return { settled: !query.isPending, value: (query.data ?? 0) > 0 }
-}
-
-const useDesktopScreenTimeSignal = (active: boolean): Signal<boolean> => {
-  const start7days = startOfDay(subDays(new Date(), 7))
-  const statusQuery = useQuery({
-    enabled: active,
-    queryFn: fetchActivityWatchStatus,
-    queryKey: ['awStatus'],
-    staleTime: SIGNAL_STALE_MS,
-  })
-  // The status lists every pushing device; only the productivity records tell desktop from phone.
-  const hasDevices = (statusQuery.data?.length ?? 0) > 0
-  const productivityQuery = useQuery({
-    enabled: active && hasDevices,
-    queryFn: () => fetchProductivity(start7days, endOfDay(new Date())),
-    queryKey: ['productivity7days', formatISO(start7days, { representation: 'date' })],
-    staleTime: SIGNAL_STALE_MS,
-  })
-  return {
-    settled: !statusQuery.isPending && (!hasDevices || !productivityQuery.isPending),
-    value: (productivityQuery.data?.records ?? []).some((r) => r.source === 'activitywatch' && !r.is_mobile),
-  }
-}
-
-const useSocialSignal = (active: boolean): Signal<{ followingCount: number; challengeCount: number }> => {
-  const followingQuery = useQuery({
-    enabled: active,
-    queryFn: fetchFollowing,
-    queryKey: ['following'],
-    staleTime: SIGNAL_STALE_MS,
-  })
-  const followingCount = followingQuery.data?.length ?? 0
-  const participationsQuery = useQuery({
-    enabled: active && !followingQuery.isPending && followingCount === 0,
-    queryFn: listMyChallengeParticipations,
-    queryKey: ['challengeParticipations'],
-    staleTime: SIGNAL_STALE_MS,
-  })
-  return {
-    settled: !followingQuery.isPending && (followingCount > 0 || !participationsQuery.isPending),
-    value: { challengeCount: participationsQuery.data?.length ?? 0, followingCount },
-  }
-}
-
-/** One call per signal, made only while `active`; `ready` once every call that will run has settled. */
-const useDataSignals = (active: boolean): { ready: boolean; signals: DataSignals } => {
-  const healthConnect = useHealthConnectSignal(active)
-  const screenTime = useDesktopScreenTimeSignal(active)
-  const social = useSocialSignal(active)
-  return {
-    ready: active && healthConnect.settled && screenTime.settled && social.settled,
-    signals: {
-      ...social.value,
-      hasDesktopScreenTime: screenTime.value,
-      hasHealthConnectData: healthConnect.value,
+  const wearable = useQuery({
+    enabled: needs('wearable'),
+    queryKey: [
+      'getStarted',
+      'wearable',
+      settings?.garmin_connected,
+      settings?.oura_connected,
+      settings?.strava_connected,
+    ],
+    queryFn: async () => {
+      const results = await Promise.all([
+        settings?.garmin_connected ? fetchRawRecordCount({ source: 'garmin' }) : 0,
+        settings?.oura_connected ? fetchRawRecordCount({ source: 'oura' }) : 0,
+        settings?.strava_connected ? fetchRawRecordCount({ source: 'strava' }) : 0,
+      ])
+      return results.some((count) => count > 0)
     },
-  }
+    staleTime,
+    refetchInterval: active ? 30000 : false,
+  })
+  const desktop = useQuery({
+    enabled: needs('computer_time'),
+    queryKey: ['getStarted', 'desktop'],
+    queryFn: async () => {
+      const devices = await fetchActivityWatchStatus()
+      if (!devices.length) return false
+      const result = await fetchProductivity(startOfDay(subDays(new Date(), 7)), endOfDay(new Date()))
+      return result.records.some((record) => record.source === 'activitywatch' && !record.is_mobile)
+    },
+    staleTime,
+    refetchInterval: active ? 30000 : false,
+  })
+  const social = useQuery({
+    enabled: needs('social'),
+    queryKey: ['getStarted', 'social'],
+    queryFn: async () =>
+      (await fetchFollowing()).length > 0 || (await listMyChallengeParticipations()).length > 0,
+    staleTime,
+  })
+  return [
+    { id: 'android_app' as const, query: health, detected: (health.data ?? 0) > 0 },
+    { id: 'wearable' as const, query: wearable, detected: !!wearable.data },
+    { id: 'computer_time' as const, query: desktop, detected: !!desktop.data },
+    { id: 'social' as const, query: social, detected: !!social.data },
+  ]
 }
 
-function StepDescription({ step }: { step: GetStartedStep }) {
-  if (step.id !== 'computer_time') return <>{step.description}</>
+export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean }) {
+  const location = useLocation()
+  const review =
+    forceReview || new URLSearchParams(location.url.split('?')[1] ?? '').get('onboarding') === 'review'
+  const client = useQueryClient()
+  const settingsQuery = useQuery({ queryFn: fetchUserSettings, queryKey: ['userSettings'] })
+  const settings = settingsQuery.data
+  const [hidden, setHidden] = useState(false)
+  const [chapter, setChapter] = useState(0)
+  const [selectedId, setSelectedId] = useState<OnboardingStepId>('browser_basics')
+  const [busy, setBusy] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const session = useRef(currentSessionGeneration())
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [celebration, setCelebration] = useState<CelebrationEvent | null>(null)
+  const saving = useRef(false)
+  const initialPending = useRef<boolean | null>(null)
+  const baseline = useRef<Partial<Record<OnboardingStepId, boolean>>>({})
+  const attempted = useRef(new Set<string>())
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const steps = onboardingSteps(settings?.onboarding_progress, settings?.onboarding_manual_done)
+  if (settings && initialPending.current === null) {
+    initialPending.current = onboardingCounts(steps).remaining > 0
+    const firstPending = steps.find((step) => step.status === 'pending') ?? steps[0]
+    setChapter(firstPending.chapter)
+    setSelectedId(firstPending.id)
+  }
+  const active = isGuideActive(settings, hidden, review, initialPending.current)
+  const needs = (id: OnboardingStepId) => active && steps.find((s) => s.id === id)?.status === 'pending'
+  const signals = useSetupSignals(settings, needs, active)
+  const [health, wearable, desktop, social] = signals.map((signal) => signal.query)
+  const save = async (update: UpdateSettingsInput, celebrate: boolean, hide = false) => {
+    if (saving.current) return false
+    saving.current = true
+    setBusy(true)
+    setError('')
+    try {
+      const result = await updateUserSettings(update)
+      if (!mounted.current || session.current !== currentSessionGeneration()) return false
+      client.setQueryData(['userSettings'], result)
+      if (hide) setHidden(true)
+      if (celebrate) {
+        const counts = onboardingCounts(
+          onboardingSteps(result.onboarding_progress, result.onboarding_manual_done),
+        )
+        setCelebration(
+          nextCelebration(
+            counts.remaining === 0 && counts.completed > 0 ? 'onboarding-finish' : 'onboarding-step',
+          ),
+        )
+      }
+      return true
+    } catch {
+      if (mounted.current && session.current === currentSessionGeneration()) {
+        setError('Your change could not be saved. Please try again. Your progress is unchanged.')
+      }
+      return false
+    } finally {
+      saving.current = false
+      if (mounted.current && session.current === currentSessionGeneration()) setBusy(false)
+    }
+  }
+  useEffect(() => {
+    if (!active) return
+    for (const signal of signals) {
+      if (!signal.query.isSuccess) continue
+      const isInitial = baseline.current[signal.id] === undefined
+      if (isInitial) baseline.current[signal.id] = signal.detected
+      if (!signal.detected || !needs(signal.id) || saving.current) continue
+      const key = `${signal.id}:${steps.find((s) => s.id === signal.id)?.status}`
+      if (attempted.current.has(key)) continue
+      attempted.current.add(key)
+      void save(
+        { onboarding_progress: { [signal.id]: 'completed' } },
+        !isInitial && baseline.current[signal.id] === false,
+      )
+      break
+    }
+  }, [
+    active,
+    settings,
+    health.data,
+    health.isSuccess,
+    wearable.data,
+    wearable.isSuccess,
+    desktop.data,
+    desktop.isSuccess,
+    social.data,
+    social.isSuccess,
+    busy,
+    retry,
+  ])
+  if (!settings || !active) return null
+  const signalCopy: Partial<Record<OnboardingStepId, string>> = {}
+  for (const signal of signals) {
+    signalCopy[signal.id] = signalText(signal, settings)
+  }
+  const changeChapter = (next: number) => {
+    setChapter(next)
+    const chapterSteps = steps.filter((s) => s.chapter === next)
+    setSelectedId((chapterSteps.find((s) => s.status === 'pending') ?? chapterSteps[0]).id)
+  }
+  const changeStatus = async (id: OnboardingStepId, status: StepStatus) => {
+    if (status === 'completed' && !steps.find((s) => s.id === id)?.manualLabel) return
+    const success = await save({ onboarding_progress: { [id]: status } }, status === 'completed')
+    if (!mounted.current || session.current !== currentSessionGeneration()) return
+    if (success && status !== 'pending') {
+      const next = steps.find((s) => s.chapter === chapter && s.id !== id && s.status === 'pending')
+      if (next) setSelectedId(next.id)
+    }
+    if (status === 'pending') attempted.current.delete(`${id}:pending`)
+  }
   return (
     <>
-      Install{' '}
-      <a href="https://activitywatch.net/" target="_blank" rel="noopener noreferrer">
-        ActivityWatch
-      </a>
-      , then paste this into a terminal. It sends app usage here every 5 minutes.
+      <OnboardingFlow
+        steps={onboardingSteps(settings.onboarding_progress, settings.onboarding_manual_done, signalCopy)}
+        chapter={chapter}
+        selectedId={selectedId}
+        busy={busy}
+        error={
+          error ||
+          (signals.some((s) => s.query.isError)
+            ? 'Some setup checks are unavailable. You can continue exploring.'
+            : '')
+        }
+        copied={copied}
+        onChapter={changeChapter}
+        onSelect={setSelectedId}
+        onStatus={(id, status) => void changeStatus(id, status)}
+        onHide={() => void save({ onboarding_dismissed_at: new Date().toISOString() }, false, true)}
+        onCopyUrl={() => {
+          void navigator.clipboard
+            .writeText(FOGHOUSE_URL)
+            .then(() => setCopied(true))
+            .catch(() => setError('Could not copy. Select and copy the website address above.'))
+        }}
+        onRetry={() => {
+          attempted.current.clear()
+          setError('')
+          setRetry((value) => value + 1)
+          for (const s of signals) if (needs(s.id)) void s.query.refetch()
+        }}
+        computerSetup={<ActivityWatchInstall manualHref="/data-sources/activitywatch-desktop" />}
+      />
+      {celebration && <Celebration {...celebration} onDone={() => setCelebration(null)} />}
     </>
   )
 }
 
-function StepRow({
-  step,
-  busy,
-  onMarkDone,
-}: {
-  step: GetStartedStep
-  busy: boolean
-  onMarkDone: (id: OnboardingStepId) => void
-}) {
+function isGuideActive(
+  settings: UserSettingsResponse | undefined,
+  hidden: boolean,
+  review: boolean,
+  initiallyPending: boolean | null,
+) {
   return (
-    <li class={`get-started-step${step.done ? ' done' : ''}`}>
-      <span class="get-started-status" role="img" aria-label={step.done ? 'Done' : 'Not done yet'}>
-        {step.done && (
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
-            <path d="M5 12l5 5 9-10" />
-          </svg>
-        )}
-      </span>
-      <div class="get-started-body">
-        <span class="get-started-title">{step.title}</span>
-        <span class="get-started-description">
-          <StepDescription step={step} />
-        </span>
-        {step.id === 'computer_time' && !step.done && (
-          <div class="get-started-inline">
-            <ActivityWatchInstall manualHref="/data-sources/activitywatch-desktop" />
-          </div>
-        )}
-      </div>
-      <div class="get-started-actions">
-        {step.action && (
-          <a class="get-started-action" href={step.action.href}>
-            {step.action.label}
-          </a>
-        )}
-        {step.manual && !step.done && (
-          <button type="button" class="get-started-mark" onClick={() => onMarkDone(step.id)} disabled={busy}>
-            Mark as done
-          </button>
-        )}
-      </div>
-    </li>
+    !!settings && !hidden && (review || !settings.onboarding_dismissed_at) && (review || !!initiallyPending)
   )
 }
-
-/** The "Get started" checklist at the top of the dashboard; its signals load only until it is hidden. */
-export function GetStartedGuide() {
-  const queryClient = useQueryClient()
-  const [hiddenNow, setHiddenNow] = useState(false)
-
-  const { data: settings } = useQuery({
-    queryFn: fetchUserSettings,
-    queryKey: ['userSettings'],
-    staleTime: 5 * 60 * 1000,
-  })
-  const active = !!settings && !settings.onboarding_dismissed_at && !hiddenNow
-  const { ready, signals } = useDataSignals(active)
-
-  const updateMutation = useMutation({
-    mutationFn: (update: UpdateSettingsInput) => updateUserSettings(update),
-    onSuccess: (data) => queryClient.setQueryData(['userSettings'], data),
-  })
-
-  if (!ready || !settings) return null
-
-  const manualDone = settings.onboarding_manual_done
-  const input: GetStartedInput = {
-    ...signals,
-    dismissed: false,
-    garminConnected: settings.garmin_connected,
-    manualDone,
-    ouraConnected: settings.oura_connected,
-    stravaConnected: settings.strava_connected,
-  }
-  const steps = getStartedSteps(input)
-  if (!isGetStartedVisible(input, steps)) return null
-
-  const dismiss = () => {
-    setHiddenNow(true)
-    updateMutation.mutate({ onboarding_dismissed_at: new Date().toISOString() })
-  }
-
-  const markDone = (id: OnboardingStepId) =>
-    updateMutation.mutate({ onboarding_manual_done: [...manualDone.filter((done) => done !== id), id] })
-
-  return (
-    <section class="get-started" aria-labelledby="get-started-title">
-      <header class="get-started-header">
-        <h2 id="get-started-title">Get started</h2>
-        <span class="get-started-count">
-          {countDone(steps)} of {steps.length} done
-        </span>
-      </header>
-
-      <ol class="get-started-steps">
-        {steps.map((step) => (
-          <StepRow key={step.id} step={step} busy={updateMutation.isPending} onMarkDone={markDone} />
-        ))}
-      </ol>
-
-      <button type="button" class="get-started-hide" onClick={dismiss}>
-        Hide this guide
-      </button>
-    </section>
-  )
+function signalText(signal: ReturnType<typeof useSetupSignals>[number], settings: UserSettingsResponse) {
+  return signal.query.isError
+    ? 'Status unavailable — retry the check below.'
+    : signal.query.isPending
+      ? 'Checking setup…'
+      : signal.detected
+        ? 'Data verified — saving setup progress…'
+        : signal.id === 'wearable' &&
+            (settings.garmin_connected || settings.oura_connected || settings.strava_connected)
+          ? 'Connected — waiting for first data'
+          : signal.id === 'social'
+            ? 'No follow or challenge found yet.'
+            : 'Waiting for first data'
 }

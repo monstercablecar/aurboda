@@ -16,6 +16,7 @@ const ACTIVITY_SHARE_PREVIEW = /^\/feed\/activities\/[^/]+\/preview$/
  */
 export const isAllowedWhenReadOnly = (method: string, path: string): boolean => {
   const verb = method.toUpperCase()
+  if (path === '/resources/session' && (verb === 'POST' || verb === 'DELETE')) return true
   if (SAFE_METHODS.has(verb)) return true
   if (path === '/export' || path.startsWith('/export/')) return true
   if (path.startsWith('/webauthn/')) return true

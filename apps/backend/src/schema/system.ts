@@ -1,4 +1,14 @@
 export const systemTables: Record<string, string> = {
+  browser_push_subscriptions: `
+    CREATE TABLE IF NOT EXISTS browser_push_subscriptions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      endpoint TEXT NOT NULL UNIQUE,
+      keys JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `,
+
   // MCP session persistence for surviving backend restarts
   mcp_sessions: `
     CREATE TABLE IF NOT EXISTS mcp_sessions (

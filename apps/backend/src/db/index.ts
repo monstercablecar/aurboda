@@ -60,6 +60,8 @@ export {
 
 export { type Queryable, type UserDb } from './pool.ts'
 
+export * from './pharmacology.ts'
+
 export {
   getAllScrobbles,
   getScrobbles,

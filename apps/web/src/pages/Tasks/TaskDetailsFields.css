@@ -1,0 +1,149 @@
+.task-details-fields {
+  display: grid;
+  gap: 1rem;
+}
+.task-details-fields fieldset {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+.task-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+.task-detail-row input:not([type='checkbox']) {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.task-detail-row input[type='checkbox'],
+.task-archive-label input {
+  width: auto;
+}
+.task-details-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.planning-form .task-editor-controls {
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.task-editor-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+}
+.task-editor-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.task-editor-section summary span {
+  font-weight: 400;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  color: var(--color-text-muted);
+}
+.task-editor-section[open] > :not(summary) {
+  margin-top: 0.75rem;
+}
+.task-editor-form .task-archive-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.task-editor-form input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+.task-save-status {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.tasks-board-mode .planning-header {
+  margin-bottom: 0.75rem;
+}
+.tasks-board-mode .planning-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.tasks-board-mode .planning-toolbar {
+  margin-bottom: 0.75rem;
+}
+@media (max-width: 520px) {
+  .task-detail-row input:not([type='checkbox']) {
+    flex-basis: calc(100% - 2rem);
+  }
+  .task-detail-row button {
+    min-height: 2.5rem;
+  }
+  .task-editor-section summary span {
+    display: block;
+    margin-left: 1rem;
+  }
+}
+
+.tasks-board-mode .planning-header .planning-actions {
+  margin-top: 0;
+}
+
+.planning-page:has(.tasks-board-mode) {
+  max-width: 1600px;
+  padding-top: 1.25rem;
+}
+.planning-page:has(.tasks-board-mode) > .planning-header {
+  margin-bottom: 0.75rem;
+}
+.planning-page:has(.tasks-board-mode) .planning-eyebrow {
+  display: none;
+}
+.planning-page:has(.tasks-board-mode) > .planning-header h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0;
+}
+.planning-page:has(.tasks-board-mode) > .planning-tabs {
+  margin-bottom: 0.75rem;
+}
+.tasks-board-mode > .planning-header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (min-width: 760px) {
+  .tasks-board-mode {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .tasks-board-mode > * {
+    grid-column: 1 / -1;
+  }
+  .tasks-board-mode > .planning-header {
+    grid-column: 2;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+  .tasks-board-mode > .task-view-switch {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+  }
+}

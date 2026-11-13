@@ -1,0 +1,108 @@
+#foghouse-onboarding-preview * {
+  box-sizing: border-box;
+}
+#foghouse-onboarding-preview {
+  margin: 0;
+  background: #f2f4ef;
+  color: #273c3b;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+#foghouse-onboarding-preview main {
+  padding: clamp(0.6rem, 3vw, 2rem);
+  max-width: 1100px;
+  margin: auto;
+}
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  max-width: 960px;
+  margin: auto;
+  color: #5c7068;
+}
+.preview-controls strong {
+  color: #29483f;
+}
+.preview-controls button,
+.preview-closed button,
+.preview-installer button {
+  font: inherit;
+  border: 1px solid #b7cbc0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+}
+.preview-controls button:disabled {
+  opacity: 0.5;
+}
+.preview-controls span {
+  flex: 1;
+}
+.preview-notice,
+.preview-closed {
+  max-width: 960px;
+  margin: 1rem auto;
+  padding: 1rem;
+  background: #e3eee5;
+  border-radius: 12px;
+}
+.preview-installer {
+  padding: 1rem;
+  background: #297d780a;
+  border: 1px dashed #77a59c;
+  border-radius: 10px;
+}
+.preview-installer p {
+  margin-top: 0.5rem;
+}
+@media (prefers-color-scheme: dark) {
+  #foghouse-onboarding-preview {
+    background: #12201c;
+    color: #dcebe3;
+  }
+  .preview-controls,
+  .preview-controls strong {
+    color: #bed4c7;
+  }
+  .preview-controls button,
+  .preview-closed button,
+  .preview-installer button {
+    background: #223c30;
+    color: #dcebe3;
+  }
+  .preview-notice,
+  .preview-closed {
+    background: #203d31;
+  }
+}
+
+#foghouse-onboarding-preview {
+  position: relative;
+}
+#foghouse-onboarding-preview .celebration-overlay {
+  position: absolute;
+}
+
+#foghouse-onboarding-preview {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-border: #dde3ea;
+  --color-text: #1b2430;
+  --color-text-muted: #5b6675;
+  --color-accent: #17707a;
+  --color-primary: #17707a;
+}
+@media (prefers-color-scheme: dark) {
+  #foghouse-onboarding-preview {
+    --color-bg: #12161c;
+    --color-surface: #1b222b;
+    --color-border: #2a333f;
+    --color-text: #e6e9ee;
+    --color-text-muted: #9aa6b4;
+    --color-accent: #4cc3cc;
+    --color-primary: #17707a;
+  }
+}

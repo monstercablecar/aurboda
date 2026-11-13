@@ -1,0 +1,66 @@
+import { createTableStatements, tableCreationOrder } from './schema';
+
+/** WorkProfile schema: stores the core workday key for the WorkMetrics API. */
+export const workProfilesSchema = `
+CREATE TABLE IF NOT EXISTS work_profiles (
+  PRIMARY KEY work_id UUID DEFAULT gen_random_uuid(),
+  date_bin_val TEXT NOT NULL,
+  granularite_level ANYELEMENT,
+  provenance ANYELEMENT,
+  created_val TIMESTAMETZ,
+  updated_val TIMESTAMETZ DEFAULT NOW()
+);
+
+-- Index on composite key for rapid lookup in time-series queries.
+CREATE INDEX IF NOT EXISTS idx_work_profiles_key ON work_profiles (work_id, date_bin_val, granularite_level) WITH (fillfactor = 90);
+`;
+
+/** WorkMetricDefinitions schema: stores the mapped schema for /work API endpoints. */
+export const workMetricDefinitionsSchema = `
+CREATE TABLE IF NOT EXISTS work_metric_definitions (
+  PRIMARY KEY metric_id UUID DEFAULT gen_random_uuid(),
+  label_name VARCHAR(255) NOT NULL,
+  unique_id ANYELEMENT NOT NULL,
+  description_val TEXT,
+  metadata ANYELEMENT,
+  created_val TIMESTAMETZ,
+  updated_val TIMESTAMETZ DEFAULT NOW()
+);
+
+-- Index on composite keys for efficient joins in metric aggregation queries.
+CREATE INDEX IF NOT EXISTS idx_work_metric_unique ON work_metric_definitions (metric_id, unique_id) WITH (fillfactor = 90);
+`;
+
+/** LegacyAggregate schema: stores pre-migration aggregate entries. */
+export const legacyAggregateSchema = `
+CREATE TABLE IF NOT EXISTS legacy_aggregates (
+  PRIMARY KEY id UUID DEFAULT gen_random_uuid(),
+  timestamp_val INT NOT NULL,
+  model_type ANYELEMENT,
+  time_bin_val ANYELEMENT,
+  version_str TEXT,
+  updated_val TIMESTAMETZ DEFAULT NOW()
+);
+
+-- Index on composite keys for rapid aggregation backfill.
+CREATE INDEX IF NOT EXISTS idx_legacy_aggregate_key ON legacy_aggregates (timestamp_val, model_type, time_bin_val) WITH (fillfactor = 90);
+`;
+
+// Integration order: API schema tables first, then legacy aggregate backup.
+tableCreationOrder.push({
+  name: 'work_profiles',
+  sourcePath: () => './apps/backend/src/schema/work.ts',
+  dependencies: []
+});
+
+tableCreationOrder.push({
+  name: 'work_metric_definitions',
+  sourcePath: () => './apps/backend/src/schema/work.ts',
+  dependencies: ['work_profiles']
+});
+
+tableCreationOrder.push({
+  name: 'legacy_aggregates',
+  sourcePath: () => './apps/backend/src/schema/work.ts',
+  dependencies: []
+});

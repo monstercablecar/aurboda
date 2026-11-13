@@ -23,12 +23,21 @@
 }
 
 .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
   color: #fff;
   font-weight: 700;
   font-size: 1.1rem;
   white-space: nowrap;
   overflow: hidden;
   text-decoration: none;
+}
+
+.sidebar-brand img {
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .sidebar-brand:hover {

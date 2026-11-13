@@ -1,6 +1,7 @@
 import { useLocation } from 'preact-iso'
 import { useEffect, useState } from 'preact/hooks'
 
+import { brandForRoute } from '../branding'
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
 import {
   DATA_SOURCE_LINKS,
@@ -17,6 +18,7 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 export function Sidebar() {
   const { url } = useLocation()
   const isLoggedIn = auth.value.token
+  const brand = brandForRoute(url, Boolean(isLoggedIn))
   const isAdmin = auth.value.is_admin
   const canSignup = signupMode.value === 'open'
 
@@ -48,8 +50,9 @@ export function Sidebar() {
   return (
     <aside class={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <div class="sidebar-header">
-        <a href="/" class="sidebar-brand">
-          Aurboda
+        <a href="/" class="sidebar-brand" aria-label={`${brand.name} home`}>
+          {brand.isPrivate && <img src={brand.mark} alt="" width={32} height={32} />}
+          <span>{brand.name}</span>
         </a>
         <button
           class="sidebar-toggle"

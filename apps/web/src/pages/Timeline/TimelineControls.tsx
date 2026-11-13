@@ -53,7 +53,9 @@ export const TimelineControls: FunctionComponent<TimelineControlsProps> = ({
         onClick={() =>
           queryClient.invalidateQueries({
             predicate: (query) =>
-              typeof query.queryKey[0] === 'string' && (query.queryKey[0] as string).startsWith('timeline-'),
+              typeof query.queryKey[0] === 'string' &&
+              ((query.queryKey[0] as string).startsWith('timeline-') ||
+                query.queryKey[0] === 'people-calendar'),
           })
         }
         title={isFetching ? 'Loading...' : 'Refresh data'}

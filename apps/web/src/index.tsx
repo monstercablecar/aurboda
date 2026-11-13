@@ -1,13 +1,15 @@
-import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import axios from 'axios'
 import { render } from 'preact'
 import { LocationProvider, Route, Router, useLocation } from 'preact-iso'
 
+import { appContentClass, useBrandTitle } from './branding.js'
+import './branding.css'
 import { Footer } from './components/Footer.jsx'
 import { GuestBar } from './components/GuestBar.jsx'
 import { Header } from './components/Header.jsx'
 import { PlanBanner } from './components/PlanBanner.jsx'
+import { SessionBoundary } from './components/SessionBoundary'
 import { Sidebar } from './components/Sidebar.jsx'
 import { isEmbedded } from './embed.js'
 import { lazyPage } from './lazyPage.js'
@@ -97,6 +99,13 @@ const Signup = lazyPage(() => import('./pages/Signup/index.jsx'), 'Signup')
 const Sleep = lazyPage(() => import('./pages/Sleep/index.jsx'), 'Sleep')
 const Terms = lazyPage(() => import('./pages/Terms/index.jsx'), 'Terms')
 const Timeline = lazyPage(() => import('./pages/Timeline/index.jsx'), 'Timeline')
+const Assessments = lazyPage(() => import('./pages/Assessments/index'), 'Assessments')
+const Treatments = lazyPage(() => import('./pages/Treatments/index'), 'Treatments')
+const CPAP = lazyPage(() => import('./pages/CPAP/index'), 'CPAP')
+const Resources = lazyPage(() => import('./pages/Resources/index'), 'Resources')
+const People = lazyPage(() => import('./pages/People/index'), 'People')
+const WorkMetrics = lazyPage(() => import('./pages/WorkMetrics/index'), 'WorkMetrics')
+const SimpleFood = lazyPage(() => import('./pages/SimpleFood/index'), 'SimpleFood')
 
 function AppShell() {
   const { path } = useLocation()
@@ -104,6 +113,7 @@ function AppShell() {
   // all web chrome (header, sidebar, footer) and just render page content.
   const embedded = isEmbedded()
   const isLoggedIn = Boolean(auth.value.token)
+  useBrandTitle(path, isLoggedIn)
   const showNav = !embedded && shouldShowNav(path, isLoggedIn)
   const showGuestBar = !embedded && shouldShowGuestBar(path, isLoggedIn)
   // Shown in the native app's WebView too: Android users would otherwise only see the 402s.
@@ -113,7 +123,7 @@ function AppShell() {
     <>
       {showNav && <Header />}
       {showNav && <Sidebar />}
-      <div class="app-content">
+      <div class={appContentClass(path)}>
         {showGuestBar && <GuestBar />}
         {showPlanBanner && <PlanBanner />}
         <main>
@@ -133,6 +143,13 @@ function AppShell() {
             <Route path="/privacy" component={Privacy} />
             <Route path="/terms" component={Terms} />
             <Route path="/goals" component={Goals} />
+            <Route path="/cpap" component={CPAP} />
+            <Route path="/work" component={WorkMetrics} />
+            <Route path="/people" component={People} />
+            <Route path="/resources" component={Resources} />
+            <Route path="/assessments" component={Assessments} />
+            <Route path="/treatments" component={Treatments} />
+            <Route path="/simple-food" component={SimpleFood} />
             <Route path="/timeline" component={Timeline} />
             <Route path="/data" component={Data} />
             <Route path="/add" component={AddData} />
@@ -190,12 +207,12 @@ function AppShell() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <SessionBoundary>
       <LocationProvider>
         <AppShell />
         <ReactQueryDevtools initialIsOpen={false} />
       </LocationProvider>
-    </QueryClientProvider>
+    </SessionBoundary>
   )
 }
 

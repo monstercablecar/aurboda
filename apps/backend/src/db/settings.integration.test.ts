@@ -19,6 +19,39 @@ describe('Settings Integration Tests', () => {
     await cleanTestDb()
   })
 
+  describe('persistent onboarding progress', () => {
+    test('concurrent different-step updates preserve progress and legacy settings', async () => {
+      const user = getTestUser()
+      await upsertUserSettings(user, { sex: 'male', onboarding_manual_done: ['ask_ai'] })
+      await Promise.all([
+        upsertUserSettings(user, { onboarding_progress: { work: 'completed' } }),
+        upsertUserSettings(user, { onboarding_progress: { people: 'skipped' } }),
+      ])
+      await upsertUserSettings(user, { lastfm_username: 'test' })
+      expect(await getUserSettings(user)).toMatchObject({
+        onboarding_progress: { work: 'completed', people: 'skipped' },
+        onboarding_manual_done: ['ask_ai'],
+        sex: 'male',
+        lastfm_username: 'test',
+      })
+      await upsertUserSettings(user, { onboarding_progress: { people: 'pending' } })
+      expect((await getUserSettings(user))?.onboarding_progress).toEqual({
+        work: 'completed',
+        people: 'pending',
+      })
+      await upsertUserSettings(user, { onboarding_progress: {} })
+      expect((await getUserSettings(user))?.onboarding_progress).toEqual({
+        work: 'completed',
+        people: 'pending',
+      })
+      await upsertUserSettings(user, {}, ['onboarding_progress'])
+      const cleared = await getUserSettings(user)
+      expect(cleared?.onboarding_progress).toBeUndefined()
+      expect(cleared?.onboarding_manual_done).toEqual(['ask_ai'])
+      expect(cleared?.sex).toBe('male')
+    })
+  })
+
   describe('claimSettingsFlag', () => {
     test('concurrent claims without a settings row: exactly one wins and one row exists', async () => {
       const user = getTestUser()

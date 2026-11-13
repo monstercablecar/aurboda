@@ -177,7 +177,7 @@ export const mapNoteRow = (row: QueryResultRow): Note => ({
   entity_id: row.entity_id ?? null,
   entity_type: parseEntityType(row.entity_type),
   id: row.id,
-  source: row.source ? parseDataSource(row.source) : undefined,
+  source: row.source ?? undefined,
   start_time: row.start_time ? new Date(row.start_time) : undefined,
   updated_at: new Date(row.updated_at),
 })

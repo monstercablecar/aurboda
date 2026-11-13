@@ -77,6 +77,22 @@ export function CalendarsSource() {
         <h1>Calendars (ICS)</h1>
       </div>
 
+      <section class="settings-section">
+        <h2>People dates</h2>
+        <p>
+          Birthdays and significant dates saved in People appear privately in the Timeline's Calendar
+          category, including upcoming dates. Open a date to return to the person, or explore ideas for
+          marking the occasion in People.
+        </p>
+        <p>
+          <a href="/people">Manage People dates</a> · <a href="/timeline">Open Timeline</a>
+        </p>
+        <p>
+          People dates need no external calendar subscription and do not automatically schedule notifications.
+          Use an individual date's Add to Google Calendar button to review and save a copy in Google. Changes
+          in Aurboda do not update that copy; review any yearly repeat in Google.
+        </p>
+      </section>
       <div class="data-source-detail">
         <p class="source-description">
           Add calendar ICS URLs to import calendar events as tags. Events appear in trends and correlation

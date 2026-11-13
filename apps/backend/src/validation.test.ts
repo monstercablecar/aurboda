@@ -134,8 +134,8 @@ describe('validateBody', () => {
     expect(auditWarn).toHaveBeenCalledWith(
       'testuser',
       'data',
-      'Validation error: POST /test',
-      expect.objectContaining({ errors: expect.any(Object) }),
+      'Validation error: POST unmatched route',
+      expect.objectContaining({ issue_count: expect.any(Number) }),
     )
   })
 
@@ -227,8 +227,8 @@ describe('validateQuery', () => {
     expect(auditWarn).toHaveBeenCalledWith(
       'testuser',
       'data',
-      'Validation error: GET /metrics',
-      expect.objectContaining({ errors: expect.any(Object) }),
+      'Validation error: GET unmatched route',
+      expect.objectContaining({ issue_count: expect.any(Number) }),
     )
   })
 
@@ -241,5 +241,22 @@ describe('validateQuery', () => {
     validateQuery(schema)(req, res, next)
 
     expect(auditWarn).not.toHaveBeenCalled()
+  })
+})
+
+test('validation audit excludes dynamic paths, dynamic keys and echoed error details', () => {
+  const schema = z.record(
+    z.string(),
+    z.string().refine(() => false, { message: 'private medical answer' }),
+  )
+  const req = createMockReq({
+    body: { 'private person name': 'secret' },
+    path: '/secret-token',
+    route: { path: '/:id' },
+    user: 'testuser',
+  })
+  validateBody(schema)(req, createMockRes(), vi.fn())
+  expect(auditWarn).toHaveBeenLastCalledWith('testuser', 'data', 'Validation error: POST /:id', {
+    issue_count: 1,
   })
 })

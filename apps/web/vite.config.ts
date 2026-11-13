@@ -7,8 +7,10 @@ export default defineConfig({
   plugins: [preact()],
   build: {
     sourcemap: true,
+    rollupOptions: { input: { main: 'index.html', foghouseGames: 'foghouse-games.html' } },
   },
   test: {
+    server: { deps: { inline: ['@tanstack/react-query'] } },
     // Pin the test timezone so date-formatting cases (same-day vs cross-day
     // windows) are deterministic on any machine, without individual test files
     // mutating the worker-shared `process.env.TZ` (#1014).

@@ -5,3 +5,6 @@ export * from './read-only.ts'
 export * from './hashtags.ts'
 export * from './periods.ts'
 export * from './top-list.ts'
+
+export * from './work-profile.ts'
+export * from './work-day-model.ts'

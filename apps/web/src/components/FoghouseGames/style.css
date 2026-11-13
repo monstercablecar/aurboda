@@ -1,0 +1,347 @@
+.foghouse-games {
+  --arcade-cyan: #66f7ec;
+  --arcade-violet: #b8a0ff;
+  position: relative;
+  margin: 1.25rem 0;
+  max-width: 760px;
+  border: 1px solid #264756;
+  border-radius: 20px;
+  overflow: hidden;
+  color: #e4f8fa;
+  background: #08121e;
+  box-shadow:
+    0 10px 35px #0003,
+    inset 0 1px 0 #73ffec13;
+  font-family: inherit;
+}
+.foghouse-arcade-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 16px 22px;
+  border-bottom: 1px solid #29465480;
+}
+.foghouse-games h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  color: #e4f8fa;
+}
+.foghouse-games h2 > span {
+  color: var(--arcade-cyan);
+  margin-right: 7px;
+}
+.foghouse-arcade-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  color: #849eaf;
+  white-space: nowrap;
+}
+.foghouse-game-tabs {
+  display: flex;
+  padding: 12px 20px 0;
+  gap: 10px;
+}
+.foghouse-game-tabs button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid #244050;
+  background: #0d1c2a;
+  color: #93aebc;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.foghouse-game-tabs button > span {
+  margin-right: 6px;
+  font-size: 1.1rem;
+}
+.foghouse-game-tabs button[aria-pressed='true'] {
+  background: #112c37;
+  border-color: #58d4cd;
+  color: var(--arcade-cyan);
+  box-shadow: inset 0 0 18px #5ffbf10a;
+}
+.foghouse-games button:focus-visible,
+.foghouse-games summary:focus-visible,
+.foghouse-games select:focus-visible {
+  outline: 2px solid var(--arcade-violet);
+  outline-offset: 3px;
+}
+.foghouse-launch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: calc(100% - 40px);
+  min-height: 230px;
+  margin: 14px 20px;
+  border: 1px solid #244555;
+  border-radius: 12px;
+  overflow: hidden;
+  color: #e4f8fa;
+  background:
+    radial-gradient(ellipse at 50% 45%, #113d454d, transparent 65%),
+    linear-gradient(#65ffe908 1px, transparent 1px), linear-gradient(90deg, #65ffe908 1px, transparent 1px),
+    #091623;
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px,
+    auto;
+  cursor: pointer;
+}
+.foghouse-launch:hover {
+  border-color: #62ccc7;
+  background-color: #0b1c2c;
+}
+.foghouse-launch-label {
+  margin-top: 22px;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+}
+.foghouse-launch-label > span {
+  color: var(--arcade-cyan);
+}
+.foghouse-launch-sub {
+  color: #8da8b9;
+  font-size: 0.75rem;
+  margin-top: 6px;
+  letter-spacing: 0.06em;
+}
+.foghouse-memory-mark {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  gap: 8px;
+  transform: perspective(300px) rotateX(12deg) rotateZ(-8deg);
+}
+.foghouse-memory-mark > span {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #41bcb9;
+  border-radius: 4px;
+  background: #183b47;
+  box-shadow: 0 0 10px #61fff11a;
+}
+.foghouse-memory-mark > span:nth-child(2),
+.foghouse-memory-mark > span:nth-child(6),
+.foghouse-memory-mark > span:nth-child(7) {
+  background: #66f7ec;
+  box-shadow: 0 0 18px #66f7ec55;
+}
+.foghouse-reaction-mark {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  border: 2px solid var(--arcade-violet);
+  border-radius: 50%;
+  box-shadow:
+    0 0 24px #ac83ff33,
+    inset 0 0 24px #ac83ff22;
+}
+.foghouse-reaction-mark > span {
+  width: 54px;
+  height: 54px;
+  border: 1px solid #66f7ec;
+  border-radius: 50%;
+  box-shadow: 0 0 14px #66f7ec33;
+}
+.foghouse-instructions {
+  margin: 0 22px 16px;
+  font-size: 0.85rem;
+  color: #a9bdcb;
+}
+.foghouse-instructions summary {
+  color: #bbd8e1;
+  cursor: pointer;
+  width: fit-content;
+  padding: 7px 0;
+}
+.foghouse-instructions p {
+  line-height: 1.55;
+}
+.foghouse-instructions label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.foghouse-games select,
+.foghouse-games textarea {
+  color: #e4f8fa;
+  background: #102434;
+  border: 1px solid #365665;
+  border-radius: 6px;
+  padding: 9px;
+  font: inherit;
+}
+.foghouse-play-window {
+  position: relative;
+}
+.foghouse-game-frame {
+  display: block;
+  border: 0;
+  width: 100%;
+  height: 490px;
+  background: #08121e;
+}
+.foghouse-exit {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #355765;
+  border-radius: 50%;
+  color: #a8c7d4;
+  background: #0d2030;
+  font-size: 24px;
+  cursor: pointer;
+}
+.foghouse-game-result {
+  padding: 12px 22px 22px;
+}
+.foghouse-result-eyebrow {
+  color: #90b7bf;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+.foghouse-result-eyebrow > span {
+  color: var(--arcade-cyan);
+}
+.foghouse-primary-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0 16px;
+}
+.foghouse-primary-score strong {
+  font-size: 3.2rem;
+  font-weight: 500;
+  color: var(--arcade-cyan);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 24px #66f7ec22;
+}
+.foghouse-primary-score > span {
+  color: #a9c5d0;
+  font-size: 0.85rem;
+}
+.foghouse-game-result dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.foghouse-game-result dl > div {
+  padding: 12px;
+  border: 1px solid #223d4c;
+  border-radius: 8px;
+  background: #0c1c29;
+}
+.foghouse-game-result dt {
+  font-size: 0.7rem;
+  color: #8eaab9;
+}
+.foghouse-game-result dd {
+  margin: 6px 0 0;
+  color: #e4f8fa;
+  font-variant-numeric: tabular-nums;
+}
+.foghouse-game-result dd small {
+  font-size: 0.65rem;
+  color: #93adbc;
+}
+.foghouse-result-actions {
+  display: flex;
+  gap: 10px;
+}
+.foghouse-result-actions button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid #365665;
+  background: #102434;
+  color: #b8d5df;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.foghouse-result-actions .foghouse-save {
+  border-color: #55d6cd;
+  background: #173d42;
+  color: #8dfff1;
+}
+.foghouse-games button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.foghouse-result-details {
+  margin-top: 18px;
+  color: #9fb7c5;
+  font-size: 0.8rem;
+}
+.foghouse-result-details summary {
+  cursor: pointer;
+}
+.foghouse-result-details label {
+  display: block;
+  margin: 12px 0;
+}
+.foghouse-games textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+}
+.foghouse-result-details pre {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 0.7rem;
+  padding: 10px;
+  background: #050e18;
+  border-radius: 6px;
+}
+.foghouse-games a {
+  color: #7fddd8;
+}
+.foghouse-game-status {
+  margin: 0;
+  padding: 0 22px 16px;
+  font-size: 0.8rem;
+  color: #a8c7d2;
+}
+@media (max-width: 480px) {
+  .foghouse-arcade-tag {
+    display: none;
+  }
+  .foghouse-arcade-header {
+    padding: 14px 16px;
+  }
+  .foghouse-game-tabs {
+    padding: 12px 14px 0;
+  }
+  .foghouse-launch {
+    margin: 12px 14px;
+    width: calc(100% - 28px);
+    min-height: 220px;
+  }
+}
+.foghouse-games {
+  flex: 0 0 auto;
+}
+.dashboard .foghouse-games h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #e4f8fa;
+}

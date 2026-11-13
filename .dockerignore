@@ -37,3 +37,7 @@ apps/android
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local agent worktrees and documentation symlink (not application build inputs)
+.letta
+tryouts/CLAUDE.md

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'preact/hooks'
 
 import { EditableDashboard } from '../../components/EditableDashboard'
+import { FoghouseGames } from '../../components/FoghouseGames'
 import { GetStartedGuide } from '../../components/GetStartedGuide'
 import { PeriodDashboardBar } from '../../components/PeriodSwitcher'
 import { ShareDashboardPeriodDialog } from '../../components/ShareDashboardPeriodDialog'
@@ -101,6 +102,7 @@ export function Dashboard() {
       </div>
 
       {!isEditing && <GetStartedGuide />}
+      {!isEditing && <FoghouseGames />}
 
       {!isLoading && period && <PeriodDashboardBar state={period} onShare={setSharingPeriod} />}
 

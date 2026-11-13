@@ -48,8 +48,9 @@ export const nextFetchRange = (
 
   const todayStr = toIsoDate(today)
   const desiredTo = toIsoDate(addDays(view.end, MARGIN_DAYS))
+  const desiredFrom = toIsoDate(subDays(view.start, MARGIN_DAYS))
   const desired = {
-    from: toIsoDate(subDays(view.start, MARGIN_DAYS)),
+    from: desiredFrom > todayStr ? todayStr : desiredFrom,
     to: desiredTo > todayStr ? todayStr : desiredTo,
   }
   return desired.from === current.from && desired.to === current.to ? current : desired

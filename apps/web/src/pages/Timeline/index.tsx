@@ -42,7 +42,7 @@ import { useTimelineContextMenu } from './useTimelineContextMenu'
 import { useTimelineData } from './useTimelineData'
 import { _initialHash, useTimelineNavigation } from './useTimelineNavigation'
 import { HORIZONTAL_MARGIN, useTimelineZoom, VERTICAL_MARGIN } from './useTimelineZoom'
-import { buildViewHash, getDefaultOrientation } from './viewHash'
+import { buildViewHash, getDefaultOrientation, parseViewHash } from './viewHash'
 import { visibleBuckets } from './visibleBuckets'
 import './style.css'
 
@@ -122,7 +122,7 @@ export const Timeline = () => {
   }, [isFullscreen])
 
   const [hiddenCategories, setHiddenCategories] = useState<Set<LegendCategory>>(
-    () => new Set(_initialHash.hide),
+    () => new Set(parseViewHash().hide),
   )
   const hiddenCategoriesRef = useRef<Set<LegendCategory>>(hiddenCategories)
   hiddenCategoriesRef.current = hiddenCategories
@@ -138,6 +138,8 @@ export const Timeline = () => {
     mergeGapMs,
     splitAbutting,
     toDateKey: toDate.value,
+    viewStart: effectiveViewStart,
+    viewEnd: effectiveViewEnd,
   })
   const {
     activities,

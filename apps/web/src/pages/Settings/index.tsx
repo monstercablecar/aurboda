@@ -7,6 +7,8 @@ import { AvatarSettings } from '../../components/AvatarSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
 import { MealPreferencesSettings } from '../../components/MealPreferencesSettings'
+import { NotificationsSettings } from '../../components/NotificationsSettings'
+import { OnboardingSettings } from '../../components/OnboardingSettings'
 import { PasskeySettings } from '../../components/PasskeySettings'
 import { PlanSettings } from '../../components/PlanSettings'
 import { ProfileSettings } from '../../components/ProfileSettings'
@@ -178,6 +180,8 @@ export function Settings() {
     <div class="settings-page">
       <h1>Settings</h1>
 
+      <OnboardingSettings />
+
       <PlanSettings />
 
       <AvatarSettings />
@@ -306,6 +310,8 @@ export function Settings() {
       <MealPreferencesSettings />
 
       <PasskeySettings />
+
+      <NotificationsSettings />
 
       <section class="settings-section">
         <p class="section-description">

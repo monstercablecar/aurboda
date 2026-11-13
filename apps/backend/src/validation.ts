@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express'
 import type { ParamsDictionary } from 'express-serve-static-core'
 import type { z } from 'zod'
 
+import { auditOperation } from './api/audit-body.ts'
 import { auditWarn } from './services/audit-log.ts'
 import { trimStrings } from './trim-input.ts'
 
@@ -29,7 +30,9 @@ export const validateBody =
       if (!result.success) {
         const errors = validationErrors(result.error)
         if (req.user) {
-          auditWarn(req.user, 'data', `Validation error: ${req.method} ${req.path}`, { errors })
+          auditWarn(req.user, 'data', `Validation error: ${auditOperation(req.method, req.route?.path)}`, {
+            issue_count: result.error.issues.length,
+          })
         }
         res.status(400).json({ error: errors, success: false })
         return
@@ -53,7 +56,9 @@ export const validateQuery =
       if (!result.success) {
         const errors = validationErrors(result.error)
         if (req.user) {
-          auditWarn(req.user, 'data', `Validation error: ${req.method} ${req.path}`, { errors })
+          auditWarn(req.user, 'data', `Validation error: ${auditOperation(req.method, req.route?.path)}`, {
+            issue_count: result.error.issues.length,
+          })
         }
         res.status(400).json({ error: errors, success: false })
         return

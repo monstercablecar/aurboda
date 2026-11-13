@@ -4,6 +4,10 @@ Aurboda aggregates health, productivity, and location data from multiple sources
 
 You connect sources from **Data Sources** in the web app's sidebar, one page per source with its own setup steps; the Android app adds Health Connect and Bluetooth heart rate sensors. Connect whatever you already use, one is enough to start. The table below links each source's own page, which covers what is synced, the setup and how the sync works.
 
+## Private manual records
+
+[People](./people.md) stores private per-person observations, activities and plans. Its local guidance catalog needs no external knowledge connection. These records are kept outside the globally shareable metric registry. Optional [reminders](./people-reminders.md) reuse the existing scheduler and browser notification setup.
+
 ## Overview
 
 <!-- BEGIN:data-sources -->
@@ -21,7 +25,8 @@ You connect sources from **Data Sources** in the web app's sidebar, one page per
 | [**ActivityWatch**](./activitywatch.md)           | App/window usage per device (desktop and Android)                                                                               | Push (agent script)                    | None                               | Install AW + push agent or enable in Aurboda Android app |
 | [**Last.fm**](./lastfm.md)                        | Music scrobbles with auto-generated tags from configurable rules                                                                | Pull (API)                             | API key (admin setting)            | Last.fm username                                         |
 | [**Media players (MPRIS)**](./media.md)           | Video, music and podcast plays with URL, played time and track length (Linux desktop)                                           | Push (logger script)                   | None                               | Run the MPRIS logger + push script                       |
-| [**Calendars (ICS)**](./calendars.md)             | Calendar events imported as tags (Google Calendar, Outlook, iCloud, Nextcloud, etc.)                                            | Pull (ICS fetch)                       | None                               | ICS URL(s)                                               |
+| [**Calendars (ICS)**](./calendars.md)             | Calendar events imported as activities (Google Calendar, Outlook, iCloud, Nextcloud, etc.)                                      | Pull (ICS fetch)                       | None                               | ICS URL(s)                                               |
+| [**ResMed myAir CPAP**](./cpap.md)                | CPAP usage, AHI, mask leak, mask sessions and myAir scores                                                                      | CSV import at /cpap                    | None                               | Unzip myAir export and select SLEEP_RECORD.csv           |
 | **Cronometer**                                    | Meals with full per-item macros and ~50 micronutrients                                                                          | CSV import                             | None                               | Export CSV from Cronometer                               |
 | [**Livsmedelsverket**](./livsmedelsverket.md)     | Canonical food library: 2,500+ Swedish foods with macros + micros (per 100 g)                                                   | One-shot bulk import (UI button)       | None                               | Click "Import from Livsmedelsverket" on /food-items      |
 | **Manual Entry**                                  | Any metric, tag, activity, meal, or note                                                                                        | Web UI, REST API, or MCP               | None                               | —                                                        |
@@ -61,7 +66,7 @@ All sources feed into a common data model:
 - **`activities`** -- Duration-based or point-in-time events: sleep, exercise, meditation, nap, and anything of a custom type, including what you log yourself, Oura tags, Last.fm rule tags and calendar events (these were once a separate `tags` table, which is now migrated into activities)
 - **`productivity`** -- App/website usage records (from RescueTime and ActivityWatch)
 - **`locations`** -- GPS coordinates (from OwnTracks, plus activity tracks from Garmin and Strava)
-- **`raw_records`** -- Original data preserved in full JSON form
+- **`raw_records`** -- Original data preserved in full JSON form where supported; CPAP CSV imports retain only session dates and metric values
 
 See [data-storage.md](./data-storage.md) for the complete data model.
 

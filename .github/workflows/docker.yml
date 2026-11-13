@@ -25,7 +25,7 @@ concurrency:
 jobs:
   build:
     # Only the two release branches (prevents manual dispatch from feature branches)
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    if: github.repository == 'fiddur/aurboda' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

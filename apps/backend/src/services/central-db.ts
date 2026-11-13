@@ -1,10 +1,9 @@
+import { NUTRIENT_FIELD_NAMES, type OfficialFeedSetting } from '@aurboda/api-spec'
 /**
  * Uses the shared 'aurboda' database (same as pg-boss queue) for:
  * - Server-wide configuration (signup mode, etc.)
  * - Admin user list
  */
-
-import { NUTRIENT_FIELD_NAMES, type OfficialFeedSetting } from '@aurboda/api-spec'
 import pg from 'pg'
 
 import { createRolePool, type Queryable, type UserDb, withTransaction } from '../db/pool.ts'
@@ -31,6 +30,11 @@ import {
   seedSharedNutrientRecommendations,
   type SharedNutrientRecommendationsApi,
 } from './central-nutrient-recommendations.ts'
+import {
+  createCentralResourcesApi,
+  CREATE_RESOURCES_TABLES,
+  type CentralResourcesApi,
+} from './central-resources.ts'
 import {
   ALTER_USER_ACCOUNTS_PLAN_COLUMNS,
   ALTER_USER_ACCOUNTS_PROFILE_COLUMNS,
@@ -131,6 +135,7 @@ export interface CentralDbDeps {
 
 export interface CentralDb
   extends
+    CentralResourcesApi,
     SharedFoodItemsApi,
     CentralImportJobsApi,
     DeletedUsernamesApi,
@@ -436,6 +441,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       const client = await getClient()
       await client.query(CREATE_SERVER_SETTINGS_TABLE)
       await client.query(CREATE_ADMINS_TABLE)
+      await client.query(CREATE_RESOURCES_TABLES)
       await client.query(CREATE_OURA_USER_MAPPINGS_TABLE)
       await client.query(CREATE_OURA_WEBHOOK_SUBSCRIPTIONS_TABLE)
       await client.query(CREATE_STRAVA_ATHLETE_MAPPINGS_TABLE)
@@ -485,6 +491,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       )
     },
 
+    ...createCentralResourcesApi(deps),
     ...createSharedFoodItemsApi(getClient),
     ...createCentralImportJobsApi(getClient),
     ...createDeletedUsernamesApi(getClient, deps.withTransaction),

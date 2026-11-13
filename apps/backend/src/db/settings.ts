@@ -123,6 +123,10 @@ export const upsertUserSettings = (
     const { tag_icons, ...rest } = updates
     const defined = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined))
     const merged: UserSettings = { ...existing, ...defined }
+    // Merge under the settings lock so independent step updates cannot overwrite each other.
+    if (updates.onboarding_progress !== undefined) {
+      merged.onboarding_progress = { ...existing.onboarding_progress, ...updates.onboarding_progress }
+    }
     for (const key of clear) delete merged[key]
     if (tag_icons !== undefined) {
       merged.item_icons = { ...merged.item_icons, ...tag_icons }

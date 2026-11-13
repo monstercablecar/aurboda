@@ -9,10 +9,12 @@ import type {
   GarminDataType,
   GeocodeStatus,
   MetricType,
+  OnboardingProgress,
   OnboardingStepId,
   ReportFlag,
   SyncStatus,
   TrainingLoadSettings,
+  WorkSettings,
 } from '@aurboda/api-spec'
 
 /**
@@ -265,8 +267,8 @@ export interface Note {
    */
   entity_id: string | null
   content: string
-  /** Data source that created this note (e.g. 'oura'). Null for user-created notes. */
-  source?: DataSource
+  /** Origin that created this note (e.g. 'oura' or 'work_day'). Absent for user-created notes. */
+  source?: string
   /** Inherited from the parent entity's start_time. Null for metric notes (composite key). */
   start_time?: Date
   /** Inherited from the parent entity's end_time, if any. */
@@ -453,6 +455,7 @@ export interface UserSettings {
   maf_hr?: number // Low-HR (MAF) ceiling in bpm; falls back to the zone-2 upper bound
   manually_approve_followers?: boolean // Hold incoming follows for manual approval (locked account)
   onboarding_dismissed_at?: string // ISO 8601; the dashboard "Get started" guide stays hidden while set
+  onboarding_progress?: OnboardingProgress
   onboarding_manual_done?: OnboardingStepId[] // Get-started steps marked done by hand
   rescue_time_key?: string // RescueTime API key (personal token)
   run_category_rules_seeded?: boolean // Internal: the default run-category deduction rules were created once
@@ -468,6 +471,7 @@ export interface UserSettings {
   garmin_disabled_data_types?: GarminDataType[] // Garmin data types to skip during sync
   gravl_api_token?: string // Gravl personal access token (used when no OAuth grant exists)
   sync_intervals?: SyncIntervals // Per-provider background poll intervals in minutes, `default` as fallback
+  work?: WorkSettings // Versioned user-owned Work profiles and legacy Recruiting overrides
 }
 
 /**

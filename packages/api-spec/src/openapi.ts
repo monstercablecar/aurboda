@@ -1,11 +1,13 @@
-/** Generates the OpenAPI 3.1 specification from the Zod schemas: pnpm generate:openapi */
-
+import { nativeTaskPaths } from './native-tasks-paths.ts'
 import * as fs from 'node:fs'
 import * as yaml from 'yaml'
 import { z } from 'zod'
+/** Generates the OpenAPI 3.1 specification from the Zod schemas: pnpm generate:openapi */
 import { createDocument } from 'zod-openapi'
 
+import { peoplePaths } from './people-paths.ts'
 import { isAllowedWhenReadOnly } from './read-only.ts'
+import { resourcesPaths } from './resources-paths.ts'
 import { activitiesResponseSchema } from './schemas/activities.ts'
 import { deleteAccountBodySchema, loginBodySchema, loginResponseSchema } from './schemas/admin.ts'
 import {
@@ -54,6 +56,55 @@ import {
   outboundSyncResponseSchema,
 } from './schemas/outbound-sync.ts'
 import { periodSummaryResponseSchema } from './schemas/period-summary.ts'
+import {
+  administrationResponseSchema,
+  administrationsResponseSchema,
+  assessmentResponseSchema,
+  assessmentsResponseSchema,
+  confirmRegimenBodySchema,
+  confirmRegimenResponseSchema,
+  contextEventResponseSchema,
+  contextEventsResponseSchema,
+  contextEventTypeResponseSchema,
+  contextEventTypesResponseSchema,
+  correctAssessmentBodySchema,
+  createAdministrationBodySchema,
+  createContextEventBodySchema,
+  createContextEventTypeBodySchema,
+  createQuestionnaireBodySchema,
+  createRegimenBodySchema,
+  createSubstanceBodySchema,
+  createTreatmentSessionBodySchema,
+  createTreatmentTypeBodySchema,
+  insightsQuerySchema,
+  insightsResponseSchema,
+  pharmacologyDeleteResponseSchema,
+  pharmacologyExportResponseSchema,
+  pharmacologyListQuerySchema,
+  pharmacologyTimelineQuerySchema,
+  pharmacologyTimelineResponseSchema,
+  questionnaireResponseSchema,
+  questionnairesResponseSchema,
+  regimenResponseSchema,
+  regimensResponseSchema,
+  submitAssessmentBodySchema,
+  substanceResponseSchema,
+  substancesResponseSchema,
+  todayQuerySchema,
+  todayResponseSchema,
+  treatmentSessionResponseSchema,
+  treatmentSessionsResponseSchema,
+  treatmentTypeResponseSchema,
+  treatmentTypesResponseSchema,
+  updateAdministrationBodySchema,
+  updateContextEventBodySchema,
+  updateContextEventTypeBodySchema,
+  updateQuestionnaireBodySchema,
+  updateRegimenBodySchema,
+  updateSubstanceBodySchema,
+  updateTreatmentSessionBodySchema,
+  updateTreatmentTypeBodySchema,
+} from './schemas/pharmacology.ts'
 import {
   accountPlanResponseSchema,
   accountReadOnlyResponseSchema,
@@ -108,6 +159,7 @@ import {
   webauthnSignupVerifyResponseSchema,
   webauthnUpdateCredentialBodySchema,
 } from './schemas/webauthn.ts'
+import { workDayBodySchema, workDayResponseSchema } from './schemas/work-day.ts'
 
 const errorResponseSchema = z
   .object({
@@ -121,6 +173,20 @@ const deleteResponseSchema = z
     success: z.boolean(),
   })
   .meta({ id: 'DeleteResponse' })
+
+const pharmacologyIdParams = z.object({ id: z.string().uuid() })
+const pharmacologyRequestBody = (schema: z.ZodType) => ({
+  content: { 'application/json': { schema } },
+})
+const pharmacologyResponses = (schema: z.ZodType, created = false) => ({
+  [created ? 201 : 200]: {
+    content: { 'application/json': { schema } },
+    description: 'Successful response',
+  },
+  400: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Bad request' },
+  404: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Not found' },
+  409: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Conflict' },
+})
 
 const openApiDocument = createDocument({
   components: {
@@ -157,6 +223,27 @@ const openApiDocument = createDocument({
   },
   openapi: '3.1.0',
   paths: {
+    ...peoplePaths,
+    '/work/days': {
+      post: {
+        summary: 'Atomically save a configured Work day',
+        tags: ['Work'],
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: { 'application/json': { schema: workDayBodySchema } } },
+        responses: {
+          200: {
+            description: 'Saved Work day',
+            content: { 'application/json': { schema: workDayResponseSchema } },
+          },
+          400: { description: 'Invalid Work data' },
+          401: { description: 'Unauthorized' },
+          404: { description: 'Unknown Work profile' },
+          409: { description: 'Conflicting historical or deleted records' },
+        },
+      },
+    },
+    ...resourcesPaths,
+    ...nativeTaskPaths,
     '/challenges': {
       get: {
         description: 'List the challenges hosted by the authenticated user.',
@@ -1535,6 +1622,363 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/pharmacology/substances': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(substancesResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List substances',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createSubstanceBodySchema),
+        responses: pharmacologyResponses(substanceResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create substance',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/substances/{id}': {
+      get: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(substanceResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get substance',
+        tags: ['Pharmacology'],
+      },
+      patch: {
+        requestBody: pharmacologyRequestBody(updateSubstanceBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(substanceResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update substance',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Archive substance',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/regimens': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(regimensResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List regimens',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createRegimenBodySchema),
+        responses: pharmacologyResponses(regimenResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create regimen',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/regimens/{id}': {
+      get: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(regimenResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get regimen',
+        tags: ['Pharmacology'],
+      },
+      patch: {
+        requestBody: pharmacologyRequestBody(updateRegimenBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(regimenResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update regimen',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Archive regimen',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/regimens/{id}/confirm': {
+      post: {
+        description:
+          'Record only explicitly submitted regimen items. Retrying with the same idempotency key is safe.',
+        requestBody: pharmacologyRequestBody(confirmRegimenBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(confirmRegimenResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Confirm regimen items',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/administrations': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(administrationsResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List administration events',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createAdministrationBodySchema),
+        responses: pharmacologyResponses(administrationResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Record administration event',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/administrations/{id}': {
+      patch: {
+        description: 'Correct an administration after preserving its prior immutable revision.',
+        requestBody: pharmacologyRequestBody(updateAdministrationBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(administrationResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Correct administration',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        description: 'Soft-delete an administration after preserving its prior immutable revision.',
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Void administration',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/treatment-types': {
+      get: {
+        responses: pharmacologyResponses(treatmentTypesResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List treatment types',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createTreatmentTypeBodySchema),
+        responses: pharmacologyResponses(treatmentTypeResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create treatment type',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/treatment-types/{id}': {
+      patch: {
+        requestBody: pharmacologyRequestBody(updateTreatmentTypeBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentTypeResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update treatment type',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/treatments': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(treatmentSessionsResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List treatment sessions',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createTreatmentSessionBodySchema),
+        responses: pharmacologyResponses(treatmentSessionResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create treatment session',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/treatments/{id}': {
+      get: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentSessionResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get treatment session',
+        tags: ['Pharmacology'],
+      },
+      patch: {
+        requestBody: pharmacologyRequestBody(updateTreatmentSessionBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentSessionResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update treatment session',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Soft-delete treatment session',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/questionnaires': {
+      get: {
+        responses: pharmacologyResponses(questionnairesResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List questionnaire templates',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createQuestionnaireBodySchema),
+        responses: pharmacologyResponses(questionnaireResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create questionnaire template',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/questionnaires/{id}': {
+      patch: {
+        requestBody: pharmacologyRequestBody(updateQuestionnaireBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(questionnaireResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update questionnaire template',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/assessments': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(assessmentsResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List assessments',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(submitAssessmentBodySchema),
+        responses: pharmacologyResponses(assessmentResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Submit assessment',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/assessments/{id}': {
+      patch: {
+        requestBody: pharmacologyRequestBody(correctAssessmentBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(assessmentResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Correct assessment',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Soft-delete assessment',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/context-types': {
+      get: {
+        responses: pharmacologyResponses(contextEventTypesResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List context event types',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createContextEventTypeBodySchema),
+        responses: pharmacologyResponses(contextEventTypeResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create context event type',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/context-types/{id}': {
+      patch: {
+        requestBody: pharmacologyRequestBody(updateContextEventTypeBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(contextEventTypeResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update context event type',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/context-events': {
+      get: {
+        requestParams: { query: pharmacologyListQuerySchema },
+        responses: pharmacologyResponses(contextEventsResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'List context events',
+        tags: ['Pharmacology'],
+      },
+      post: {
+        requestBody: pharmacologyRequestBody(createContextEventBodySchema),
+        responses: pharmacologyResponses(contextEventResponseSchema, true),
+        security: [{ bearerAuth: [] }],
+        summary: 'Create context event',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/context-events/{id}': {
+      patch: {
+        requestBody: pharmacologyRequestBody(updateContextEventBodySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(contextEventResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Update context event',
+        tags: ['Pharmacology'],
+      },
+      delete: {
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(pharmacologyDeleteResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Soft-delete context event',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/today': {
+      get: {
+        description: 'Derive a local-day plan without manufacturing administration facts.',
+        requestParams: { query: todayQuerySchema },
+        responses: pharmacologyResponses(todayResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get today plan',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/timeline': {
+      get: {
+        requestParams: { query: pharmacologyTimelineQuerySchema },
+        responses: pharmacologyResponses(pharmacologyTimelineResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get pharmacology timeline',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/insights': {
+      get: {
+        description:
+          'Observational coverage and data-quality summary. Associations do not establish causality.',
+        requestParams: { query: insightsQuerySchema },
+        responses: pharmacologyResponses(insightsResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Get pharmacology insights',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/export': {
+      get: {
+        responses: pharmacologyResponses(pharmacologyExportResponseSchema),
+        security: [{ bearerAuth: [] }],
+        summary: 'Export pharmacology JSON',
+        tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/export.csv': {
+      get: {
+        responses: {
+          200: { content: { 'text/csv': { schema: z.string() } }, description: 'Tabular CSV export' },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Export pharmacology CSV',
+        tags: ['Pharmacology'],
+      },
+    },
+
     '/user/settings': {
       get: {
         description:
@@ -1592,6 +2036,10 @@ const openApiDocument = createDocument({
     { description: 'Named and detected locations', name: 'Locations' },
     { description: 'RescueTime productivity data', name: 'Productivity' },
     { description: 'User settings and preferences', name: 'Settings' },
+    {
+      description: 'Medications, supplements, treatments, assessments, and recovery observations',
+      name: 'Pharmacology',
+    },
     {
       description: 'Data synchronization with external services',
       name: 'Sync',

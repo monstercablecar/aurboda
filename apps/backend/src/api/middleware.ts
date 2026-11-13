@@ -8,19 +8,17 @@ import type { CentralDb } from '../services/central-db.ts'
 import type { AnyMiddleware } from '../typed-router.ts'
 
 import { migrateSchemaIfNeeded } from '../db/index.ts'
+import { httpError } from '../http-error.ts'
 import { safeRefusal } from '../services/account-gate.ts'
 import { auditError, auditInfo, auditWarn } from '../services/audit-log.ts'
 import { backfillScreentimeActivities } from '../services/backfill-screentime-activities.ts'
 import { redactGarminLoginAudit } from '../services/redact-garmin-login-audit.ts'
 import { retypeLegacyScreentime } from '../services/retype-legacy-screentime.ts'
-import { summarizeAuditBody } from './audit-body.ts'
-
-const summarizeResponse = (body: unknown): unknown =>
-  body !== null && typeof body === 'object' ? summarizeAuditBody(body) : body
+import { summarizeAuditBody, auditOperation } from './audit-body.ts'
 
 /**
  * Log level is based on response status: 4xx → warn, 5xx → error, otherwise → info.
- * Redacts `password` and summarizes large request/response bodies (see `summarizeAuditBody`).
+ * Retains only fixed body type/count metadata, including for error responses.
  */
 export const createAuditLogMiddleware =
   (auth: Auth, isDeletedUser: (user: string) => boolean = () => false): RequestHandler =>
@@ -49,20 +47,21 @@ export const createAuditLogMiddleware =
 
         res.on('finish', () => {
           if (isDeletedUser(user)) return
+          const operation = auditOperation(req.method, req.route?.path)
           if (res.statusCode >= 500) {
-            auditError(user, 'data', `${req.method} ${req.path}`, {
+            auditError(user, 'data', operation, {
               ...sanitizedBody,
               status: res.statusCode,
-              response: summarizeResponse(responseBody),
+              response: summarizeAuditBody(responseBody),
             })
           } else if (res.statusCode >= 400) {
-            auditWarn(user, 'data', `${req.method} ${req.path}`, {
+            auditWarn(user, 'data', operation, {
               ...sanitizedBody,
               status: res.statusCode,
-              response: summarizeResponse(responseBody),
+              response: summarizeAuditBody(responseBody),
             })
           } else {
-            auditInfo(user, 'data', `${req.method} ${req.path}`, sanitizedBody)
+            auditInfo(user, 'data', operation, sanitizedBody)
           }
         })
       }
@@ -77,7 +76,8 @@ export const createAuditLogMiddleware =
  * sweeps when this build's DDL differs from what the database records — and
  * after a deploy the background sweep in `api.ts` has usually done that
  * already. The first request still awaits it, so no request runs against
- * stale schema; subsequent requests wait if it is still in flight. Also kicks
+ * stale schema; subsequent requests wait if it is still in flight. Failures reject
+ * waiting requests with 503 and evict the check so a later request can retry. Also kicks
  * off a one-shot background backfill of historical screentime activities,
  * gated via sync_state.
  *
@@ -101,26 +101,33 @@ export const createAuthMiddleware = (
         if (isDeletedUser(user)) return next(unauthorized)
         req.user = user
 
-        if (!migratedUsers.has(user)) {
-          const migrationPromise = migrateSchemaIfNeeded(user)
-            .then(() => {
-              void (async () => {
-                await backfillScreentimeActivities(user).catch((err) =>
-                  console.error(`⚠️ Screentime backfill failed for ${user}:`, err),
-                )
-                await retypeLegacyScreentime(user).catch((err) =>
-                  console.error(`⚠️ Legacy screentime retype failed for ${user}:`, err),
-                )
-                await redactGarminLoginAudit(user).catch((err) =>
-                  console.error(`⚠️ Garmin login audit redaction failed for ${user}:`, err),
-                )
-              })()
-            })
-            .catch((err) => console.error(`⚠️ Migration failed for ${user}:`, err))
-          migratedUsers.set(user, migrationPromise)
-          await migrationPromise
-        } else {
-          await migratedUsers.get(user)
+        try {
+          if (!migratedUsers.has(user)) {
+            const migrationPromise = migrateSchemaIfNeeded(user)
+              .then(() => {
+                void (async () => {
+                  await backfillScreentimeActivities(user).catch((err) =>
+                    console.error(`⚠️ Screentime backfill failed for ${user}:`, err),
+                  )
+                  await retypeLegacyScreentime(user).catch((err) =>
+                    console.error(`⚠️ Legacy screentime retype failed for ${user}:`, err),
+                  )
+                  await redactGarminLoginAudit(user).catch((err) =>
+                    console.error(`⚠️ Garmin login audit redaction failed for ${user}:`, err),
+                  )
+                })()
+              })
+              .catch(() => {
+                migratedUsers.delete(user)
+                throw httpError(503, 'Account schema is temporarily unavailable. Please retry.')
+              })
+            migratedUsers.set(user, migrationPromise)
+            await migrationPromise
+          } else {
+            await migratedUsers.get(user)
+          }
+        } catch {
+          return next(httpError(503, 'Account schema is temporarily unavailable. Please retry.'))
         }
 
         if (accountGate && !isAllowedWhenReadOnly(req.method, req.baseUrl + req.path)) {
