@@ -26,3 +26,5 @@
 451737914176738eac224c9f81d1d94ca02b7089:apps/backend/src/db/tags.integration.test.ts:generic-api-key:112
 # UUID identifying a tag fixture in a disposable test database.
 451737914176738eac224c9f81d1d94ca02b7089:apps/backend/src/db/tags.integration.test.ts:generic-api-key:405
+# Documentation table prose about token persistence and a source-file path, not a credential.
+a1d6b31710510c48a90fa0336a4b6fd70d1118bb:docs/data-access.md:generic-api-key:42
