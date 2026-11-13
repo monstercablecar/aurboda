@@ -152,7 +152,7 @@ export {
   getActivitiesByCategory,
   getActivitiesExcludingCategories,
   getActivitiesNeedingDetail,
-  getAllActivitiesInRange,
+  getEffectiveActivitiesInRange,
   getScreentimeActivities,
   migrateExerciseTypes,
   getNonSleepActivitiesMerged,
@@ -238,7 +238,6 @@ export {
 
 export {
   deleteNote,
-  deleteNotesForEntity,
   deleteNotesForEntityIn,
   getNoteById,
   getNoteRoot,
@@ -309,6 +308,7 @@ export {
   getParticipationById,
   getParticipationByToken,
   getParticipationByUrl,
+  hasRemoteChallengeMember,
   listChallengeMembers,
   listChallengeParticipations,
   listChallenges,
@@ -328,6 +328,17 @@ export {
   getChallengeBanner,
   upsertChallengeBanner,
 } from './challenge-banner.ts'
+
+export {
+  countFeedImages,
+  deleteFeedImage,
+  type FeedImageRecord,
+  getFeedImage,
+  insertFeedImage,
+  isFeedImageId,
+  listFeedImages,
+  type NewFeedImage,
+} from './feed-images.ts'
 
 export { isMissingDatabase } from './pg-errors.ts'
 
@@ -349,11 +360,15 @@ export {
 
 export {
   countAcceptedFeedFollowing,
+  type FeedFollowedTagActor,
   type FeedFollowingInput,
   type FeedFollowingRecord,
   getFeedFollowing,
   getFeedFollowingByActor,
+  getFeedFollowingByTag,
   listAcceptedFeedFollowing,
+  listFeedFollowedTagActors,
+  listFeedFollowedTags,
   listFeedFollowing,
   markFeedFollowingAccepted,
   removeFeedFollowing,
@@ -381,6 +396,19 @@ export {
   updateFeedPostReactionPresentation,
   upsertFeedPostReaction,
 } from './feed-reactions.ts'
+
+export {
+  type FeedPostQuoteRecord,
+  type FeedQuoteAuthorizationInput,
+  type FeedQuoteAuthorizationRecord,
+  deleteFeedQuoteAuthorizationsByActor,
+  deleteFeedQuoteAuthorizationsByQuote,
+  deleteFeedQuoteAuthorizationsForPost,
+  getFeedQuoteAuthorization,
+  listFeedPostQuotes,
+  listFeedQuoteAuthorizations,
+  upsertFeedQuoteAuthorization,
+} from './feed-quotes.ts'
 
 export {
   countTimelineRepliesTo,
@@ -442,6 +470,7 @@ export {
   createReplyPost,
   type DashboardPostInput,
   deleteFeedPost,
+  deleteFeedPostWithQuotes,
   type ExercisePostInput,
   type FeedPostCursor,
   type FeedPostInput,

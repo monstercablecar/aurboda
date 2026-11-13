@@ -1,6 +1,6 @@
 /**
  * The AS2 `content` for a dashboard-period share post (#1505): the dashboard name and the period
- * as a heading, the author's note through the same outbound sanitiser as article prose, one line
+ * as a heading, the author's note shaped for Mastodon like article prose (`renderNoteProse`), one line
  * per figure widget (metric and sparkline cards, the activity summary, record cards, activity
  * type cards, top lists and the places card) with its change against the previous period, then
  * the dashboard's public page as a plain link when it was published and linked. Charts have no
@@ -25,9 +25,12 @@ import {
   type StructuredDashboardDeps,
   type StructuredDashboardPost,
 } from '../feed-structured-dashboard.ts'
-import { renderProse } from './article-object.ts'
+import { renderNoteProse } from './note-prose.ts'
 
 const formatFigure = (value: number): string => String(Number(value.toFixed(1)))
+
+const plural = (count: number, singular: string, pluralForm: string): string =>
+  count === 1 ? singular : pluralForm
 
 /** ` (↑ 4%)`, ` (↓ 2%)` or ` (→)`; empty without a change to show. */
 export const changeSuffix = (percent: number | null): string => {
@@ -97,7 +100,7 @@ export const activityTypeLines = (
   if (data.sleep) {
     const { avg_minutes } = data.sleep
     return [
-      `${name} ${data.count} nights · avg ${formatHoursMinutes(avg_minutes)}${figureChange(avg_minutes, data.previous_sleep_avg_minutes)}`,
+      `${name} ${data.count} ${plural(data.count, 'night', 'nights')} · avg ${formatHoursMinutes(avg_minutes)}${figureChange(avg_minutes, data.previous_sleep_avg_minutes)}`,
     ]
   }
   const distance = data.distance_km !== null ? ` · ${data.distance_km.toFixed(1)} km` : ''
@@ -114,10 +117,10 @@ const topListTitles: Record<TopListSource, string> = {
   screentime_app: 'Top apps',
 }
 
-const topListUnits: Record<TopListCardData['unit'], string> = {
-  hours: ' h',
-  plays: ' plays',
-  visits: ' visits',
+const topListUnits: Record<TopListCardData['unit'], [singular: string, plural: string]> = {
+  hours: [' h', ' h'],
+  plays: [' play', ' plays'],
+  visits: [' visit', ' visits'],
 }
 
 export const topListLines = (
@@ -128,18 +131,28 @@ export const topListLines = (
   if (data === null || (data.total === 0 && data.items.length === 0)) return []
   const items = data.items.length > 0 ? ` — ${data.items.map((item) => item.name).join(', ')}` : ''
   return [
-    `${config.title ?? topListTitles[config.source]} ${formatFigure(data.total)}${topListUnits[data.unit]}${items}${figureChange(data.total, data.previous_total)}`,
+    `${config.title ?? topListTitles[config.source]} ${formatFigure(data.total)}${plural(data.total, ...topListUnits[data.unit])}${items}${figureChange(data.total, data.previous_total)}`,
   ]
 }
 
+const NIGHT_PLACES = 3
+
 export const placesLines = (title: string | undefined, widgetData: WidgetData | undefined): string[] => {
   const data = widgetData?.type === 'places_card' ? widgetData.data : null
-  if (data === null || (data.visits === 0 && data.nights_home === 0 && data.nights_away === 0)) return []
+  if (data === null) return []
+  const nights = [
+    ...data.nights_by_place.slice(0, NIGHT_PLACES),
+    ...(data.nights_elsewhere > 0 ? [{ name: 'elsewhere', nights: data.nights_elsewhere }] : []),
+  ].map(
+    ({ name, nights: count }, i) =>
+      `${count}${i === 0 ? ` ${plural(count, 'night', 'nights')}` : ''} ${name}`,
+  )
+  if (nights.length === 0 && data.visits === 0) return []
   const distinct =
     data.distinct_places > 0
-      ? ` · ${data.distinct_places} places${figureChange(data.distinct_places, data.previous_distinct_places)}`
+      ? `${data.distinct_places} ${plural(data.distinct_places, 'place', 'places')}${figureChange(data.distinct_places, data.previous_distinct_places)}`
       : ''
-  return [`${title ?? 'Places'} ${data.nights_home} nights home, ${data.nights_away} away${distinct}`]
+  return [`${title ?? 'Places'} ${[nights.join(', '), distinct].filter((part) => part !== '').join(' · ')}`]
 }
 
 /**
@@ -186,7 +199,7 @@ export const renderDashboardShareHtml = (
   const parts = [
     `<p><strong>${escapeXml(dashboard.name)}</strong> · ${escapeXml(periodLabel(dashboard.period))}</p>`,
   ]
-  if (message) parts.push(renderProse(message))
+  if (message) parts.push(renderNoteProse(message))
   if (structured) {
     const lines = figureLines(structured)
     if (lines.length > 0) parts.push(`<p>${lines.map(escapeXml).join('<br>')}</p>`)

@@ -1,23 +1,20 @@
+import { DEFAULT_IMPACT_WINDOW_MINUTES, formatImpactWindow, IMPACT_WINDOW_OPTIONS } from '@aurboda/api-spec'
 import { signal } from '@preact/signals'
 import { useQuery } from '@tanstack/react-query'
-import * as d3 from 'd3'
-import { useEffect, useRef } from 'preact/hooks'
 
+import { ImpactFigure } from '../../components/charts/ImpactFigure'
 import {
   fetchActivityImpact,
   fetchBaseline,
   fetchHrvActivitiesCorrelation,
-  type ActivityCorrelation,
-  type ActivityImpactData,
   type ActivityImpactType,
   type BaselineData,
   type HrvContextMetric,
-  type HrvStatsWithDelta,
-  type LocationCorrelation,
-  type ProductivityCorrelation,
 } from '../../state/api'
+import { ContextTable } from './ContextTable'
 import { ExploreTab } from './Explore'
 import { describeOccurrences } from './occurrences'
+import { isLongWindow } from './window'
 import './style.css'
 
 const periodDays = signal(30)
@@ -39,226 +36,11 @@ const CONTEXT_METRIC_PHRASES: Record<HrvContextMetric, string> = {
   stress_level: 'stress level',
 }
 
+const windowMinutes = signal(DEFAULT_IMPACT_WINDOW_MINUTES)
+
 const activeTab = signal<'hrv' | 'explore'>('hrv')
 
 const selectedActivity = signal<{ name: string; type: ActivityImpactType } | null>(null)
-
-function ImpactTimelineChart({
-  data,
-  baseline,
-}: {
-  data: ActivityImpactData
-  baseline: BaselineData | null
-}) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
-
-  useEffect(() => {
-    if (!svgRef.current || !containerRef.current) return
-
-    const containerWidth = containerRef.current.clientWidth
-    const height = 200
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
-
-    const margin = { bottom: 40, left: 50, right: 50, top: 30 }
-    const width = containerWidth
-    const innerWidth = width - margin.left - margin.right
-    const innerHeight = height - margin.top - margin.bottom
-
-    const windows = ['before30min', 'before15min', 'during', 'after15min', 'after30min'] as const
-    const labels = ['-30 min', '-15 min', 'During', '+15 min', '+30 min']
-
-    const hrvData = windows.map((w) => data.hrv_timeline[w].mean)
-    const hrData = windows.map((w) => data.hr_timeline[w].mean)
-    const stressData = windows.map((w) => data.stress_timeline[w].mean)
-
-    const g = svg
-      .attr('width', width)
-      .attr('height', height)
-      .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`)
-
-    const x = d3.scalePoint<number>().domain([0, 1, 2, 3, 4]).range([0, innerWidth])
-
-    // HRV Y scale (left)
-    const hrvExtent = d3.extent(hrvData.filter((d): d is number => d !== null)) as [number, number]
-    const hrvPadding = (hrvExtent[1] - hrvExtent[0]) * 0.3 || 10
-    const yHrv = d3
-      .scaleLinear()
-      .domain([hrvExtent[0] - hrvPadding, hrvExtent[1] + hrvPadding])
-      .range([innerHeight, 0])
-
-    // HR Y scale (right)
-    const hrExtent = d3.extent(hrData.filter((d): d is number => d !== null)) as [number, number]
-    const hrPadding = (hrExtent[1] - hrExtent[0]) * 0.3 || 10
-    const yHr = d3
-      .scaleLinear()
-      .domain([hrExtent[0] - hrPadding, hrExtent[1] + hrPadding])
-      .range([innerHeight, 0])
-
-    // Stress Y scale (hidden axis, own range)
-    const stressFiltered = stressData.filter((d): d is number => d !== null)
-    const stressExtent = d3.extent(stressFiltered) as [number, number]
-    const stressPadding = stressFiltered.length > 0 ? (stressExtent[1] - stressExtent[0]) * 0.3 || 10 : 10
-    const yStress = d3
-      .scaleLinear()
-      .domain([
-        stressFiltered.length > 0 ? stressExtent[0] - stressPadding : 0,
-        stressFiltered.length > 0 ? stressExtent[1] + stressPadding : 100,
-      ])
-      .range([innerHeight, 0])
-
-    if (baseline?.hrv.avg30day !== null && baseline?.hrv.avg30day !== undefined) {
-      g.append('line')
-        .attr('x1', 0)
-        .attr('y1', yHrv(baseline.hrv.avg30day))
-        .attr('x2', innerWidth)
-        .attr('y2', yHrv(baseline.hrv.avg30day))
-        .attr('stroke', '#10b981')
-        .attr('stroke-width', 1)
-        .attr('stroke-dasharray', '4,4')
-        .attr('opacity', 0.5)
-    }
-
-    const hrvLine = d3
-      .line<number | null>()
-      .defined((d) => d !== null)
-      .x((_, i) => x(i)!)
-      .y((d) => yHrv(d!))
-      .curve(d3.curveMonotoneX)
-
-    g.append('path')
-      .datum(hrvData)
-      .attr('fill', 'none')
-      .attr('stroke', '#10b981')
-      .attr('stroke-width', 2)
-      .attr('d', hrvLine)
-
-    hrvData.forEach((d, i) => {
-      if (d !== null) {
-        g.append('circle')
-          .attr('cx', x(i)!)
-          .attr('cy', yHrv(d))
-          .attr('r', 5)
-          .attr('fill', '#10b981')
-          .attr('stroke', 'white')
-          .attr('stroke-width', 2)
-      }
-    })
-
-    const hrLine = d3
-      .line<number | null>()
-      .defined((d) => d !== null)
-      .x((_, i) => x(i)!)
-      .y((d) => yHr(d!))
-      .curve(d3.curveMonotoneX)
-
-    g.append('path')
-      .datum(hrData)
-      .attr('fill', 'none')
-      .attr('stroke', '#ef4444')
-      .attr('stroke-width', 2)
-      .attr('d', hrLine)
-
-    hrData.forEach((d, i) => {
-      if (d !== null) {
-        g.append('circle')
-          .attr('cx', x(i)!)
-          .attr('cy', yHr(d))
-          .attr('r', 5)
-          .attr('fill', '#ef4444')
-          .attr('stroke', 'white')
-          .attr('stroke-width', 2)
-      }
-    })
-
-    if (stressFiltered.length > 0) {
-      const stressLine = d3
-        .line<number | null>()
-        .defined((d) => d !== null)
-        .x((_, i) => x(i)!)
-        .y((d) => yStress(d!))
-        .curve(d3.curveMonotoneX)
-
-      g.append('path')
-        .datum(stressData)
-        .attr('fill', 'none')
-        .attr('stroke', '#f59e0b')
-        .attr('stroke-width', 2)
-        .attr('d', stressLine)
-
-      stressData.forEach((d, i) => {
-        if (d !== null) {
-          g.append('circle')
-            .attr('cx', x(i)!)
-            .attr('cy', yStress(d))
-            .attr('r', 5)
-            .attr('fill', '#f59e0b')
-            .attr('stroke', 'white')
-            .attr('stroke-width', 2)
-        }
-      })
-    }
-
-    // Activity zone highlight
-    g.append('rect')
-      .attr('x', x(2)! - 30)
-      .attr('y', 0)
-      .attr('width', 60)
-      .attr('height', innerHeight)
-      .attr('fill', '#3b82f6')
-      .attr('fill-opacity', 0.1)
-
-    g.append('g')
-      .attr('transform', `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(x).tickFormat((_, i) => labels[i]))
-      .selectAll('text')
-      .attr('fill', 'currentColor')
-
-    g.append('g').call(d3.axisLeft(yHrv).ticks(4)).selectAll('text').attr('fill', '#10b981')
-
-    g.append('g')
-      .attr('transform', `translate(${innerWidth},0)`)
-      .call(d3.axisRight(yHr).ticks(4))
-      .selectAll('text')
-      .attr('fill', '#ef4444')
-
-    g.append('text')
-      .attr('x', 10)
-      .attr('y', -10)
-      .attr('fill', '#10b981')
-      .attr('font-size', '12px')
-      .text('HRV (ms)')
-
-    g.append('text')
-      .attr('x', innerWidth - 10)
-      .attr('y', -10)
-      .attr('text-anchor', 'end')
-      .attr('fill', '#ef4444')
-      .attr('font-size', '12px')
-      .text('HR (bpm)')
-  }, [data, baseline])
-
-  return (
-    <div ref={containerRef} class="impact-chart-container">
-      <svg ref={svgRef} />
-    </div>
-  )
-}
-
-// Delta class: positive delta = good for HRV, bad for HR/stress (inverted)
-const getDeltaClass = (value: number | null, inverted: boolean): string => {
-  if (value === null) return ''
-  if (value === 0) return ''
-  const isPositive = inverted ? value < 0 : value > 0
-  return isPositive ? 'positive' : 'negative'
-}
-
-const formatDelta = (value: number | null, decimals: number): string => {
-  if (value === null) return '--'
-  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}`
-}
 
 const formatValue = (value: number | null | undefined, decimals: number): string =>
   value != null ? value.toFixed(decimals) : '--'
@@ -269,45 +51,6 @@ const isActivitySelected = (
   type: ActivityImpactType,
 ): boolean => selected?.name === name && selected?.type === type
 
-function CorrelationRow({
-  name,
-  stats,
-  onSelect,
-  selected,
-  type,
-  extra,
-}: {
-  name: string
-  stats: HrvStatsWithDelta
-  onSelect: () => void
-  selected: boolean
-  type: string
-  extra?: string
-}) {
-  return (
-    <tr class={selected ? 'selected' : ''} onClick={onSelect}>
-      <td class="name-cell">
-        <span class="name">{name}</span>
-        {extra && <span class="extra">{extra}</span>}
-      </td>
-      <td class="type-cell">{type}</td>
-      <td class="value-cell">{stats.mean_hrv?.toFixed(1) ?? '--'}</td>
-      <td class={`delta-cell ${getDeltaClass(stats.hrv_delta_from_baseline, false)}`}>
-        {formatDelta(stats.hrv_delta_from_baseline, 1)}
-      </td>
-      <td class="value-cell">{stats.mean_hr?.toFixed(0) ?? '--'}</td>
-      <td class={`delta-cell ${getDeltaClass(stats.hr_delta_from_baseline, true)}`}>
-        {formatDelta(stats.hr_delta_from_baseline, 0)}
-      </td>
-      <td class="value-cell">{stats.mean_stress?.toFixed(0) ?? '--'}</td>
-      <td class={`delta-cell ${getDeltaClass(stats.stress_delta_from_baseline, true)}`}>
-        {formatDelta(stats.stress_delta_from_baseline, 0)}
-      </td>
-      <td class="samples-cell">{stats.sample_minutes} min</td>
-    </tr>
-  )
-}
-
 // eslint-disable-next-line complexity -- large render switching between HRV and explore tabs
 export function Correlations() {
   const baselineQuery = useQuery({
@@ -317,8 +60,8 @@ export function Correlations() {
   })
 
   const correlationsQuery = useQuery({
-    queryFn: () => fetchHrvActivitiesCorrelation(periodDays.value, contextMetric.value),
-    queryKey: ['hrvActivitiesCorrelation', periodDays.value, contextMetric.value],
+    queryFn: () => fetchHrvActivitiesCorrelation(periodDays.value, contextMetric.value, windowMinutes.value),
+    queryKey: ['hrvActivitiesCorrelation', periodDays.value, contextMetric.value, windowMinutes.value],
     staleTime: 5 * 60 * 1000,
   })
 
@@ -326,9 +69,21 @@ export function Correlations() {
     enabled: selectedActivity.value !== null,
     queryFn: () =>
       selectedActivity.value
-        ? fetchActivityImpact(selectedActivity.value.name, selectedActivity.value.type, 90, 30)
+        ? fetchActivityImpact(
+            selectedActivity.value.name,
+            selectedActivity.value.type,
+            periodDays.value,
+            windowMinutes.value,
+            'exact',
+          )
         : Promise.reject(),
-    queryKey: ['activityImpact', selectedActivity.value?.name, selectedActivity.value?.type],
+    queryKey: [
+      'activityImpact',
+      selectedActivity.value?.name,
+      selectedActivity.value?.type,
+      periodDays.value,
+      windowMinutes.value,
+    ],
     staleTime: 5 * 60 * 1000,
   })
 
@@ -374,6 +129,18 @@ export function Correlations() {
               <option value={60}>Last 60 days</option>
               <option value={90}>Last 90 days</option>
             </select>
+            <select
+              value={windowMinutes.value}
+              onChange={(e) => (windowMinutes.value = parseInt((e.target as HTMLSelectElement).value, 10))}
+              class="period-select"
+              title="How long before and after each occurrence to compare"
+            >
+              {IMPACT_WINDOW_OPTIONS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  ±{formatImpactWindow(minutes)}
+                </option>
+              ))}
+            </select>
           </div>
         )}
       </div>
@@ -398,6 +165,13 @@ export function Correlations() {
             Analyze how different activities correlate with your {CONTEXT_METRIC_PHRASES[contextMetric.value]}
             . Click a row to see the detailed before/during/after timeline.
           </p>
+
+          {isLongWindow(windowMinutes.value) && (
+            <p class="window-note">
+              A window of {formatImpactWindow(windowMinutes.value)} also picks up your daily rhythm: a few
+              hours after an evening session is mostly sleep. So Change is not the activity's effect alone.
+            </p>
+          )}
 
           {isLoading && <div class="loading">Analyzing correlations...</div>}
 
@@ -424,149 +198,66 @@ export function Correlations() {
           {activityImpact && (
             <section class="impact-section">
               <h2>
-                Impact of "{activityImpact.activity}" on HRV/HR
+                Impact of "{activityImpact.activity}" on HRV, heart rate and stress
                 <span class="impact-meta">
                   {activityImpact.occurrences} occurrences, avg {activityImpact.avg_duration_min} min
                 </span>
               </h2>
-              <ImpactTimelineChart data={activityImpact} baseline={baseline} />
-              <div class="impact-legend">
-                <span>
-                  <span class="dot hrv" /> HRV (higher is generally better)
-                </span>
-                <span>
-                  <span class="dot hr" /> Heart Rate
-                </span>
-                <span>
-                  <span class="dot stress" /> Stress
-                </span>
-                <span>
-                  <span class="zone" /> Activity period
-                </span>
-              </div>
+              <ImpactFigure data={activityImpact} baseline={baseline} />
             </section>
           )}
 
           {correlations && (
             <>
               {correlations.correlations.activities.length > 0 && (
-                <section class="table-section">
-                  <h2>Activities</h2>
-                  <div class="table-container">
-                    <table class="correlations-table">
-                      <thead>
-                        <tr>
-                          <th>Activity</th>
-                          <th>Type</th>
-                          <th>HRV</th>
-                          <th>Δ HRV</th>
-                          <th>HR</th>
-                          <th>Δ HR</th>
-                          <th>Stress</th>
-                          <th>Δ Stress</th>
-                          <th>Samples</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {correlations.correlations.activities.map((a: ActivityCorrelation) => (
-                          <CorrelationRow
-                            key={a.activity_type}
-                            name={a.activity_type}
-                            stats={a}
-                            onSelect={() => handleSelectActivity(a.activity_type, 'activity_type')}
-                            selected={isActivitySelected(
-                              selectedActivity.value,
-                              a.activity_type,
-                              'activity_type',
-                            )}
-                            type="activity"
-                            extra={describeOccurrences(a.occurrences, a.avg_duration_min)}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <ContextTable
+                  title="Activities"
+                  nameHeader="Activity"
+                  windowMinutes={correlations.window_minutes}
+                  rows={correlations.correlations.activities.map((a) => ({
+                    extra: describeOccurrences(a.occurrences, a.avg_duration_min),
+                    key: a.activity_type,
+                    name: a.activity_type,
+                    onSelect: () => handleSelectActivity(a.activity_type, 'activity_type'),
+                    selected: isActivitySelected(selectedActivity.value, a.activity_type, 'activity_type'),
+                    stats: a,
+                  }))}
+                />
               )}
 
               {correlations.correlations.locations.length > 0 && (
-                <section class="table-section">
-                  <h2>Locations</h2>
-                  <div class="table-container">
-                    <table class="correlations-table">
-                      <thead>
-                        <tr>
-                          <th>Location</th>
-                          <th>Type</th>
-                          <th>HRV</th>
-                          <th>Δ HRV</th>
-                          <th>HR</th>
-                          <th>Δ HR</th>
-                          <th>Stress</th>
-                          <th>Δ Stress</th>
-                          <th>Samples</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {correlations.correlations.locations.map((l: LocationCorrelation) => (
-                          <CorrelationRow
-                            key={l.location_name}
-                            name={l.location_name}
-                            stats={l}
-                            onSelect={() => handleSelectActivity(l.location_name, 'location')}
-                            selected={isActivitySelected(selectedActivity.value, l.location_name, 'location')}
-                            type="location"
-                            extra={`${l.visit_count} visits`}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <ContextTable
+                  title="Locations"
+                  nameHeader="Location"
+                  windowMinutes={correlations.window_minutes}
+                  rows={correlations.correlations.locations.map((l) => ({
+                    extra: `${l.visit_count} visits`,
+                    key: l.location_name,
+                    name: l.location_name,
+                    onSelect: () => handleSelectActivity(l.location_name, 'location'),
+                    selected: isActivitySelected(selectedActivity.value, l.location_name, 'location'),
+                    stats: l,
+                  }))}
+                />
               )}
 
               {correlations.correlations.productivity.length > 0 && (
-                <section class="table-section">
-                  <h2>Productivity Categories</h2>
-                  <div class="table-container">
-                    <table class="correlations-table">
-                      <thead>
-                        <tr>
-                          <th>Category</th>
-                          <th>Type</th>
-                          <th>HRV</th>
-                          <th>Δ HRV</th>
-                          <th>HR</th>
-                          <th>Δ HR</th>
-                          <th>Stress</th>
-                          <th>Δ Stress</th>
-                          <th>Samples</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {correlations.correlations.productivity.map((p: ProductivityCorrelation) => (
-                          <CorrelationRow
-                            key={p.category}
-                            name={p.category}
-                            stats={p}
-                            onSelect={() => handleSelectActivity(p.category, 'productivity_category')}
-                            selected={isActivitySelected(
-                              selectedActivity.value,
-                              p.category,
-                              'productivity_category',
-                            )}
-                            type="productivity"
-                            extra={
-                              p.correlation_coefficient !== null
-                                ? `r=${p.correlation_coefficient.toFixed(2)}`
-                                : undefined
-                            }
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <ContextTable
+                  title="Productivity Categories"
+                  nameHeader="Category"
+                  windowMinutes={correlations.window_minutes}
+                  rows={correlations.correlations.productivity.map((p) => ({
+                    extra:
+                      p.correlation_coefficient !== null
+                        ? `r=${p.correlation_coefficient.toFixed(2)}`
+                        : undefined,
+                    key: p.category,
+                    name: p.category,
+                    onSelect: () => handleSelectActivity(p.category, 'productivity_category'),
+                    selected: isActivitySelected(selectedActivity.value, p.category, 'productivity_category'),
+                    stats: p,
+                  }))}
+                />
               )}
             </>
           )}
@@ -579,8 +270,22 @@ export function Correlations() {
                 and lower stress.
               </li>
               <li>
-                <strong>Δ HRV / Δ HR / Δ Stress:</strong> Change from your personal baseline. Positive HRV
-                delta is typically good; negative HR/stress delta is typically good.
+                <strong>During:</strong> the average while it was going on, one value per occurrence.
+              </li>
+              <li>
+                <strong>vs avg:</strong> during minus your average over the whole period. Higher HRV is
+                typically good; lower heart rate and stress are typically good.
+              </li>
+              <li>
+                <strong>Change:</strong> the{' '}
+                {formatImpactWindow(correlations?.window_minutes ?? windowMinutes.value)} after minus the{' '}
+                {formatImpactWindow(correlations?.window_minutes ?? windowMinutes.value)} before, for
+                occurrences with data on both sides. It is coloured only when it is statistically clear; hover
+                it for the before and after values.
+              </li>
+              <li>
+                Back-to-back or duplicate entries count as one occurrence, and values are resampled to
+                5-minute averages so densely recorded stretches do not dominate.
               </li>
               <li>
                 <strong>Correlation coefficient (r):</strong> For productivity, this shows how the

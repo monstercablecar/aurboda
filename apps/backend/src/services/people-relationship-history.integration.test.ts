@@ -3,8 +3,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 
 import { _setDbForUser } from '../db/connection.ts'
 import { createRolePool } from '../db/pool.ts'
-import { startTestDb, stopTestDb, getTestUser, getTestDbClient } from '../test/db-test-helper.ts'
-import { createTestDatabase } from '../test/db-test-helper.ts'
+import {
+  startTestDb,
+  stopTestDb,
+  getTestUser,
+  getTestDbClient,
+  createTestDatabase,
+} from '../test/db-test-helper.ts'
 import * as people from './people.ts'
 const profile = (statuses: string[] = []) =>
   createPersonBodySchema.parse({

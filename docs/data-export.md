@@ -10,10 +10,15 @@ the account has turned read-only ([plans and billing](admin.md#plans-and-billing
 Every Aurboda user has their own PostgreSQL database (`aurboda_<username>`). **Settings → Export account
 data → Download export** gives you a complete copy of it as a gzipped plain SQL dump,
 `aurboda-<username>-<YYYY-MM-DD>.sql.gz`, made with `pg_dump`. It is the full-fidelity export: every
-metric, activity, location, meal, note, setting, rule and feed post, in a form you can restore into your
+metric, activity, location, meal, note, setting, rule and feed post — and every picture you added to what
+you wrote, which lives in your database too (`feed_image`) — in a form you can restore into your
 own Aurboda installation (to move servers) or simply read and query with standard PostgreSQL tools.
 
 The dump is plain SQL (`CREATE TABLE …`, `COPY … FROM stdin`), so `gunzip -c` shows exactly what it holds.
+After `pg_dump`'s own output it carries one more table, `exported_shared_food_items`: the food items
+from the server's shared library (Livsmedelsverket and the like) that your meals, recipes, portions,
+sensitivity flags and icon overrides use. That library lives in the server's central database, not
+in yours, so without them the food names in your meals would not resolve on another server.
 
 ## Saved account data included
 
@@ -36,11 +41,10 @@ password: don't share it or leave it somewhere public.
 
 ## What is not in it
 
-- **Shared Resources and server catalogs:** the shared Resources library, its files and metadata, and
-  the shared food catalog are outside your private database. Private meal records and shared-food
-  overrides can still contain references to that excluded catalog; their presence does not make the
-  shared catalog portable. Saved nutrient snapshots remain in your database, but names and icons can depend on the shared
-  catalog. A destination needs the corresponding shared entries for those references to resolve.
+- **Shared Resources and the rest of the server catalogs:** the shared Resources library, its files
+  and metadata, and shared catalog entries unrelated to your account are not exported. The referenced
+  shared food subset is included through `exported_shared_food_items` as described above; this is not
+  a copy of the central database. Saved nutrient snapshots remain in your private database.
 - **Server sign-in and access configuration:** the central account record, login password, admin or
   billing status, account email and timestamps, server usage records, MCP/OAuth connector grants and server Oura/Strava webhook registrations are not
   exported. Per-user `webauthn_credentials` records (including public keys and counters) are included,
@@ -107,8 +111,18 @@ file name with yours. Run them from the directory with the compose file. Before 
 
 4. **Start Aurboda and log in** (`docker compose start aurboda`). The next request migrates the restored schema to the target server's version, so use the same customized version or a newer compatible version that supports the exported features.
 
+   On that first login (or when Aurboda starts) the shared food items in `exported_shared_food_items`
+   are matched to the new server's library, and the table is dropped. An item the new library holds
+   under the same id is left as it is; one it holds under another id (the same source and source id,
+   say the same Livsmedelsverket number) has your meals, recipes, portions, flags and icon overrides
+   moved over to it; anything else becomes your own food item, with your icon and default quantity
+   on it, and an item of yours with the same name already there gets the source added to the copy's
+   name. If that step fails, it is logged and tried again on the next start.
+
 A restore into a server without Docker works the same way: run the `psql` commands as a superuser
 against that server.
 
 The backend's integration test (`apps/backend/src/services/export-dump.integration.test.ts`) dumps a
-database with the real `pg_dump` and restores it with exactly these steps.
+database with the real `pg_dump` and restores it with exactly these steps;
+`exported-shared-food.integration.test.ts` does the same with shared food items in the data and
+checks the matching against libraries that have them under the same id, under another id, or not at all.

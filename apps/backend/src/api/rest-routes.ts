@@ -14,7 +14,9 @@ import type { DetailSyncedCallback, TrackWrittenCallback } from '../integrations
 import type { AutosharePreviewDeps } from '../mcp/autoshare-rule-tools.ts'
 import type { AccountDeleter } from '../services/account-deletion.ts'
 import type { AccountPlans } from '../services/account-plan.ts'
+import type { PostUpdateResender } from '../services/activitypub/post-update-resend.ts'
 import type { AdminUsers } from '../services/admin-users.ts'
+import type { ArticlePreviewer } from '../services/article-preview.ts'
 import type { CentralDb } from '../services/central-db.ts'
 import type { DiscoverChallenges } from '../services/challenge-discovery.ts'
 import type { DeductionEngineDeps } from '../services/deduction-engine.ts'
@@ -27,7 +29,9 @@ import type { FollowActions } from '../services/following.ts'
 import type { InvitationAuth } from '../services/invitation.ts'
 import type { NamedLocationsChanged } from '../services/locations.ts'
 import type { OuraWebhookManager } from '../services/oura-webhook-manager.ts'
+import type { PublicTagActions } from '../services/public-tags.ts'
 import type { SyncProvider } from '../services/queries/index.ts'
+import type { RelayActions } from '../services/relays.ts'
 import type { HrSettingsChanged, ProfileChanged } from '../services/settings.ts'
 import type { TimelineHub } from '../services/timeline-hub.ts'
 import type { RetroEnrichTrigger } from '../services/timeline-retro-enrich.ts'
@@ -37,6 +41,7 @@ import type { AnyMiddleware } from '../typed-router.ts'
 import {
   getFeedPostById,
   getLocations,
+  getPublicSharedDashboardBySlug,
   getTimeSeries,
   listUserNames,
   markActivityDetailSynced,
@@ -59,9 +64,11 @@ import { createCorrelationsRouter } from '../routes/correlations-router.ts'
 import { createDashboardRouter } from '../routes/dashboard-router.ts'
 import { createDeductionRulesRouter } from '../routes/deduction-rules-router.ts'
 import { createExportRouter } from '../routes/export-router.ts'
+import { createFeedFollowedTagsRouter } from '../routes/feed-followed-tags-router.ts'
 import { createFeedFollowersRouter } from '../routes/feed-followers-router.ts'
 import { createFeedFollowingRouter } from '../routes/feed-following-router.ts'
 import { createFeedImageRouter } from '../routes/feed-image-router.ts'
+import { createFeedImagesRouter } from '../routes/feed-images-router.ts'
 import { createFeedPublicRouter } from '../routes/feed-public-router.ts'
 import { createFeedRouter, type FeedDeliver } from '../routes/feed-router.ts'
 import { createFoodItemsRouter } from '../routes/food-items-router.ts'
@@ -81,6 +88,7 @@ import { createProductivityRouter } from '../routes/productivity-router.ts'
 import { createProfileRouter } from '../routes/profile-router.ts'
 import { createPublicAvatarRouter } from '../routes/public-avatar-router.ts'
 import { createPublicBannerRouter } from '../routes/public-banner-router.ts'
+import { createPublicFeedImageRouter } from '../routes/public-feed-image-router.ts'
 import { createPublicSharesRouter } from '../routes/public-shares-router.ts'
 import { createRawRecordsRouter } from '../routes/raw-records-router.ts'
 import { createReportsRouter } from '../routes/reports-router.ts'
@@ -100,24 +108,34 @@ import { createWellKnownRouter, type WellKnownConfig } from '../routes/well-know
 import { createWorkRouter } from '../routes/work-router.ts'
 import {
   renderChartPng,
+  renderImpactPng,
   renderRaceChartPng,
   renderRoutePng,
   renderScatterPng,
+  svgToPng,
 } from '../services/activitypub/feed-images.ts'
 import { fetchOsmTile } from '../services/activitypub/osm-tiles.ts'
-import { getArticleChartSeriesData, getArticleCorrelationScatter } from '../services/article-block-data.ts'
+import {
+  getArticleChartSeriesData,
+  getArticleCorrelationScatter,
+  getArticleImpact,
+} from '../services/article-block-data.ts'
 import { articleBlockMisses } from '../services/article-block-misses.ts'
 import { loadAvatarDataUri, loadChallengeBannerDataUri } from '../services/avatar-resolve.ts'
 import { buildChartSvg } from '../services/charts/chart-svg.ts'
+import { buildImpactSvg } from '../services/charts/impact-svg.ts'
 import { buildRaceChartSvg } from '../services/charts/race-chart-svg.ts'
 import { buildScatterSvg } from '../services/charts/scatter-svg.ts'
+import { loadPublicDashboardChartWith } from '../services/dashboard-chart.ts'
 import { latestExerciseSession } from '../services/exercise-card.ts'
 import { resolveChallengeRaceByUrl, resolveStandingsChart } from '../services/feed-structured-challenge.ts'
 import { resolveExerciseTrendSeries } from '../services/feed-structured-exercise.ts'
 import { resolveFeedActivity } from '../services/feed.ts'
 import { readOfficialFeedSetting } from '../services/official-feed.ts'
 import { createOgImageRenderer } from '../services/og-image.ts'
+import { loadPublicPostChartWith, type PostChartDeps } from '../services/post-chart.ts'
 import { getUserTimezone } from '../services/settings.ts'
+import { resolveDashboardView } from '../services/shared-dashboard-data.ts'
 import { resolveSharedExerciseData } from '../services/shared-exercise-data.ts'
 import { createTemplateLoader } from '../services/web-template.ts'
 
@@ -152,6 +170,9 @@ interface RestRoutesDeps {
   feedDeliver: FeedDeliver
   followActions: FollowActions
   followerActions: FollowerActions
+  relayActions: RelayActions
+  publicTagActions: PublicTagActions
+  postUpdateResender: PostUpdateResender
   /** Outbound like ⭐ / boost 🔄 toggles for the home timeline. */
   reactionActions: ReactionActions
   timelineHub: TimelineHub
@@ -164,6 +185,24 @@ interface RestRoutesDeps {
   onHrSettingsChanged: HrSettingsChanged
   onNamedLocationsChanged: NamedLocationsChanged
   dataExport: { exporter: DumpExporter; requestDumpLink: DumpLinkIssuer; tokens: ExportTokens }
+  /** The article preview, shared with MCP's `preview_article`. */
+  previewArticle: ArticlePreviewer
+}
+
+/** Where a post's chart data comes from, for its feed images and its link-preview card alike. */
+export const postChartDeps: PostChartDeps = {
+  // Merged-span window so the rendered chart covers what the user shared,
+  // matching the Note's duration/metrics (#881).
+  getActivity: resolveFeedActivity,
+  // Shared with the markdown export's eligibility check (#974), so "would
+  // this block's image render?" can never drift from the endpoint.
+  getArticleChartSeries: getArticleChartSeriesData,
+  getArticleImpact,
+  getChallengeRaceByUrl: resolveChallengeRaceByUrl,
+  getCorrelationScatter: getArticleCorrelationScatter,
+  getExerciseTrend: (user, post) => resolveExerciseTrendSeries(user, post),
+  getSeries: getTimeSeries,
+  getStandingsChart: resolveStandingsChart,
 }
 
 export const mountRestRouters = ({
@@ -191,6 +230,10 @@ export const mountRestRouters = ({
   feedDeliver,
   followActions,
   followerActions,
+  relayActions,
+  publicTagActions,
+  postUpdateResender,
+  previewArticle,
   reactionActions,
   onProfileChanged,
   onHrSettingsChanged,
@@ -256,11 +299,13 @@ export const mountRestRouters = ({
   httpd.use('/shared-dashboards', createSharedDashboardsRouter(authMiddleware, webHost))
   httpd.use('/shared-exercises', createSharedExercisesRouter(authMiddleware, webHost))
   httpd.use('/profile', createProfileRouter(authMiddleware, webHost, onProfileChanged))
-  // Mount the following + followers routers before `/feed` so `/feed/following/*`
-  // and `/feed/followers/*` (two path segments) resolve here and never touch the
+  // Mount the following, followers and images routers before `/feed` so `/feed/following/*`,
+  // `/feed/followers/*` and `/feed/images/*` resolve here and never touch the
   // feed router's `/:postId`.
   httpd.use('/feed/following', createFeedFollowingRouter(authMiddleware, followActions))
+  httpd.use('/feed/followed-tags', createFeedFollowedTagsRouter(authMiddleware, followActions))
   httpd.use('/feed/followers', createFeedFollowersRouter(authMiddleware, followerActions))
+  httpd.use('/feed/images', createFeedImagesRouter(authMiddleware, apiBaseUrl))
   httpd.use(
     '/feed',
     createFeedRouter(
@@ -271,6 +316,7 @@ export const mountRestRouters = ({
       retroEnrichTimeline,
       webHost,
       reactionActions,
+      previewArticle,
     ),
   )
   httpd.use('/challenges', createChallengesRouter(authMiddleware, webHost, apiBaseUrl, discoverChallenges))
@@ -280,6 +326,9 @@ export const mountRestRouters = ({
   httpd.use(
     createFeedPublicRouter({
       apiBaseUrl,
+      listOfficialRemotePosts: (handles, tags, limit, before) =>
+        centralDb.listOfficialRemotePosts(handles, tags, limit, before),
+      publicTags: publicTagActions,
       readOfficialFeed: () => readOfficialFeedSetting(centralDb),
       webHost,
     }),
@@ -288,23 +337,16 @@ export const mountRestRouters = ({
   // public/unlisted posts. Mounted alongside the series router (same guard).
   httpd.use(
     createFeedImageRouter({
+      ...postChartDeps,
       articleBlockMisses,
-      // Merged-span window so the rendered chart/route cover what the user
-      // shared, matching the Note's duration/metrics (#881).
-      getActivity: resolveFeedActivity,
-      // Shared with the markdown export's eligibility check (#974), so "would
-      // this block's image render?" can never drift from the endpoint.
-      getArticleChartSeries: getArticleChartSeriesData,
-      getCorrelationScatter: getArticleCorrelationScatter,
       getPost: getFeedPostById,
       getRoute: async (user, start, end) =>
         (await getLocations(user, start, end)).locations.map((l) => l.coordinates),
-      getSeries: getTimeSeries,
-      getExerciseTrend: (user, post) => resolveExerciseTrendSeries(user, post),
-      getChallengeRaceByUrl: resolveChallengeRaceByUrl,
-      getStandingsChart: resolveStandingsChart,
+      rasterizeSvg: svgToPng,
       renderChart: renderChartPng,
       renderChartSvg: buildChartSvg,
+      renderImpact: renderImpactPng,
+      renderImpactSvg: buildImpactSvg,
       renderRaceChart: renderRaceChartPng,
       renderRaceChartSvg: buildRaceChartSvg,
       // Draw the route over the OSM basemap; falls back to a bare shape if tiles
@@ -315,8 +357,9 @@ export const mountRestRouters = ({
     }),
   )
   // Before the public-shares router, whose `/public/:username/:slug` resolver
-  // would otherwise take `/public/:username/challenges`.
+  // would otherwise take `/public/:username/challenges` and `/public/:username/images/*`.
   httpd.use(createChallengeQuantpubRouter({ apiBaseUrl, webHost }))
+  httpd.use(createPublicFeedImageRouter())
   httpd.use(createPublicSharesRouter(webHost))
   // Mounted before the share-html router so `/u/.../opengraph-image.png`,
   // `/u/:username/avatar.png` and `/u/:username/:slug/banner.webp` win over the
@@ -329,6 +372,12 @@ export const mountRestRouters = ({
       latestExerciseSession: (username, exercise) => latestExerciseSession(username, exercise),
       loadAvatarDataUri,
       loadBannerDataUri: loadChallengeBannerDataUri,
+      loadDashboardChart: loadPublicDashboardChartWith({
+        getDashboard: getPublicSharedDashboardBySlug,
+        getTimezone: getUserTimezone,
+        resolveView: resolveDashboardView,
+      }),
+      loadPostChart: loadPublicPostChartWith({ ...postChartDeps, getPost: getFeedPostById }),
       loadExerciseCard: async (username, exercise) => {
         const [data, timeZone] = await Promise.all([
           resolveSharedExerciseData(username, exercise),
@@ -371,6 +420,9 @@ export const mountRestRouters = ({
       ouraWebhookManager,
       accountDeleter,
       accountPlans,
+      relayActions,
+      publicTagActions,
+      postUpdateResender,
     ),
   )
   httpd.use(

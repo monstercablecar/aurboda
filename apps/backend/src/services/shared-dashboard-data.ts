@@ -24,7 +24,6 @@ import type {
 
 import {
   hrZoneMetrics,
-  isExerciseActivityType,
   metricCardLookbackDays,
   percentChange,
   periodGranularityOf,
@@ -34,13 +33,13 @@ import {
   windowDays,
 } from '@aurboda/api-spec'
 
-import { getAllActivityTypeNames } from '../db/index.ts'
 import { getActivityRecords, publicRecord } from './activity-records.ts'
 import { maskBreakdownNames } from './breakdown-mask.ts'
 import { getChartData } from './chart-data.ts'
 import { getActivityImpact } from './correlations/activity-impact.ts'
 import { getBaseline } from './correlations/baseline.ts'
 import { getCustomMetrics } from './custom-metrics.ts'
+import { dayKey, dayStartInTz } from './day-keys.ts'
 import { getGoalsProgress } from './goals.ts'
 import { getLatestSleep } from './latest-sleep.ts'
 import {
@@ -57,7 +56,6 @@ import {
   getPlacesSummary,
   getTopApps,
   getTopMedia,
-  queryActivities,
   queryMetrics,
 } from './queries/index.ts'
 import { getEffectiveHrZones, getUserTimezone } from './settings.ts'
@@ -112,6 +110,41 @@ const inclusiveRange = (window: ResolveWindow): Range => ({
 
 const windowOf = (options: ResolveOptions, lookbackDays: number): Range =>
   options.window ? inclusiveRange(options.window) : lookbackRange(lookbackDays)
+
+/** A stored `since` can be later than today (saved through the API); it then starts today. */
+const clampSince = (since: string, tz: string, now: Date): string => {
+  const today = dayKey(now, tz)
+  return since > today ? today : since
+}
+
+/** Whole calendar days in `tz` from a chart's fixed `since` date to today, at least one: a trend's lookback. */
+export const sinceLookbackDays = (since: string, tz: string, now: Date = new Date()): number =>
+  Math.max(
+    1,
+    Temporal.PlainDate.from(clampSince(since, tz, now)).until(Temporal.PlainDate.from(dayKey(now, tz))).days,
+  )
+
+/** A bar chart's range from its fixed `since` date's midnight in `tz` to now. */
+export const sinceRange = (since: string, tz: string, now: Date = new Date()): Range => ({
+  end: now,
+  start: dayStartInTz(clampSince(since, tz, now), tz),
+})
+
+const chartWindowOf = (
+  options: ResolveOptions,
+  config: { lookback_days: number; since?: string },
+  tz: string,
+) =>
+  !options.window && config.since ? sinceRange(config.since, tz) : windowOf(options, config.lookback_days)
+
+const trendLookbackDays = (
+  options: ResolveOptions,
+  config: { lookback_days?: number; since?: string },
+  tz: string,
+): number => {
+  if (options.window) return periodDays(options.window) - 1
+  return config.since ? sinceLookbackDays(config.since, tz) : (config.lookback_days ?? 90)
+}
 
 const summaryFigures = async (user: string, apiMetric: string, range: Range) => {
   const summary = await getPeriodSummary(user, [apiMetric], range.start, range.end)
@@ -230,7 +263,7 @@ const resolveTrendChart = async (
     filter_field: config.filter_field,
     filter_value: config.filter_value,
     half_life_days: config.half_life_days ?? 15,
-    lookback_days: options.window ? periodDays(options.window) - 1 : (config.lookback_days ?? 90),
+    lookback_days: trendLookbackDays(options, config, tz),
     measure: config.measure,
     missing_days: config.missing_days,
     pattern: config.pattern,
@@ -273,7 +306,7 @@ const resolveBarChart = async (
   tz: string,
   options: ResolveOptions,
 ): Promise<WidgetData> => {
-  const { end, start } = windowOf(options, config.lookback_days)
+  const { end, start } = chartWindowOf(options, config, tz)
   const result = await getChartData(user, {
     activity_type_id: config.tag_definition_id,
     aggregation: config.aggregation ?? 'count',
@@ -413,12 +446,12 @@ const topListFigures = async (
   range: Range,
   tz: string,
 ): Promise<TopListFigures> => {
-  const { limit, source } = config
+  const { limit, media_source, source } = config
   switch (source) {
     case 'media_artist':
     case 'media_album':
     case 'media_track':
-      return topListFromMedia(await getTopMedia(user, range, mediaGrouping[source], limit))
+      return topListFromMedia(await getTopMedia(user, range, mediaGrouping[source], limit, media_source))
     case 'screentime_app':
       return topListFromApps(await getTopApps(user, range, limit), windowDays(range.start, range.end))
     case 'place':
@@ -463,6 +496,8 @@ const resolvePlacesCard = async (
           ...current,
           previous_distinct_places: previous.distinct_places,
           previous_nights_away: previous.nights_away,
+          previous_nights_by_place: previous.nights_by_place,
+          previous_nights_elsewhere: previous.nights_elsewhere,
           previous_visits: previous.visits,
         }
       : current,
@@ -502,43 +537,28 @@ interface SummaryVisibility {
   showWorkouts: boolean
 }
 
-const durationMinutes = (a: { start_time: string; end_time?: string }): number =>
-  a.end_time ? (new Date(a.end_time).getTime() - new Date(a.start_time).getTime()) / 60000 : 0
-
-/** Aggregates to exactly the figures the widget renders — never the raw list. */
+/** The same roll-up as an activity type card over the window, so the two always agree. */
 const summarizeActivities = async (
   user: string,
-  types: string[],
   range: Range,
   visibility: SummaryVisibility,
 ): Promise<ActivitySummaryData> => {
-  const activities = await queryActivities(user, types, range.start, range.end)
-  const exercise = activities.filter((a) => isExerciseActivityType(a.activity_type))
-  const sleep = activities.filter((a) => a.activity_type === 'sleep')
-  const meditation = activities.filter((a) => a.activity_type === 'meditation')
-
+  const rollUp = (type: string, visible: boolean) =>
+    visible
+      ? getActivityTypeSummary(user, type, { end: range.end.toISOString(), start: range.start.toISOString() })
+      : null
+  const [exercise, meditation, sleep] = await Promise.all([
+    rollUp('exercise', visibility.showWorkouts),
+    rollUp('meditation', visibility.showMeditation),
+    rollUp('sleep', visibility.showSleep),
+  ])
   return {
-    exercise: visibility.showWorkouts
-      ? {
-          count: exercise.length,
-          total_minutes: exercise.reduce((sum, a) => sum + durationMinutes(a), 0),
-        }
-      : null,
-    meditation: visibility.showMeditation
-      ? {
-          count: meditation.length,
-          total_minutes: meditation.reduce((sum, a) => sum + durationMinutes(a), 0),
-        }
-      : null,
-    sleep: visibility.showSleep
-      ? {
-          avg_hours:
-            sleep.length > 0
-              ? sleep.reduce((sum, a) => sum + durationMinutes(a) / 60, 0) / sleep.length
-              : null,
-          count: sleep.length,
-        }
-      : null,
+    exercise: exercise && { count: exercise.count, total_minutes: exercise.total_minutes },
+    meditation: meditation && { count: meditation.count, total_minutes: meditation.total_minutes },
+    sleep: sleep && {
+      avg_hours: sleep.sleep ? sleep.sleep.avg_minutes / 60 : null,
+      count: sleep.count,
+    },
   }
 }
 
@@ -581,16 +601,12 @@ const resolveActivitySummary = async (
     return { data: { exercise: null, meditation: null, sleep: null }, type: 'activity_summary' }
   }
 
-  const types = await getAllActivityTypeNames(user)
-  const current = await summarizeActivities(
-    user,
-    types,
-    windowOf(options, config.lookback_days ?? 7),
-    visibility,
-  )
-  if (!options.previous) return { data: current, type: 'activity_summary' }
-  const previous = await summarizeActivities(user, types, inclusiveRange(options.previous), visibility)
-  return { data: withPrevious(current, previous), type: 'activity_summary' }
+  const summarize = (range: Range) => summarizeActivities(user, range, visibility)
+  const [current, previous] = await Promise.all([
+    summarize(windowOf(options, config.lookback_days ?? 7)),
+    options.previous ? summarize(inclusiveRange(options.previous)) : undefined,
+  ])
+  return { data: previous ? withPrevious(current, previous) : current, type: 'activity_summary' }
 }
 
 const resolveHrZones = async (

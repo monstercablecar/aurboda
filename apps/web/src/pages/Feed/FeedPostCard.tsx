@@ -22,6 +22,7 @@ import { ArticleContent } from './ArticleContent'
 import { ChallengeShareContent } from './ChallengeShareContent'
 import { DashboardShareContent, DashboardShareFallback } from './DashboardShareContent'
 import { ExerciseShareContent, ExerciseShareFallback } from './ExerciseShareContent'
+import { postPermalinkPath } from './post-permalink'
 import { postTagLine } from './post-tag-line'
 import {
   structuredHasNativeExerciseChart,
@@ -210,17 +211,22 @@ export const FeedPostCard = ({
   author,
   footer,
   visitor = false,
+  permalink: linked = true,
 }: {
   post: FeedPost
   author: PostAuthor
   footer?: ComponentChildren
   /** Rendered for an unauthenticated visitor (the public profile), who can't fetch the owner's live data. */
   visitor?: boolean
+  /** False for a post that does not exist yet (a preview): the timestamp links nowhere. */
+  permalink?: boolean
 }) => {
   const vis = VISIBILITY[post.visibility]
   const when = formatDistanceToNow(new Date(post.created_at), { addSuffix: true })
   const { chart, route, standings, trend } = mediaUrls(post, author.username)
   const tags = postTagLine(post, visitor)
+  const permalink = linked ? postPermalinkPath(author.username, post) : null
+  const time = <time title={new Date(post.created_at).toLocaleString()}>{when}</time>
 
   return (
     <article class="feed-post">
@@ -229,7 +235,7 @@ export const FeedPostCard = ({
         <div class="feed-post-ident">
           <span class="feed-post-name">{author.displayName}</span>
           <span class="feed-post-handle">
-            {author.handle} · <time title={new Date(post.created_at).toLocaleString()}>{when}</time> ·{' '}
+            {author.handle} · {permalink ? <a href={permalink}>{time}</a> : time} ·{' '}
             <span title={vis.label} aria-label={vis.label}>
               {vis.icon}
             </span>

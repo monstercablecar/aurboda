@@ -3,6 +3,7 @@ import type {
   ArticleDraftResponse,
   ArticleDraftsResponse,
   ArticleExportResponse,
+  ArticlePreviewResponse,
   CreateArticleDraftBody,
   CreateArticleBody,
   DashboardSharePreviewResponse,
@@ -15,12 +16,16 @@ import type {
   FeedPostsResponse,
   FeedVisibility,
   FollowActorResponse,
+  FollowedTag,
+  FollowedTagsResponse,
   FollowerActor,
   FollowerResponse,
   FollowersQuery,
   FollowersResponse,
   FollowingActor,
   FollowingResponse,
+  FollowTagResponse,
+  PreviewArticleBody,
   ReplyToPostBody,
   ShareActivityBody,
   ShareChallengeBody,
@@ -96,6 +101,14 @@ export const shareExercise = async (body: ShareExerciseBody): Promise<FeedPost> 
   })
   if (!response.data.post) throw new Error('Share failed: no post returned')
   return response.data.post
+}
+
+/** What an article (draft) would federate as, and how Mastodon would show it; creates nothing. */
+export const previewArticle = async (body: PreviewArticleBody): Promise<ArticlePreviewResponse> => {
+  const response = await axios.post<ArticlePreviewResponse>(`${API_URL}/feed/articles/preview`, body, {
+    headers: authHeaders(),
+  })
+  return response.data
 }
 
 /** What sharing this exercise with these opt-ins would post: the Note HTML and the native payload. Creates nothing. */
@@ -291,6 +304,34 @@ export const updateFollowingNotify = async (id: string, notify_on_post: boolean)
   return response.data.actor
 }
 
+/** List the hashtags the user follows (accepted + pending), by tag. */
+export const fetchFollowedTags = async (): Promise<FollowedTag[]> => {
+  const response = await axios.get<FollowedTagsResponse>(`${API_URL}/feed/followed-tags`, {
+    headers: authHeaders(),
+  })
+  return response.data.followed_tags
+}
+
+/** Follow a hashtag (with or without `#`) through its tag actor. */
+export const followTag = async (tag: string): Promise<FollowedTag> => {
+  let response
+  try {
+    response = await axios.post<FollowTagResponse>(
+      `${API_URL}/feed/followed-tags`,
+      { tag },
+      { headers: authHeaders() },
+    )
+  } catch (error) {
+    throw new Error(apiErrorMessage(error, 'Couldn’t follow that tag. Check it and try again.'))
+  }
+  if (!response.data.followed_tag) throw new Error('Follow failed: no tag returned')
+  return response.data.followed_tag
+}
+
+export const unfollowTag = async (tag: string): Promise<void> => {
+  await axios.delete(`${API_URL}/feed/followed-tags/${encodeURIComponent(tag)}`, { headers: authHeaders() })
+}
+
 export const fetchFollowers = async (status: FollowersQuery['status'] = 'all'): Promise<FollowerActor[]> => {
   const response = await axios.get<FollowersResponse>(`${API_URL}/feed/followers`, {
     headers: authHeaders(),
@@ -320,10 +361,10 @@ export const rejectFollower = async (id: string): Promise<void> => {
  * newest-first). Pass the previous page's `next_cursor` to page; a null cursor
  * (in the response) means there are no more.
  */
-export const fetchTimeline = async (cursor?: string): Promise<TimelineResponse> => {
+export const fetchTimeline = async (cursor?: string, tag?: string | null): Promise<TimelineResponse> => {
   const response = await axios.get<TimelineResponse>(`${API_URL}/feed/timeline`, {
     headers: authHeaders(),
-    params: cursor ? { cursor } : {},
+    params: { ...(cursor ? { cursor } : {}), ...(tag ? { tag } : {}) },
   })
   return response.data
 }
@@ -411,7 +452,7 @@ export const fetchFeedPostReplies = async (postId: string): Promise<TimelineEntr
   return response.data.replies
 }
 
-/** Who favourited or boosted one of YOUR feed posts, newest first. */
+/** Who favourited, boosted or quoted one of YOUR feed posts, newest first. */
 export const fetchFeedPostReactions = async (postId: string): Promise<FeedPostReaction[]> => {
   const response = await axios.get<FeedPostReactionsResponse>(
     `${API_URL}/feed/${encodeURIComponent(postId)}/reactions`,

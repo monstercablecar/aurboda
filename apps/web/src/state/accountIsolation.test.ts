@@ -15,6 +15,7 @@ const deferred = <T>() => {
 let storage: Storage
 beforeEach(() => {
   vi.resetModules()
+  sessionStorage.clear()
   const values = new Map<string, string>()
   storage = {
     get length() {
@@ -50,6 +51,8 @@ test('direct user and token transitions replace caches and remove only dashboard
   const old = query.queryClient
   old.setQueryData(['private'], 'alice data')
   storage.setItem('aurboda:dashboard:alice', 'private dashboard')
+  sessionStorage.setItem('aurboda:dashboardData:alice:home', 'private period data')
+  sessionStorage.setItem('unrelated', 'keep')
   storage.setItem('work:draft:alice', 'unfinished draft')
   storage.setItem('unrelated', 'keep')
   auth.value = { user: 'bob', token: 'b' }
@@ -57,11 +60,15 @@ test('direct user and token transitions replace caches and remove only dashboard
   expect(old.getQueryCache().getAll()).toHaveLength(0)
   expect(query.queryClient.getQueryData(['private'])).toBeUndefined()
   expect(storage.getItem('aurboda:dashboard:alice')).toBeNull()
+  expect(sessionStorage.getItem('aurboda:dashboardData:alice:home')).toBeNull()
+  expect(sessionStorage.getItem('unrelated')).toBe('keep')
   expect(storage.getItem('work:draft:alice')).toBe('unfinished draft')
   expect(storage.getItem('unrelated')).toBe('keep')
   const bob = query.queryClient
+  sessionStorage.setItem('aurboda:dashboardData:bob:home', 'old token data')
   auth.value = { user: 'bob', token: 'new-b' }
   expect(query.queryClient).not.toBe(bob)
+  expect(sessionStorage.getItem('aurboda:dashboardData:bob:home')).toBeNull()
   const same = query.queryClient
   auth.value = { user: 'bob', token: 'new-b', is_admin: true }
   expect(query.queryClient).toBe(same)
@@ -162,9 +169,11 @@ test('Axios fence stops old query continuations from restoring persistent dashbo
 
 test('native startup uses bridge credentials and later native/direct changes retire the session', async () => {
   storage.setItem('auth', JSON.stringify({ user: 'saved', token: 'saved-token' }))
+  sessionStorage.setItem('aurboda:dashboardData:saved:home', 'saved account period')
   window.AurbodaNative = { getAuth: () => JSON.stringify({ user: 'native', token: 'native-token' }) }
   const { auth, query } = await setup()
   expect(auth.value.user).toBe('native')
+  expect(sessionStorage.getItem('aurboda:dashboardData:saved:home')).toBeNull()
   const initial = query.queryClient
   auth.value = { user: 'native', token: 'replacement-native' }
   expect(query.queryClient).not.toBe(initial)

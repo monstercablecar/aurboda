@@ -43,6 +43,14 @@ const parsePrefillTime = (value: string | undefined): string | undefined => {
 /** Seed for a form's time field: the `?time=` prefill when there is one, else now. */
 const seedTime = (initialTime: string | undefined): string => initialTime ?? nowLocal()
 
+const confirmedFitRecords = (result: Awaited<ReturnType<typeof uploadFitFile>>) => {
+  const records = Array.isArray(result.data) ? result.data : result.data ? [result.data] : []
+  if (!result.success || !records.length || records.some((record) => !record.id)) {
+    throw new Error('The server did not confirm a complete import. Some files may already be saved.')
+  }
+  return records
+}
+
 interface FormProps {
   /** Called after successful creation. If it returns true, the form was navigated away. */
   onCreated: (entityType: string, entityId: string | undefined) => boolean
@@ -68,9 +76,7 @@ export const FitUpload = ({ onCreated }: FormProps) => {
         let lastId: string | undefined
         for (const file of Array.from(files)) {
           const result = await uploadFitFile(file)
-          const records = Array.isArray(result.data) ? result.data : result.data ? [result.data] : []
-          if (!result.success || !records.length || records.some((record) => !record.id))
-            throw new Error('The server did not confirm a complete import. Some files may already be saved.')
+          const records = confirmedFitRecords(result)
           const data = records[0]
           lastId = data?.id
         }

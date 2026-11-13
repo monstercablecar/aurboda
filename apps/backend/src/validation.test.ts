@@ -4,7 +4,7 @@ import { addActivityBodySchema, createSharedDashboardBodySchema } from '@aurboda
 import { describe, expect, test, vi } from 'vitest'
 import { z } from 'zod'
 
-import { validateBody, validateQuery, validationErrors } from './validation.ts'
+import { validateBody, validateQuery, validateQueryOneOf, validationErrors } from './validation.ts'
 
 vi.mock('./services/audit-log.ts', () => ({
   auditWarn: vi.fn(),
@@ -257,6 +257,68 @@ test('validation audit excludes dynamic paths, dynamic keys and echoed error det
   })
   validateBody(schema)(req, createMockRes(), vi.fn())
   expect(auditWarn).toHaveBeenLastCalledWith('testuser', 'data', 'Validation error: POST /:id', {
+    issue_count: 1,
+  })
+})
+
+describe('validateQueryOneOf', () => {
+  const rangeSchema = z.object({ from: z.string(), to: z.string() })
+  const idSchema = z.object({ id: z.string() })
+  const middleware = validateQueryOneOf((query) =>
+    'from' in query || 'to' in query ? rangeSchema : idSchema,
+  )
+
+  test('validates with the schema the query selects and passes the parsed query on', () => {
+    const req = createMockReq({ query: { from: 'a', to: 'b' } as unknown as Request['query'] })
+    const next = vi.fn() as unknown as NextFunction
+
+    middleware(req, createMockRes(), next)
+
+    expect(next).toHaveBeenCalled()
+    expect(req.query).toEqual({ from: 'a', to: 'b' })
+  })
+
+  test('reports the errors of the selected schema only', () => {
+    const req = createMockReq({ query: { from: 'a', id: 'x' } as unknown as Request['query'] })
+    const res = createMockRes()
+    const next = vi.fn() as unknown as NextFunction
+
+    middleware(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith({ error: { to: [expect.any(String)] }, success: false })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  test('falls through to the other schema when the selector picks it', () => {
+    const req = createMockReq({ query: { id: 'x' } as unknown as Request['query'] })
+    const next = vi.fn() as unknown as NextFunction
+
+    middleware(req, createMockRes(), next)
+
+    expect(next).toHaveBeenCalled()
+    expect(req.query).toEqual({ id: 'x' })
+  })
+})
+
+test('selected query validation audit excludes dynamic paths, keys and error details', () => {
+  const schema = z.record(
+    z.string(),
+    z.string().refine(() => false, { message: 'private medical answer' }),
+  )
+  const req = createMockReq({
+    method: 'GET',
+    query: { 'private person name': 'secret' },
+    path: '/secret-token',
+    route: { path: '/:id' },
+    user: 'testuser',
+  })
+  const res = createMockRes()
+  const next = vi.fn()
+  validateQueryOneOf(() => schema)(req, res, next)
+  expect(res.status).toHaveBeenCalledWith(400)
+  expect(next).not.toHaveBeenCalled()
+  expect(auditWarn).toHaveBeenLastCalledWith('testuser', 'data', 'Validation error: GET /:id', {
     issue_count: 1,
   })
 })

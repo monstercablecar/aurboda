@@ -7,9 +7,13 @@ import {
   shareDashboardPeriodBodySchema,
   shareExerciseBodySchema,
   followActorBodySchema,
+  followTagBodySchema,
   followersQuerySchema,
+  hashtagInputSchema,
+  publicTagPostsQuerySchema,
   iso8601DateTimeSchema,
   postTagsInputSchema,
+  previewArticleBodySchema,
   publishArticleDraftBodySchema,
   replyToPostBodySchema,
   shareActivityBodySchema,
@@ -22,9 +26,11 @@ import {
 import { z } from 'zod'
 
 import type { FeedDeliver } from '../routes/feed-router.ts'
+import type { ArticlePreviewer } from '../services/article-preview.ts'
 import type { ReactionActions, ReactionResult, ReplyResult } from '../services/feed-reactions.ts'
 import type { FollowerActions } from '../services/followers.ts'
 import type { FollowActions } from '../services/following.ts'
+import type { PublicTagActions } from '../services/public-tags.ts'
 import type { RetroEnrichTrigger } from '../services/timeline-retro-enrich.ts'
 
 import {
@@ -35,15 +41,15 @@ import {
   createExercisePost,
   createFeedPost,
   deleteArticleDraft,
-  deleteFeedPost,
+  deleteFeedPostWithQuotes,
   getActivityById,
   getArticleDraft,
   getFeedPostById,
   getTimelineEntryById,
   listArticleDrafts,
+  listFeedFollowedTags,
   listFeedFollowers,
   listFeedFollowing,
-  listFeedPostReactions,
   updateArticleDraft,
   updateFeedFollowingNotify,
   updateFeedPost,
@@ -70,7 +76,7 @@ import {
   previewExerciseShare,
   resolveExerciseShare,
 } from '../services/feed-exercise-share.ts'
-import { MAX_POST_REACTIONS, serializeFeedPostReaction } from '../services/feed-reactions.ts'
+import { listPostReactions } from '../services/feed-reactions.ts'
 import {
   getFeedPage,
   normalizeFeedMessage,
@@ -78,7 +84,7 @@ import {
   serializeFeedPost,
 } from '../services/feed.ts'
 import { serializeFollower } from '../services/followers.ts'
-import { serializeFollowing } from '../services/following.ts'
+import { serializeFollowedTag, serializeFollowing } from '../services/following.ts'
 import {
   activityKindTag,
   articleTexts,
@@ -110,6 +116,10 @@ export interface FeedToolsOptions {
   retroEnrichTimeline?: RetroEnrichTrigger
   /** Canonical web origin, to build a shared challenge's public URL (#994). */
   webHost?: string
+  /** The public tag pages (`list_public_tag_posts`); absent, the tool reports none. */
+  publicTagActions?: Pick<PublicTagActions, 'page'>
+  /** The article preview (`preview_article`), with the chart data it draws from; absent, the tool reports unavailable. */
+  previewArticle?: ArticlePreviewer
 }
 
 export const registerFeedTools = (server: McpServer, user: string, options: FeedToolsOptions = {}) => {
@@ -118,6 +128,8 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
     deliver,
     followActions,
     followerActions,
+    previewArticle,
+    publicTagActions,
     reactionActions,
     retroEnrichTimeline,
     webHost,
@@ -304,7 +316,7 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
 
   server.tool(
     'create_article',
-    'Publish a long-form ARTICLE to your feed: a title, markdown prose, and inline chart blocks over locked time windows. `blocks` is an ordered list of `{type:"prose", markdown}` or `{type:"chart", metric, start?, end?, bucket?, caption?}`. A chart block over `[start, end]` re-resolves live against that window; omit its start/end to inherit `default_start`/`default_end`. A `{type:"challenge", challenge_url, caption?}` block embeds a challenge\'s live standings and a join link; take `challenge_url` from `list_challenges` (`share_url`) or from a joined challenge\'s URL. Use this (not `share_activity`) for a written analysis spanning multiple charts. It publishes (and federates) immediately; to let the user review first, use `create_article_draft` instead.',
+    'Publish a long-form ARTICLE to your feed: a title, markdown prose, and inline chart blocks over locked time windows. `blocks` is an ordered list of `{type:"prose", markdown}` or `{type:"chart", metric, start?, end?, bucket?, caption?}`. A chart block over `[start, end]` re-resolves live against that window; omit its start/end to inherit `default_start`/`default_end`. A `{type:"challenge", challenge_url, caption?}` block embeds a challenge\'s live standings and a join link; take `challenge_url` from `list_challenges` (`share_url`) or from a joined challenge\'s URL. A `{type:"impact", activity, activity_type, window_minutes?, start?, end?, caption?}` block shows HRV, heart rate and stress before, during and after each session of one activity over its window (like `get_activity_impact` with `match: "exact"`); name `activity` exactly as `get_hrv_activities_correlation` lists it. Use this (not `share_activity`) for a written analysis spanning multiple charts. It publishes (and federates) immediately; to let the user review first, use `create_article_draft` instead.',
     { ...createArticleBodySchema.shape },
     async (body) => {
       const built = await validateArticleContent({
@@ -355,7 +367,7 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
 
   server.tool(
     'create_article_draft',
-    'Save an ARTICLE DRAFT: a private, unpublished article the user can keep working on in the web editor (or via `update_article_draft`) and publish when ready. A draft is never federated or shown on any feed. It may be incomplete — an empty title, a chart block without `metric`, a correlation block without `trigger`/`outcome`. `article` takes the same shape as `create_article` (`title`, `blocks`, `default_start`, `default_end`); `visibility` is the audience it gets once published.',
+    'Save an ARTICLE DRAFT: a private, unpublished article the user can keep working on in the web editor (or via `update_article_draft`) and publish when ready. A draft is never federated or shown on any feed. It may be incomplete — an empty title, a chart block without `metric`, a correlation block without `trigger`/`outcome`, an impact block without `activity`. `article` takes the same shape as `create_article` (`title`, `blocks`, `default_start`, `default_end`); `visibility` is the audience it gets once published.',
     { ...createArticleDraftBodySchema.shape },
     async ({ article, visibility }) => {
       const record = await createArticleDraft(user, {
@@ -431,8 +443,18 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
   )
 
   server.tool(
+    'preview_article',
+    "Preview what an ARTICLE (or an unfinished draft) WOULD federate, creating nothing: the Note `content` HTML, its title `name`, tags and numbered figure `attachments` (alt text, and whether Mastodon shows each: it keeps the first 4), `publish_error` (what still keeps it from publishing, or null), and `mastodon`: an emulation of Mastodon's web UI — the content after Mastodon's sanitiser without the trailing hashtag paragraph, and the hashtag bar — plus `notes` on what Mastodon changes for this post. Only complete blocks are previewed. `include_images` also returns each shown figure as SVG markup (`image_svg`, null when the block has no data to draw); it is meant for UIs.",
+    { ...previewArticleBodySchema.shape },
+    async (body) => {
+      if (!previewArticle) return errorResponse('Article preview is not available')
+      return jsonResponse(await previewArticle(user, body))
+    },
+  )
+
+  server.tool(
     'export_article_markdown',
-    'Export a published ARTICLE as paste-ready markdown for a text-only destination (e.g. r/QuantifiedSelf): the title, the prose blocks verbatim, and one image link per chart/correlation block pointing at its rendered PNG. Paste the result and add your own write-up around the linked charts.',
+    'Export a published ARTICLE as paste-ready markdown for a text-only destination (e.g. r/QuantifiedSelf): the title, the prose blocks verbatim, and one image link per chart, correlation, challenge or impact block pointing at its rendered PNG. Paste the result and add your own write-up around the linked charts.',
     { id: z.string().uuid().describe('Feed post ID (must be an article)') },
     async ({ id }) => {
       const post = await getFeedPostById(user, id)
@@ -467,16 +489,16 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
     async ({ id }) => {
       const existing = await getFeedPostById(user, id)
       if (!existing) return errorResponse('Feed post not found')
-      await deleteFeedPost(user, id)
+      const stamps = await deleteFeedPostWithQuotes(user, id)
       // Retract from followers with a Delete{Tombstone}, same as the REST route.
-      deliver?.deleted(user, existing)
+      deliver?.deleted(user, existing, stamps ?? [])
       return jsonResponse({ deleted: true, id })
     },
   )
 
   server.tool(
     'list_following',
-    'List the actors you follow (accepted and pending), with their handle, display name, and acceptance state.',
+    'List the people you follow (accepted and pending), with their handle, display name, and acceptance state. Followed hashtags are listed by `list_followed_tags`.',
     {},
     async () => {
       const records = await listFeedFollowing(user)
@@ -486,12 +508,22 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
 
   server.tool(
     'list_timeline',
-    'List your home timeline: posts received from the actors you follow, newest first. Pass `cursor` (from a previous call) to page.',
+    'List your home timeline: posts received from the actors and hashtags you follow, newest first. Pass `cursor` (from a previous call) to page, and `tag` to list only posts carrying that hashtag. Each entry has its `tags`; a card boosted by a followed tag actor has `boosted_by.tag`.',
     { ...timelineQuerySchema.shape },
-    async ({ cursor, limit }) => {
-      const page = await getTimelinePage(user, limit, cursor, { origin: webHost })
+    async ({ cursor, limit, tag }) => {
+      const page = await getTimelinePage(user, limit, cursor, { origin: webHost, tag })
       retroEnrichTimeline?.(user)
       return jsonResponse(page)
+    },
+  )
+
+  server.tool(
+    'list_public_tag_posts',
+    "List a public tag page (`/tags/<tag>`): the public posts carrying the hashtag, from this server and others, newest first — what this server's instance actor receives from the tag's actor on the tag actor host, plus this server's own public posts with the tag. Only tags the admin configured have a page. Pass `cursor` (from a previous call) to page.",
+    { tag: hashtagInputSchema, ...publicTagPostsQuerySchema.shape },
+    async ({ cursor, tag }) => {
+      const result = publicTagActions ? await publicTagActions.page(tag, cursor) : { ok: false as const }
+      return result.ok ? jsonResponse(result.page) : errorResponse(`No public page for #${tag}`)
     },
   )
 
@@ -579,12 +611,11 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
 
   server.tool(
     'list_feed_post_reactions',
-    'List who favourited or boosted one of YOUR feed posts (by feed post id), newest first. Remote servers push these as `Like`/`Announce`; a reaction with no resolvable actor still counts.',
+    'List who favourited, boosted or quoted one of YOUR feed posts (by feed post id), newest first. Likes and boosts are the `Like`/`Announce` remote servers push; a quote (kind `quote`, with the quoting post in `url`) is one whose FEP-044f quote request we approved. A reaction with no resolvable actor still counts.',
     { id: z.string().uuid().describe('Feed post ID') },
     async ({ id }) => {
       if ((await getFeedPostById(user, id)) == null) return errorResponse('Feed post not found')
-      const rows = await listFeedPostReactions(user, id, MAX_POST_REACTIONS)
-      return jsonResponse(rows.map(serializeFeedPostReaction))
+      return jsonResponse(await listPostReactions(user, id))
     },
   )
 
@@ -609,6 +640,40 @@ export const registerFeedTools = (server: McpServer, user: string, options: Feed
       const removed = await followActions.unfollow(user, id)
       if (!removed) return errorResponse('Not following that actor')
       return jsonResponse({ id, unfollowed: true })
+    },
+  )
+
+  server.tool(
+    'list_followed_tags',
+    'List the hashtags you follow (accepted and pending). Each is the follow of its tag actor (e.g. `running@tags.pub`). Tag follows never raise post notifications.',
+    {},
+    async () => {
+      const records = await listFeedFollowedTags(user)
+      return jsonResponse(records.flatMap((record) => serializeFollowedTag(record) ?? []))
+    },
+  )
+
+  server.tool(
+    'follow_tag',
+    "Follow a hashtag, e.g. `#running`: follows the tag actor `<tag>@<tag actor host>` (default `running@tags.pub`), which boosts every public post it sees carrying that hashtag into your home timeline. Pending until the tag actor accepts. Filter the timeline to it with `list_timeline`'s `tag`.",
+    { ...followTagBodySchema.shape },
+    async ({ tag }) => {
+      if (!followActions) return errorResponse('Following is not available')
+      const result = await followActions.followTag(user, tag)
+      if (!result.ok) return errorResponse(result.error)
+      return jsonResponse(serializeFollowedTag(result.record))
+    },
+  )
+
+  server.tool(
+    'unfollow_tag',
+    'Unfollow a hashtag (by the tag, with or without `#`). Sends an Undo{Follow} to its tag actor and removes the posts it boosted from your timeline.',
+    { ...followTagBodySchema.shape },
+    async ({ tag }) => {
+      if (!followActions) return errorResponse('Following is not available')
+      const removed = await followActions.unfollowTag(user, tag)
+      if (!removed) return errorResponse('Not following that tag')
+      return jsonResponse({ tag, unfollowed: true })
     },
   )
 

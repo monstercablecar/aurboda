@@ -5,9 +5,11 @@ import {
   articleEntryHtml,
   buildArticlesAtom,
   buildOfficialFeedAtom,
+  buildTagFeedAtom,
   officialFeedTitle,
   postEntryHtml,
   postEntryTitle,
+  remoteEntryTitle,
 } from './article-atom.ts'
 
 const source = (overrides: Partial<AtomArticleSource> = {}): AtomArticleSource => ({
@@ -172,6 +174,7 @@ describe('buildOfficialFeedAtom', () => {
           created_at: new Date('2026-07-08T10:00:00Z'),
           html: '<p>Hi</p>',
           id: 'abc',
+          origin: 'local',
           title: 'Morning run',
           updated_at: new Date('2026-07-09T10:00:00Z'),
           username: 'alice',
@@ -190,7 +193,75 @@ describe('buildOfficialFeedAtom', () => {
     expect(xml).not.toContain('\n  <author>')
   })
 
+  test('carries a remote post as received, linking its original and titled by its first line', () => {
+    const xml = buildOfficialFeedAtom({
+      apiBaseUrl: 'https://qs.example/api',
+      entries: [
+        {
+          actor_uri: 'https://aurboda.net/users/fiddur',
+          content: '<p>Release 2.0 &amp; more</p><p>Details follow.</p>',
+          display_name: 'Fredrik',
+          handle: '@fiddur@aurboda.net',
+          images: [{ url: 'https://aurboda.net/a.png' }],
+          note_uri: 'https://aurboda.net/notes/1',
+          origin: 'remote',
+          published_at: new Date('2026-07-08T10:00:00Z'),
+          updated_at: new Date('2026-07-09T10:00:00Z'),
+          url: 'https://aurboda.net/u/fiddur/posts/1',
+        },
+      ],
+      now: new Date('2030-01-01T00:00:00Z'),
+      webHost: 'https://qs.example',
+    })
+    expect(xml).toContain('<id>https://aurboda.net/notes/1</id>')
+    expect(xml).toContain('<title type="text">Release 2.0 &amp; more</title>')
+    expect(xml).toContain('href="https://aurboda.net/u/fiddur/posts/1"')
+    expect(xml).toContain('<author><name>Fredrik</name><uri>https://aurboda.net/users/fiddur</uri></author>')
+    expect(xml).toContain('<published>2026-07-08T10:00:00.000Z</published>')
+    expect(xml).toContain('&lt;p&gt;Details follow.&lt;/p&gt;')
+    expect(xml).toContain('&lt;img src=&quot;https://aurboda.net/a.png&quot;')
+  })
+
   test('falls back to a plain title when the web host is not a URL', () => {
     expect(officialFeedTitle('not a url')).toBe('Blog')
+  })
+})
+
+describe('remoteEntryTitle', () => {
+  test('is the first non-empty line of the text, else the author', () => {
+    expect(remoteEntryTitle({ content: '<p></p><p>Hello<br>world</p>' }, 'Bob')).toBe('Hello')
+    expect(remoteEntryTitle({ content: `<p>${'word '.repeat(30)}</p>` }, 'Bob')).toMatch(/…$/)
+    expect(remoteEntryTitle({ content: '<p><img src="x"></p>' }, 'Bob')).toBe('Bob')
+  })
+})
+
+describe('buildTagFeedAtom', () => {
+  test('escapes a hostile remote author and url, and ids each entry by its note id', () => {
+    const xml = buildTagFeedAtom({
+      apiBaseUrl: 'https://aurboda.example/api',
+      entries: [
+        {
+          actor_uri: 'https://peer.example/users/eve',
+          content: '<p>a & b</p></content><script>x</script>',
+          display_name: '</name></author><entry><id>forged</id>',
+          handle: '@eve@peer.example',
+          images: [],
+          note_uri: 'https://peer.example/notes/1',
+          published_at: new Date('2026-11-01T10:00:00Z'),
+          updated_at: new Date('2026-11-01T10:00:00Z'),
+          url: 'https://peer.example/@eve/1?a=1&b="2"',
+        },
+      ],
+      now: new Date('2026-11-10T00:00:00Z'),
+      tag: 'aurboda',
+      webHost: 'https://aurboda.example',
+    })
+    expect(xml).toContain('<id>https://peer.example/notes/1</id>')
+    expect(xml).not.toContain('<id>forged</id>')
+    expect(xml).not.toContain('<script>')
+    expect(xml).toContain('&lt;/name&gt;&lt;/author&gt;&lt;entry&gt;&lt;id&gt;forged&lt;/id&gt;')
+    expect(xml).toContain('&lt;p&gt;a &amp; b&lt;/p&gt;&lt;/content&gt;&lt;script&gt;')
+    expect(xml).toContain('href="https://peer.example/@eve/1?a=1&amp;b=&quot;2&quot;"')
+    expect(xml.match(/<entry>/g)).toHaveLength(1)
   })
 })

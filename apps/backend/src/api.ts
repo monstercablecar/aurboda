@@ -3,6 +3,7 @@ import cors from 'cors'
 import express, { json, type NextFunction, type Request, type Response } from 'express'
 import { Client } from 'pg'
 
+import type { FeedPostRecord } from './db/index.ts'
 import type { FeedDeliver } from './routes/feed-router.ts'
 
 import { auditOperation, summarizeAuditError } from './api/audit-body.ts'
@@ -10,7 +11,7 @@ import { registerAuthRoutes } from './api/auth-routes.ts'
 import { gateFederation } from './api/federation-gate.ts'
 import { createAdminMiddleware, createAuditLogMiddleware, createAuthMiddleware } from './api/middleware.ts'
 import { registerOAuthRoutes } from './api/oauth-routes.ts'
-import { mountRestRouters } from './api/rest-routes.ts'
+import { mountRestRouters, postChartDeps } from './api/rest-routes.ts'
 import { mountSyncRouter } from './api/sync-setup.ts'
 import { createUsageMiddleware } from './api/usage-middleware.ts'
 import { setupOuraWebhook, setupStravaWebhook } from './api/webhooks-setup.ts'
@@ -36,6 +37,7 @@ import {
   insertRawRecord,
   insertTimeSeries,
   listChallengesAwaitingResult,
+  listPublicFeedPosts,
   listReplyUncheckedEntries,
   listUnenrichedAurbodaEntries,
   getOAuthToken,
@@ -57,7 +59,7 @@ import {
   upsertActivityTrack,
   upsertSyncState,
 } from './db/index.ts'
-import { httpError, isHttpError } from './http-error.ts'
+import { errorResponseBody, httpError, isHttpError } from './http-error.ts'
 import { garminClient } from './integrations/garmin/client.ts'
 import { garminDataTypes } from './integrations/garmin/process.ts'
 import { syncActivityDetails, syncGarminDataType } from './integrations/garmin/sync.ts'
@@ -87,6 +89,8 @@ import {
   deliverFeedReplyPost,
   deliverFeedReplyUpdate,
   deliverFeedUpdate,
+  deliverQuoteStampDeletes,
+  revokeQuoteStamps,
   toDeliverableArticle,
   toDeliverableChallenge,
   toDeliverableDashboard,
@@ -94,19 +98,23 @@ import {
   toDeliverableReply,
 } from './services/activitypub/deliver.ts'
 import {
+  buildActorPerson,
   createFeedFederation,
   deliverActorDelete,
   deliverActorUpdate,
 } from './services/activitypub/federation.ts'
 import { configureFederationLogging } from './services/activitypub/logging.ts'
+import { createPostUpdateResender, deliverPostUpdate } from './services/activitypub/post-update-resend.ts'
 import { createTimelineBackfiller } from './services/activitypub/timeline-backfill.ts'
 import { createAurbodaEnrichAttempt } from './services/activitypub/timeline-enrich.ts'
 import { createAdminUsers } from './services/admin-users.ts'
+import { createArticlePreviewer } from './services/article-preview.ts'
 import { createAuditLogPruneQueue } from './services/audit-log-prune-queue.ts'
 import { auditError, auditInfo, pruneAuditLog } from './services/audit-log.ts'
 import { createAutoshareDeps } from './services/autoshare-deps.ts'
 import { type AutoshareQueue, createAutoshareQueue } from './services/autoshare-queue.ts'
 import { evaluateAutoshareWindow } from './services/autoshare.ts'
+import { backfillMealFoodItemNames } from './services/backfill-meal-food-item-names.ts'
 import { triggerCalorieComputation } from './services/calorie-computation.ts'
 import { createCalorieQueue, type CalorieQueue } from './services/calorie-queue.ts'
 import { closeCentralDb, getCentralDb, initializeCentralDb } from './services/central-db.ts'
@@ -126,6 +134,7 @@ import { createDetectionTrigger, type DetectionTrigger } from './services/detect
 import { runDetectionForUser } from './services/detection-worker.ts'
 import { createDumpExporter, createDumpLinkIssuer } from './services/export-dump.ts'
 import { createExportTokens } from './services/export-token.ts'
+import { reconcileExportedSharedFoodItems } from './services/exported-shared-food.ts'
 import { createReactionActions } from './services/feed-reactions.ts'
 import {
   createFeedRefreshDeps,
@@ -141,13 +150,41 @@ import {
   rejectFollower,
   serializeFollower,
 } from './services/followers.ts'
-import { type FollowActions, followActor, unfollowActor } from './services/following.ts'
+import {
+  type FollowActions,
+  followActor,
+  followTag,
+  unfollowActor,
+  unfollowTag,
+} from './services/following.ts'
 import { createGeocodeQueue } from './services/geocode-queue.ts'
 import { createInvitationAuth } from './services/invitation.ts'
 import { getPlaceVisits, type NamedLocationsChanged } from './services/locations.ts'
+import {
+  ensureDefaultOfficialFeed,
+  officialRemoteHandles,
+  readOfficialFeedSetting,
+} from './services/official-feed.ts'
 import { createPeopleReminderScheduler } from './services/people-reminders.ts'
 import { createPgBoss } from './services/pg-boss.ts'
 import { installProcessGuards } from './services/process-guards.ts'
+import { createPublicTagPruneQueue } from './services/public-tag-prune-queue.ts'
+import {
+  applyInstanceTagFollowsAtStartup,
+  createLocalPublicTagPosts,
+  createPublicTagActions,
+  createPublicTagInboxHooks,
+  createPublicTagIngest,
+  readInstanceFollowedTags,
+  readPublicTagPages,
+  readPublicTagRetentionDays,
+} from './services/public-tags.ts'
+import {
+  createRelayActions,
+  createRelayInboxHooks,
+  ensureDefaultRelays,
+  relayRecipients,
+} from './services/relays.ts'
 import { safeFetchGet } from './services/safe-fetch.ts'
 import { initSentry, Sentry } from './services/sentry.ts'
 import {
@@ -161,6 +198,7 @@ import { garminActivityExternalId } from './services/source-identity.ts'
 import { createStravaQueue, type StravaQueue } from './services/strava-queue.ts'
 import { createSyncProvider } from './services/sync-provider.ts'
 import { createSyncScheduler } from './services/sync-scheduler.ts'
+import { readTagActorHost } from './services/tag-actor-host.ts'
 import { createTimelineHub } from './services/timeline-hub.ts'
 import {
   backfillReplyLinks,
@@ -495,6 +533,14 @@ const main = async () => {
     }
     for (const user of users) {
       try {
+        await reconcileExportedSharedFoodItems(user)
+        await backfillMealFoodItemNames(user)
+      } catch (error) {
+        console.error(`⚠️ Food item reference upkeep failed for ${user}:`, error)
+      }
+    }
+    for (const user of users) {
+      try {
         const { days, skipped: alreadyDone } = await rematerializeSupersededOnce(user)
         if (!alreadyDone) console.info(`🔁 Re-materialized supersession for ${user} over ${days} day(s)`)
       } catch (error) {
@@ -544,9 +590,56 @@ const main = async () => {
     async () => (await centralDb.getSignupMode()) === 'open',
     isDeletedUser,
     isReadOnly,
+    {
+      instanceKeys: () => centralDb.getOrCreateInstanceActorKeyPair(),
+      publicTagPosts: createPublicTagIngest(centralDb),
+      relays: createRelayInboxHooks(centralDb),
+      tagFollows: createPublicTagInboxHooks(centralDb),
+    },
   )
   const backfill = createTimelineBackfiller(feedFederation, webHost)
-  const feedDeps = { apiBaseUrl, federation: feedFederation, origin: webHost }
+  const feedDeps = {
+    apiBaseUrl,
+    federation: feedFederation,
+    listRelayRecipients: () => relayRecipients(centralDb),
+    origin: webHost,
+    publicTagPosts: createLocalPublicTagPosts({
+      localActor: (ctx, user) => buildActorPerson(ctx, user, webHost),
+      publicTagPages: () => readPublicTagPages(centralDb),
+      store: centralDb,
+    }),
+    tagActorHost: () => readTagActorHost(centralDb),
+  }
+  const relayActions = createRelayActions({ federation: feedFederation, origin: webHost, store: centralDb })
+  const publicTagActions = createPublicTagActions({
+    federation: feedFederation,
+    origin: webHost,
+    store: centralDb,
+    tagActorHost: () => readTagActorHost(centralDb),
+  })
+  try {
+    if (
+      await ensureDefaultOfficialFeed({
+        centralDb,
+        countUsers: async () => (await listUserNames(userDb)).length,
+      })
+    ) {
+      console.info('📰 New installation: the official feed lists the Aurboda blog by default')
+    }
+  } catch (error) {
+    console.error('⚠️ Default official feed not set:', error)
+  }
+  postListenCallbacks.push(() =>
+    applyInstanceTagFollowsAtStartup({
+      apply: (tags) => publicTagActions.apply(tags),
+      readTags: () => readInstanceFollowedTags(centralDb),
+    }),
+  )
+  postListenCallbacks.push(async () => {
+    if ((await ensureDefaultRelays({ add: relayActions.add, centralDb, origin: webHost })) === 'seeded') {
+      console.info('🛰️ Subscribed to the tags.pub relay by default')
+    }
+  })
 
   const accountDeleter = createAccountDeleter({
     announceDeletion: (user) => deliverActorDelete(feedDeps, user),
@@ -610,6 +703,11 @@ const main = async () => {
   }
   const onDeliverError = (op: string, user: string, postId: string) => (err: unknown) =>
     console.error(`⚠️ feed ${op} delivery failed for ${user}/${postId}:`, err)
+  // Every edit path ends in one of the `updated*` hooks, so this is where a post narrowed to
+  // followers-only loses its quote stamps (FEP-044f).
+  const revokeUnsharedStamps = (user: string, post: FeedPostRecord): void => {
+    void revokeQuoteStamps(feedDeps, user, post).catch(onDeliverError('quote stamp revoke', user, post.id))
+  }
   const feedDeliver: FeedDeliver = {
     // Expand the already-resolved activity to its merged span so the delivered
     // Note reports what the user shared, not just the anchor sub-activity (#881).
@@ -621,12 +719,16 @@ const main = async () => {
     },
     // Articles and activities share the Note object id, so a deleted post of
     // either kind tombstones there — one path.
-    deleted: (user, post) => {
+    deleted: (user, post, stamps) => {
       void deliverFeedDelete(feedDeps, user, post).catch(onDeliverError('delete', user, post.id))
+      void deliverQuoteStampDeletes(feedDeps, user, stamps).catch(
+        onDeliverError('quote stamp delete', user, post.id),
+      )
     },
     // Resolve the (merged-span) activity inside the fire-and-forget boundary so a
     // lookup failure never bubbles into the (already-committed) edit's response.
     updated: (user, post) => {
+      revokeUnsharedStamps(user, post)
       void (async () => {
         if (!post.activity_id) return
         const activity = await resolveFeedActivity(user, post.activity_id)
@@ -642,6 +744,7 @@ const main = async () => {
       }
     },
     updatedArticle: (user, post) => {
+      revokeUnsharedStamps(user, post)
       const article = toDeliverableArticle(post)
       if (article) {
         void deliverFeedArticleUpdate(feedDeps, user, article).catch(onDeliverError('update', user, post.id))
@@ -657,6 +760,7 @@ const main = async () => {
       }
     },
     updatedChallenge: (user, post) => {
+      revokeUnsharedStamps(user, post)
       const challenge = toDeliverableChallenge(post)
       if (challenge) {
         void deliverFeedChallengeUpdate(feedDeps, user, challenge).catch(
@@ -672,6 +776,7 @@ const main = async () => {
       }
     },
     updatedExercise: (user, post) => {
+      revokeUnsharedStamps(user, post)
       const exercise = toDeliverableExercise(post)
       if (exercise) {
         void deliverFeedExerciseUpdate(feedDeps, user, exercise).catch(
@@ -689,6 +794,7 @@ const main = async () => {
       }
     },
     updatedDashboard: (user, post) => {
+      revokeUnsharedStamps(user, post)
       const dashboard = toDeliverableDashboard(post)
       if (dashboard) {
         void deliverFeedDashboardUpdate(feedDeps, user, dashboard).catch(
@@ -707,6 +813,7 @@ const main = async () => {
       }
     },
     updatedReply: (user, post) => {
+      revokeUnsharedStamps(user, post)
       const reply = toDeliverableReply(post)
       if (reply) {
         void deliverFeedReplyUpdate(feedDeps, user, reply).catch(onDeliverError('update', user, post.id))
@@ -867,13 +974,39 @@ const main = async () => {
     console.warn('⚠️ Scheduled audit log pruning disabled (no job queue)')
   }
 
+  if (boss) {
+    try {
+      await createPublicTagPruneQueue(boss, {
+        followedTags: () => readInstanceFollowedTags(centralDb),
+        officialFeedKeep: async () => {
+          const feed = await readOfficialFeedSetting(centralDb)
+          return { handles: officialRemoteHandles(feed), tags: feed.tags }
+        },
+        onRefollowError: (error) => console.error('⚠️ Nightly tag follow re-apply failed:', error),
+        prune: (olderThan, keep) => centralDb.prunePublicTagPosts(olderThan, keep),
+        pruneNotTagged: (tags) => centralDb.prunePublicTagPostsNotTagged(tags),
+        refollow: (tags) => publicTagActions.apply(tags),
+        retentionDays: () => readPublicTagRetentionDays(centralDb),
+      })
+    } catch (error) {
+      console.error('Failed to initialize public tag page prune:', error)
+    }
+  }
+
   // The network-requiring follow operations, bound to the same federation +
   // origin, shared by the REST following router and the MCP follow tools.
   const followActions: FollowActions = {
     follow: (user, handle) => followActor(feedDeps, user, handle),
+    followTag: (user, tag) => followTag(feedDeps, user, tag),
     unfollow: (user, id) => unfollowActor(feedDeps, user, id),
+    unfollowTag: (user, tag) => unfollowTag(feedDeps, user, tag),
   }
   const reactionActions = createReactionActions(feedDeps, feedDeliver)
+  const postUpdateResender = createPostUpdateResender({
+    deliver: (user, post) => deliverPostUpdate(feedDeps, user, post),
+    listPosts: listPublicFeedPosts,
+    listUsers: () => listUserNames(userDb),
+  })
   // The follower-management operations (approve/reject a follow request), sharing
   // the same federation + origin. Approve returns the serialised follower.
   const followerActions: FollowerActions = {
@@ -888,6 +1021,9 @@ const main = async () => {
   // so the per-instance well-known memo is shared too.
   const discoverChallenges = createChallengeDiscovery(defaultChallengeDiscoveryDeps(webHost))
 
+  // One preview, so REST and MCP share its cache of drawn figures.
+  const previewArticle = createArticlePreviewer({ chartDeps: postChartDeps, webHost })
+
   // Mounted before the global body parser: the MCP router parses its own body
   // so it can trim tool-call arguments and keep JSON-RPC parse errors.
   // Stateless mode — no session tracking needed (tools only, no subscriptions)
@@ -900,7 +1036,11 @@ const main = async () => {
       adminUsers,
       apiBaseUrl,
       autosharePreviewDeps: autoshareDeps,
+      relayActions,
+      postUpdateResender,
       centralDb,
+      previewArticle,
+      publicTagActions,
       requestDumpLink: dataExport.requestDumpLink,
       deductionQueue: deductionQueue ?? undefined,
       discoverChallenges,
@@ -1082,13 +1222,17 @@ const main = async () => {
     followerActions,
     garmin,
     httpd,
+    postUpdateResender,
+    previewArticle,
     invitationAuth,
     onActivityDetailSynced,
     onHrSettingsChanged,
     onNamedLocationsChanged,
     onTrackWritten,
+    relayActions,
     onProfileChanged,
     ouraWebhookManager,
+    publicTagActions,
     reactionActions,
     retroEnrichTimeline,
     syncProvider,
@@ -1115,7 +1259,7 @@ const main = async () => {
       })
     }
 
-    res.status(status).json({ success: false, error: err.message })
+    res.status(status).json(errorResponseBody(err, status))
   })
 
   const port = Number(process.env.PORT ?? 80)

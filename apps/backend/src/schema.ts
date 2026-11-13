@@ -210,6 +210,7 @@ export const tableCreationOrder = [
   'challenge_members_indexes',
   'challenge_members_actor_column',
   'challenge_banner',
+  'feed_image',
   'challenge_participations',
   'challenge_participations_indexes',
   'challenge_participations_protocol_column',
@@ -241,9 +242,11 @@ export const tableCreationOrder = [
   'feed_follower_columns',
   'feed_following',
   'feed_following_notify',
+  'feed_following_tag',
   'timeline_entry',
   'timeline_entry_structured',
   'timeline_entry_images',
+  'timeline_entry_tags',
   'timeline_entry_enrich_attempted',
   'timeline_entry_enrich_attempts',
   'timeline_entry_reply',
@@ -256,9 +259,12 @@ export const tableCreationOrder = [
   'timeline_entry_reply_target_indexes',
   'timeline_entry_reply_unchecked_indexes',
   'timeline_entry_boost_indexes',
+  'timeline_entry_actor_indexes',
   'feed_reaction',
   'feed_post_reaction',
   'feed_post_reaction_indexes',
+  'feed_quote_authorization',
+  'feed_quote_authorization_indexes',
   'profile_avatar',
   'mcp_sessions',
   'mcp_sessions_indexes',
@@ -288,7 +294,7 @@ export {
  * data fixes that are not expressed in `createTableStatements`. DDL changes are
  * picked up automatically by the fingerprint below.
  */
-export const MIGRATION_REVISION = 7
+export const MIGRATION_REVISION = 8
 
 /**
  * Hash the inputs a migration is derived from. Split out from

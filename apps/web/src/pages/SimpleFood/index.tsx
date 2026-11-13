@@ -622,8 +622,9 @@ export function DailyNutritionCard({
           question_version: question.version,
           value: answers[question.stable_key],
         }))
-      if (!responses.length && !notes.trim())
+      if (!responses.length && !notes.trim()) {
         throw new Error('Select at least one answer or add a note before saving.')
+      }
       const body = {
         assessed_at: localDateToNoonIso(selectedDate),
         notes: notes.trim() || undefined,
@@ -643,8 +644,9 @@ export function DailyNutritionCard({
     onSuccess: async ({ isNew, date }) => {
       setFailed(false)
       setMessage(isNew ? 'Daily check saved.' : 'Daily check updated.')
-      if (isNew && !savedDates.current.has(date) && date === currentDate.current)
+      if (isNew && !savedDates.current.has(date) && date === currentDate.current) {
         setCelebration(nextCelebration('nutrition-daily'))
+      }
       savedDates.current.add(date)
       await queryClient.invalidateQueries({ queryKey: ['simple-food-assessments'] })
       await onRefresh()
@@ -787,9 +789,9 @@ function SymptomEntryEditor({
       }
       if (mealContext) metadata.time_since_last_meal = mealContext
       else delete metadata.time_since_last_meal
-      if (entry.event_type.key === SIMPLE_FOOD_REFLUX_KEY && intensity > 0 && designation)
+      if (entry.event_type.key === SIMPLE_FOOD_REFLUX_KEY && intensity > 0 && designation) {
         metadata.reflux_designation = designation
-      else delete metadata.reflux_designation
+      } else delete metadata.reflux_designation
       await updateContextEvent(entry.id, {
         started_at: localDateTimeToIso(startedLocal),
         intensity,

@@ -8,6 +8,7 @@ import { API_URL } from '../config'
 import { readNativeAuth } from '../embed'
 import { apiErrorText } from '../utils/profile'
 import { clearCachedDashboards } from './dashboardCache'
+import { clearPeriodData } from './periodDataCache'
 import { resetQuerySession } from './queryClient'
 import { currentSessionGeneration, installSessionResponseFence } from './sessionBoundary'
 
@@ -20,6 +21,7 @@ const nativeAuth = readNativeAuth()
 const savedAuth = localStorage.getItem('auth')
 if (nativeAuth && savedAuth && savedAuth !== JSON.stringify(nativeAuth)) {
   clearCachedDashboards(() => localStorage)
+  clearPeriodData(() => sessionStorage)
 }
 export const auth = signal<{ user?: string; token?: string; is_admin?: boolean }>(
   nativeAuth ?? (savedAuth ? JSON.parse(savedAuth) : {}),
@@ -32,6 +34,7 @@ auth.subscribe((value) => {
     sessionIdentity = identity
     resetQuerySession()
     clearCachedDashboards(() => localStorage)
+    clearPeriodData(() => sessionStorage)
   }
   localStorage.setItem('auth', JSON.stringify(value))
 })
@@ -61,6 +64,12 @@ export const serverBilling = signal<
 >({})
 /** Whether the instance has an official feed, its blog at `/blog`. */
 export const officialFeedEnabled = signal(false)
+/** The hashtags with a public page at `/tags/<tag>`. */
+export const publicTagPages = signal<string[]>([])
+/** The server admin's fediverse handle, `name@host`, or null when not set. */
+export const contactFediverse = signal<string | null>(null)
+/** The server admin's Reddit username, or null when not set. */
+export const contactReddit = signal<string | null>(null)
 /** The last /status request failed: the signup mode is unknown, so say nothing about signing up. */
 export const statusFailed = signal(false)
 
@@ -73,11 +82,23 @@ export const fetchStatus = async () => {
   statusFetchPromise = (async () => {
     try {
       const response = await axios.get<ServerStatusResponse>(`${API_URL}/status`)
-      const { billing_enabled, official_feed, price_text, signup_allowed, signup_mode, trial_days } =
-        response.data
+      const {
+        billing_enabled,
+        contact_fediverse,
+        contact_reddit,
+        official_feed,
+        price_text,
+        public_tag_pages,
+        signup_allowed,
+        signup_mode,
+        trial_days,
+      } = response.data
       signupAllowed.value = signup_allowed
       signupMode.value = signup_mode
       officialFeedEnabled.value = official_feed === true
+      publicTagPages.value = public_tag_pages ?? []
+      contactFediverse.value = contact_fediverse || null
+      contactReddit.value = contact_reddit || null
       serverBilling.value = { billing_enabled, price_text, trial_days }
       statusFailed.value = false
     } catch (error) {
@@ -152,6 +173,7 @@ export const logout = () => {
   // Clear the narrowly scoped resource-media cookie as well as browser credentials.
   void axios.delete(`${API_URL}/resources/session`, { withCredentials: true }).catch(() => undefined)
   clearCachedDashboards(() => localStorage)
+  clearPeriodData(() => sessionStorage)
   auth.value = {}
 }
 

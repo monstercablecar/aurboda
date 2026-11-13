@@ -123,6 +123,19 @@ export const socialTables: Record<string, string> = {
     )
   `,
 
+  // Pictures the user adds to what they write; markdown references them by URL.
+  feed_image: `
+    CREATE TABLE IF NOT EXISTS feed_image (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      content_type  TEXT NOT NULL,
+      data          BYTEA NOT NULL,
+      width         INTEGER NOT NULL,
+      height        INTEGER NOT NULL,
+      byte_size     INTEGER NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `,
+
   // Challenges this user has joined on other (or the same) instances.
   challenge_participations: `
     CREATE TABLE IF NOT EXISTS challenge_participations (
@@ -434,6 +447,12 @@ export const socialTables: Record<string, string> = {
   feed_following_notify: `
     ALTER TABLE feed_following ADD COLUMN IF NOT EXISTS notify_on_post BOOLEAN NOT NULL DEFAULT true
   `,
+  // A followed hashtag (#1540) is the follow of its tag actor, marked with the
+  // normalised tag; NULL on the follow of a person.
+  feed_following_tag: `
+    ALTER TABLE feed_following ADD COLUMN IF NOT EXISTS tag TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_feed_following_tag ON feed_following (tag) WHERE tag IS NOT NULL;
+  `,
 
   // The user's home timeline: posts received from actors they follow (inbound
   // `Create`/`Update`/`Delete` on the feed). Keyed by a local `id`; `object_uri`
@@ -474,6 +493,10 @@ export const socialTables: Record<string, string> = {
   `,
   timeline_entry_images: `
     ALTER TABLE timeline_entry ADD COLUMN IF NOT EXISTS images JSONB
+  `,
+  timeline_entry_tags: `
+    ALTER TABLE timeline_entry ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+    CREATE INDEX IF NOT EXISTS idx_timeline_entry_tags ON timeline_entry USING GIN (tags);
   `,
   timeline_entry_enrich_attempted: `
     ALTER TABLE timeline_entry ADD COLUMN IF NOT EXISTS enrich_attempted_at TIMESTAMPTZ
@@ -555,6 +578,13 @@ export const socialTables: Record<string, string> = {
       ON timeline_entry (boost_of_uri)
       WHERE boost_of_uri IS NOT NULL
   `,
+  // Every cached copy of a remote actor is looked up by actor URI: the
+  // `Update{Person}` refresh, its "is this actor cached" gate, and a quoting
+  // actor's byline on the owner's post.
+  timeline_entry_actor_indexes: `
+    CREATE INDEX IF NOT EXISTS idx_timeline_entry_actor
+      ON timeline_entry (actor_uri)
+  `,
 
   // The user's OWN outbound reactions: a `Like` (favourite) or `Announce`
   // (boost) they sent for a post — remote or local. `id` mints the AS2 activity
@@ -599,6 +629,24 @@ export const socialTables: Record<string, string> = {
   feed_post_reaction_indexes: `
     CREATE INDEX IF NOT EXISTS idx_feed_post_reaction_post
       ON feed_post_reaction (post_id, created_at DESC)
+  `,
+
+  // `post_id` is a soft reference to feed_posts, dropped with the post like
+  // `feed_post_reaction`.
+  feed_quote_authorization: `
+    CREATE TABLE IF NOT EXISTS feed_quote_authorization (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id      UUID NOT NULL,
+      quote_uri    TEXT NOT NULL,
+      actor_uri    TEXT NOT NULL,
+      request_uri  TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (post_id, quote_uri)
+    )
+  `,
+  feed_quote_authorization_indexes: `
+    CREATE INDEX IF NOT EXISTS idx_feed_quote_authorization_post
+      ON feed_quote_authorization (post_id)
   `,
 
   // The user's public profile avatar. One per user (the profile owner), so a
