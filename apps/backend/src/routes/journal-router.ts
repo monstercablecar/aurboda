@@ -8,26 +8,38 @@ import * as service from '../services/journal.ts'
 import { typedRouter, type AnyMiddleware } from '../typed-router.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
-export const createJournalRouter = (auth: AnyMiddleware) => {
+export const createJournalRouter = (auth: AnyMiddleware, readAuth: AnyMiddleware = auth) => {
   const router = typedRouter()
+  router.get<Record<string, never>, spec.JournalCapabilitiesResponse>(
+    '/capabilities',
+    readAuth,
+    async (_req, res) => {
+      res.json({ success: true, data: service.getJournalCapabilities() })
+    },
+  )
   const validId: AnyMiddleware = (req, _res, next) => {
     if (!z.uuid().safeParse(req.params.id).success) return next(httpError(400, 'Invalid journal identifier'))
     next()
   }
-  router.get<Record<string, never>, spec.JournalCatalogResponse>('/catalog', auth, async (_req, res) => {
+  router.get<Record<string, never>, spec.JournalCatalogResponse>('/catalog', readAuth, async (_req, res) => {
     res.json({ success: true, data: JOURNAL_CATALOG })
   })
   router.get<Record<string, never>, spec.JournalEntriesResponse, unknown, spec.JournalEntriesQuery>(
     '/entries',
-    auth,
+    readAuth,
     validateQuery(spec.journalEntriesQuerySchema),
     async (req, res) => {
       res.json({ success: true, ...(await service.listJournalEntries(req.user ?? '', req.query)) })
     },
   )
-  router.get<{ id: string }, spec.JournalEntryResponse>('/entries/:id', auth, validId, async (req, res) => {
-    res.json({ success: true, data: await service.getJournalEntry(req.user ?? '', req.params.id) })
-  })
+  router.get<{ id: string }, spec.JournalEntryResponse>(
+    '/entries/:id',
+    readAuth,
+    validId,
+    async (req, res) => {
+      res.json({ success: true, data: await service.getJournalEntry(req.user ?? '', req.params.id) })
+    },
+  )
   router.post<Record<string, never>, spec.JournalEntryResponse, spec.CreateJournalEntryBody>(
     '/entries',
     auth,
@@ -60,7 +72,7 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
       res.json({ success: true })
     },
   )
-  router.get<Record<string, never>, spec.JournalAreasResponse>('/areas', auth, async (req, res) => {
+  router.get<Record<string, never>, spec.JournalAreasResponse>('/areas', readAuth, async (req, res) => {
     res.json({ success: true, data: await service.listJournalAreas(req.user ?? '') })
   })
   router.post<Record<string, never>, spec.JournalAreaResponse, spec.CreateJournalAreaBody>(
@@ -93,9 +105,13 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
       res.json({ success: true })
     },
   )
-  router.get<Record<string, never>, spec.JournalTemplatesResponse>('/templates', auth, async (req, res) => {
-    res.json({ success: true, data: await service.listJournalTemplates(req.user ?? '') })
-  })
+  router.get<Record<string, never>, spec.JournalTemplatesResponse>(
+    '/templates',
+    readAuth,
+    async (req, res) => {
+      res.json({ success: true, data: await service.listJournalTemplates(req.user ?? '') })
+    },
+  )
   router.post<Record<string, never>, spec.JournalTemplateResponse, spec.CreateJournalTemplateBody>(
     '/templates',
     auth,
@@ -130,7 +146,7 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
   )
   router.get<{ id: string }, spec.JournalRevisionsResponse>(
     '/entries/:id/revisions',
-    auth,
+    readAuth,
     validId,
     async (req, res) => {
       res.json({ success: true, data: await service.listJournalRevisions(req.user ?? '', req.params.id) })
@@ -138,7 +154,7 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
   )
   router.get<{ id: string }, spec.JournalAttachmentsResponse>(
     '/entries/:id/attachments',
-    auth,
+    readAuth,
     validId,
     async (req, res) => {
       res.json({ success: true, data: await service.listJournalAttachments(req.user ?? '', req.params.id) })
@@ -183,7 +199,7 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
   )
   router.get<{ id: string }, spec.JournalAttachmentResponse>(
     '/attachments/:id',
-    auth,
+    readAuth,
     validId,
     async (req, res) => {
       const { metadata, bytes } = await service.getJournalAttachment(req.user ?? '', req.params.id)

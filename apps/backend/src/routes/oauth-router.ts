@@ -1,10 +1,17 @@
+import {
+  type BaseResponse,
+  type OAuthConnectionsResponse,
+  type RevokeOAuthConnectionBody,
+  revokeOAuthConnectionBodySchema,
+} from '@aurboda/api-spec'
 /**
  * Provides endpoints required by the MCP spec for OAuth 2.1 authorization
  * server discovery, authorization, token exchange, and dynamic client
  * registration. Endpoints are mounted at the domain root level.
  */
-import express, { Router, type Request, type Response } from 'express'
+import express, { type Request, type Response } from 'express'
 
+import type { Auth } from '../auth.ts'
 import type { CentralDb } from '../services/central-db.ts'
 
 import { isInvalidPasswordError } from '../db/index.ts'
@@ -13,9 +20,14 @@ import {
   exchangeAuthorizationCode,
   refreshAccessToken,
   registerClient,
+  revokeConnection,
+  revokeConnectionByToken,
 } from '../services/oauth.ts'
+import { typedRouter } from '../typed-router.ts'
+import { validateBody } from '../validation.ts'
 
 export interface OAuthRouterDeps {
+  auth?: Auth
   centralDb: CentralDb
   loginToUserDb: (username: string, password: string) => Promise<unknown>
   webHost: string
@@ -28,6 +40,8 @@ const loginFormHtml = (params: {
   code_challenge: string
   code_challenge_method: string
   error?: string
+  write_access?: boolean
+  client_name?: string
 }) => `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,7 +65,8 @@ const loginFormHtml = (params: {
 <body>
   <div class="card">
     <h1>Aurboda</h1>
-    <p class="sub">Sign in to authorize access to your health data.</p>
+    <p class="sub">Connecting ${escapeHtml(params.client_name ?? params.client_id)}</p>
+    <p class="sub">Authorize this connection to read your private health and personal data, including journals when available. External AI providers handle retrieved information under their own policies; revoking access cannot recall copies already retrieved.</p>
     ${params.error ? `<div class="error">${params.error}</div>` : ''}
     <form method="POST" action="/authorize">
       <input type="hidden" name="client_id" value="${escapeHtml(params.client_id)}">
@@ -59,6 +74,8 @@ const loginFormHtml = (params: {
       <input type="hidden" name="state" value="${escapeHtml(params.state)}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(params.code_challenge)}">
       <input type="hidden" name="code_challenge_method" value="${escapeHtml(params.code_challenge_method)}">
+      <p class="sub">Read-only analysis is the default. It excludes account exports, stored connection credentials and editing or deletion. Enable write access only if you want this client to change your data and use the full tool set.</p>
+      <label><input type="checkbox" name="write_access" value="yes" ${params.write_access ? 'checked' : ''}> Also allow changes (read and write)</label>
       <label for="username">Username</label>
       <input type="text" id="username" name="username" required autocomplete="username">
       <label for="password">Password</label>
@@ -72,9 +89,9 @@ const loginFormHtml = (params: {
 const escapeHtml = (str: string): string =>
   str.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
+export const createOAuthRouter = (deps: OAuthRouterDeps) => {
   const { centralDb, loginToUserDb, webHost } = deps
-  const router = Router()
+  const router = typedRouter()
   const oauthDeps = { centralDb }
 
   router.get('/.well-known/oauth-authorization-server', (_req: Request, res: Response) => {
@@ -84,6 +101,8 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
       authorization_endpoint: `${issuer}/authorize`,
       token_endpoint: `${issuer}/token`,
       registration_endpoint: `${issuer}/register`,
+      revocation_endpoint: `${issuer}/revoke`,
+      scopes_supported: ['read', 'write'],
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
@@ -91,7 +110,7 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
     })
   })
 
-  router.get('/authorize', (req: Request, res: Response) => {
+  router.get('/authorize', async (req: Request, res: Response) => {
     const { client_id, redirect_uri, state, code_challenge, code_challenge_method } = req.query as Record<
       string,
       string
@@ -102,8 +121,15 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
       return
     }
 
+    const client = await centralDb.getOAuthClient(client_id)
+    if (!client || !client.redirect_uris.includes(redirect_uri) || code_challenge_method !== 'S256') {
+      res.status(400).send('Invalid OAuth client or redirect parameters')
+      return
+    }
+    res.setHeader('Cache-Control', 'no-store')
     res.type('html').send(
       loginFormHtml({
+        client_name: client.client_name,
         client_id,
         redirect_uri,
         state: state ?? '',
@@ -114,8 +140,16 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
   })
 
   router.post('/authorize', express.urlencoded({ extended: false }), async (req: Request, res: Response) => {
-    const { client_id, redirect_uri, state, code_challenge, code_challenge_method, username, password } =
-      req.body
+    const {
+      client_id,
+      redirect_uri,
+      state,
+      code_challenge,
+      code_challenge_method,
+      username,
+      password,
+      write_access,
+    } = req.body
 
     if (!client_id || !redirect_uri || !code_challenge || !code_challenge_method || !username || !password) {
       res.status(400).send('Missing required parameters')
@@ -138,6 +172,7 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
           state: state ?? '',
           code_challenge,
           code_challenge_method,
+          write_access: write_access === 'yes',
           error: badCredentials
             ? 'Invalid username or password'
             : 'Could not reach the database — this is a server problem, not your password. Try again shortly.',
@@ -148,6 +183,7 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
 
     try {
       const code = await createAuthorizationCode(oauthDeps, {
+        scope: write_access === 'yes' ? 'read write' : 'read',
         client_id,
         username,
         redirect_uri,
@@ -169,6 +205,8 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
   })
 
   router.post('/token', express.urlencoded({ extended: false }), async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Pragma', 'no-cache')
     const { grant_type } = req.body
 
     try {
@@ -204,6 +242,51 @@ export const createOAuthRouter = (deps: OAuthRouterDeps): Router => {
       res.status(400).json({ error: 'invalid_grant', error_description: message })
     }
   })
+
+  router.post('/revoke', express.urlencoded({ extended: false }), async (req: Request, res: Response) => {
+    const { token, client_id } = req.body ?? {}
+    if (typeof token !== 'string' || typeof client_id !== 'string') {
+      res.status(400).json({ error: 'invalid_request' })
+      return
+    }
+    await revokeConnectionByToken(oauthDeps, token, client_id)
+    res.setHeader('Cache-Control', 'no-store')
+    res.status(200).end()
+  })
+
+  const connectionOwner = async (req: Request): Promise<string | null> => {
+    const header = req.headers.authorization
+    if (!deps.auth || typeof header !== 'string' || !header.startsWith('Bearer ')) return null
+    try {
+      const user = deps.auth.getUsernameFromToken(header.slice(7))
+      return (await centralDb.isUsernameDeleted(user)) ? null : user
+    } catch {
+      return null
+    }
+  }
+
+  router.get<Record<string, never>, OAuthConnectionsResponse | BaseResponse>(
+    '/oauth/connections',
+    async (req, res) => {
+      const user = await connectionOwner(req)
+      if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' })
+      res.setHeader('Cache-Control', 'no-store')
+      res.json({ success: true, connections: await centralDb.listOAuthConnections(user) })
+    },
+  )
+
+  router.post<Record<string, never>, BaseResponse, RevokeOAuthConnectionBody>(
+    '/oauth/connections/revoke',
+    express.json(),
+    validateBody(revokeOAuthConnectionBodySchema),
+    async (req, res) => {
+      const user = await connectionOwner(req)
+      if (!user) return res.status(401).json({ success: false, error: 'Unauthorized' })
+      await revokeConnection(oauthDeps, user, req.body.client_id)
+      res.setHeader('Cache-Control', 'no-store')
+      res.json({ success: true })
+    },
+  )
 
   // Dynamic client registration (RFC 7591)
   router.post('/register', express.json(), async (req: Request, res: Response) => {

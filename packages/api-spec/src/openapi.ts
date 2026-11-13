@@ -70,6 +70,10 @@ import {
   queryMetricsResponseSchema,
 } from './schemas/metrics.ts'
 import {
+  oauthConnectionsResponseSchema,
+  revokeOAuthConnectionBodySchema,
+} from './schemas/oauth-connections.ts'
+import {
   outboundSyncAckBodySchema,
   outboundSyncAckResponseSchema,
   outboundSyncResponseSchema,
@@ -1608,6 +1612,46 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: 'Verify registration',
+        tags: ['Auth'],
+      },
+    },
+
+    '/oauth/connections': {
+      get: {
+        description:
+          'List active OAuth client grants for the authenticated browser account only. Requires its AES bearer token, not an OAuth connector token.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oauthConnectionsResponseSchema } },
+            description: 'Account connections',
+          },
+          401: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unauthorized',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List your AI connections',
+        tags: ['Auth'],
+      },
+    },
+    '/oauth/connections/revoke': {
+      post: {
+        description:
+          'Revoke all access and refresh tokens and unused authorization codes belonging to this account and client. Requires its AES bearer token; does not accept a target username.',
+        requestBody: { content: { 'application/json': { schema: revokeOAuthConnectionBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Connection revoked (also returned when already absent)',
+          },
+          401: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unauthorized',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Revoke your AI connection',
         tags: ['Auth'],
       },
     },

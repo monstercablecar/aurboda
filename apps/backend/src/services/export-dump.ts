@@ -60,6 +60,9 @@ const dumpEnv = (conn: PgConnection, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 export const dumpFileName = (user: string, now: Date): string =>
   `aurboda-${user}-${now.toISOString().slice(0, 10)}.sql.gz`
 
+export const DUMP_FORMAT_METADATA =
+  '-- aurboda_export_format: private_postgresql\n-- aurboda_export_version: 1\n-- Schema and record versions are preserved in the SQL below.\n'
+
 const MAX_STDERR = 64 * 1024
 
 /**
@@ -138,6 +141,7 @@ export const streamUserDump = ({
       if (trailer) gzip.end(trailer)
       else gzip.end()
     })
+    gzip.write(DUMP_FORMAT_METADATA)
     child.stdout.pipe(gzip, { end: false })
     gzip.pipe(counter).pipe(out, { end: false })
   })

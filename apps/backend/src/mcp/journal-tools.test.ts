@@ -15,15 +15,13 @@ test('journal tools enter existing discovery with guarded mutation names and ful
   const tools = registeredTools(server)
   const names = Object.keys(tools)
   expect(names).toContain('describe_tools')
-  expect(names.filter((name) => name.includes('journal'))).toHaveLength(19)
+  expect(names.filter((name) => name.includes('journal'))).toHaveLength(20)
   expect(tools.update_journal_entry.inputSchema).toBeDefined()
   expect(tools.list_journal_entries.inputSchema).toBeDefined()
   for (const toolName of names.filter((name) => name.includes('journal'))) {
     expect(isMutatingMcpTool(toolName)).toBe(/^(create|update|delete)_/.test(toolName))
   }
-  expect(tools.list_journal_attachments.description).toContain(
-    'bearer-authenticated GET /journal/attachments/:id',
-  )
+  expect(tools.list_journal_attachments.description).toContain('same OAuth read token')
   expect(tools.list_journal_attachments.description).toContain(
     'multipart POST /journal/entries/:id/attachments',
   )

@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { Client } from 'pg'
 import format from 'pg-format'
 import supertest from 'supertest'
@@ -20,8 +21,14 @@ import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest'
 import { _setDbForUser, initializeSchema, migrateSchemaIfNeeded, userDbName } from '../db/index.ts'
 import { createRolePool, type UserDb } from '../db/pool.ts'
 import { createExportRouter } from '../routes/export-router.ts'
-import { createDumpExporter, createDumpLinkIssuer, type PgConnection } from './export-dump.ts'
+import {
+  createDumpExporter,
+  createDumpLinkIssuer,
+  DUMP_FORMAT_METADATA,
+  type PgConnection,
+} from './export-dump.ts'
 import { createExportTokens } from './export-token.ts'
+import { JOURNAL_CATALOG } from './journal-catalog.ts'
 import * as journal from './journal.ts'
 import * as tasks from './native-tasks.ts'
 import * as people from './people.ts'
@@ -101,6 +108,7 @@ const savedTables = [
   'task_projects',
   'task_items',
   'uploaded_icons',
+  'feed_image',
   'people',
   'people_events',
   'people_reminder_deliveries',
@@ -159,27 +167,123 @@ const insertFixture = async (db: UserDb, table: string, row: Record<string, unkn
   return result.rows[0].id
 }
 
-const seedSavedFeatures = async (db: UserDb, user: string) => {
-  const areas = await journal.listJournalAreas(user)
+const storedImageBytes = Buffer.from([0, 255, 92, 10, 13, 128, 1, 0])
+const otherImageBytes = Buffer.from('OTHER TENANT MEDIA')
+
+const journalAudioBytes = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 255, 128, 10])
+const journalImageBytes = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=',
+  'base64',
+)
+const otherJournalBytes = Buffer.from('OTHER TENANT JOURNAL MEDIA')
+const journalOriginalContent = 'Original content: café, "quotes", \nsecond line'
+const workbookAnswer = 'Synthetic answer: preserve the exact prompt and version.'
+
+const seedJournalFeatures = async (user: string) => {
+  const area = await journal.createJournalArea(user, {
+    name: 'Synthetic personal area',
+    position: 12,
+    archived: false,
+  })
   const reflection = await journal.createJournalEntry(
     user,
     createJournalEntryBodySchema.parse({
       title: 'Synthetic backup reflection',
-      content: 'Original content',
+      content: journalOriginalContent,
       occurred_at: '2026-11-13T10:00:00Z',
-      area_id: areas[0].id,
+      area_id: area.id,
+      tags: ['backup', 'reflection'],
+      favorite: true,
+      pinned: true,
     }),
   )
   await journal.updateJournalEntry(user, reflection.id, {
     expected_updated_at: reflection.updated_at,
     content: 'Revised content',
   })
-  await journal.createJournalTemplate(user, { title: 'Weekly reflection', content: 'What surprised me?' })
+  const template = await journal.createJournalTemplate(user, {
+    title: 'Weekly reflection',
+    content: 'What surprised me?',
+  })
+  await journal.createJournalEntry(
+    user,
+    createJournalEntryBodySchema.parse({
+      title: '',
+      occurred_at: '2026-11-12T10:00:00Z',
+      template_id: template.id,
+      links: [{ kind: 'entry', record_id: reflection.id, label: 'Earlier reflection' }],
+    }),
+  )
   await journal.addJournalAttachment(user, reflection.id, {
     filename: 'synthetic-recording.webm',
     mime_type: 'audio/webm',
-    bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0xff, 0x80]),
+    bytes: journalAudioBytes,
   })
+  const definition = JOURNAL_CATALOG[0]
+  for (const status of ['in_progress', 'completed', 'archived'] as const) {
+    const attempt = await journal.createJournalEntry(
+      user,
+      createJournalEntryBodySchema.parse({
+        title: `Synthetic workbook ${status}`,
+        occurred_at: '2026-11-13T11:00:00Z',
+        area_id: area.id,
+        workbook_id: definition.id,
+        links: [{ kind: 'entry', record_id: reflection.id, label: 'Earlier reflection' }],
+      }),
+    )
+    const workbook = attempt.workbook
+    if (!workbook) throw new Error('Expected a workbook fixture')
+    const prompt = definition.sections[0].prompts[0].id
+    await journal.updateJournalEntry(user, attempt.id, {
+      expected_updated_at: attempt.updated_at,
+      workbook: {
+        ...workbook,
+        answers: { [prompt]: workbookAnswer },
+        completed_sections:
+          status === 'completed'
+            ? definition.sections.map((section) => section.id)
+            : [definition.sections[0].id],
+        current_section: definition.sections[definition.sections.length - 1].id,
+        status,
+      },
+    })
+    if (status === 'in_progress') {
+      await journal.addJournalAttachment(user, attempt.id, {
+        filename: 'synthetic-image.png',
+        mime_type: 'image/png',
+        bytes: journalImageBytes,
+        prompt_id: prompt,
+      })
+    }
+  }
+  const trash = await journal.createJournalEntry(
+    user,
+    createJournalEntryBodySchema.parse({
+      title: 'Synthetic trashed entry',
+      content: 'Recoverable trash content',
+      occurred_at: '2026-11-11T10:00:00Z',
+      area_id: area.id,
+    }),
+  )
+  await journal.addJournalAttachment(user, trash.id, {
+    filename: 'trashed-recording.webm',
+    mime_type: 'audio/webm',
+    bytes: journalAudioBytes,
+  })
+  await journal.updateJournalEntry(user, trash.id, {
+    expected_updated_at: trash.updated_at,
+    deleted: true,
+  })
+}
+
+const seedSavedFeatures = async (db: UserDb, user: string) => {
+  await db.query('INSERT INTO feed_image(content_type,data,width,height,byte_size) VALUES($1,$2,1,1,$3)', [
+    'image/webp',
+    storedImageBytes,
+    storedImageBytes.length,
+  ])
+  await seedJournalFeatures(user)
+
   const initialBoard = await tasks.getTaskBoard(user)
   await tasks.updateTaskBoard(user, {
     expected_updated_at: initialBoard.updated_at,
@@ -455,6 +559,23 @@ describe('database export', () => {
     await seedSavedFeatures(db, source)
     const otherDb = await createUser(other)
     pools.push(otherDb)
+    await otherDb.query(
+      'INSERT INTO feed_image(content_type,data,width,height,byte_size) VALUES($1,$2,1,1,$3)',
+      ['image/webp', otherImageBytes, otherImageBytes.length],
+    )
+    const otherJournal = await journal.createJournalEntry(
+      other,
+      createJournalEntryBodySchema.parse({
+        title: 'OTHER TENANT JOURNAL',
+        content: 'OTHER TENANT JOURNAL CONTENT',
+        occurred_at: '2026-11-13T10:00:00Z',
+      }),
+    )
+    await journal.addJournalAttachment(other, otherJournal.id, {
+      filename: 'other.png',
+      mime_type: 'image/png',
+      bytes: otherJournalBytes,
+    })
     await tasks.createTaskItem(other, createTaskItemBodySchema.parse({ title: 'OTHER TENANT TASK' }))
     await people.createPerson(
       other,
@@ -480,6 +601,32 @@ describe('database export', () => {
 
   test('the real pg_dump passes the version check against the server', async () => {
     expect(await createDumpExporter({ conn: conn() }).check(source)).toEqual({ ok: true })
+  })
+
+  test('ordinary database roles cannot read another account while privileged support access remains possible', async () => {
+    const ownUri = new URL(databaseUri(userDbName(source)))
+    ownUri.username = source
+    ownUri.password = 'pw'
+    await withClient(ownUri.toString(), async (ordinary) => {
+      expect((await ordinary.query('SELECT id FROM journal_entries')).rowCount).toBeGreaterThan(0)
+      expect((await ordinary.query('SELECT id FROM journal_attachments')).rowCount).toBeGreaterThan(0)
+    })
+    const otherUri = new URL(ownUri)
+    otherUri.pathname = `/${userDbName(other)}`
+    await withClient(otherUri.toString(), async (ordinary) => {
+      await expect(ordinary.query('SELECT id FROM journal_entries')).rejects.toMatchObject({ code: '42501' })
+      await expect(ordinary.query('SELECT bytes FROM journal_attachments')).rejects.toMatchObject({
+        code: '42501',
+      })
+    })
+    await withClient(databaseUri(userDbName(source)), async (privileged) => {
+      const supportRecord = await privileged.query(
+        `SELECT e.payload->>'content' AS content, a.bytes FROM journal_entries e
+         JOIN journal_attachments a ON a.entry_id=e.id
+         WHERE e.payload->>'title'='Synthetic backup reflection'`,
+      )
+      expect(supportRecord.rows).toEqual([{ content: 'Revised content', bytes: journalAudioBytes }])
+    })
   })
 
   test('downloads the real pg_dump over HTTP and restores with the documented steps', async () => {
@@ -525,6 +672,7 @@ describe('database export', () => {
       new RegExp(`^attachment; filename="aurboda-${source}-\\d{4}-\\d{2}-\\d{2}\\.sql\\.gz"$`),
     )
     expect(download.body.subarray(0, 2)).toEqual(Buffer.from([0x1f, 0x8b]))
+    expect(gunzipSync(download.body).toString('utf8').startsWith(DUMP_FORMAT_METADATA)).toBe(true)
     await writeFile(dumpPath, download.body)
     expect((await supertest(app).get(url.pathname + url.search)).status).toBe(401)
 
@@ -562,6 +710,114 @@ describe('database export', () => {
       expect(expected[table], `${table} fixture must contain saved data`).not.toHaveLength(0)
     }
     expect(await savedRows(restored)).toEqual(expected)
+    const reflection = (
+      await restored.query(
+        "SELECT id,area_id,payload,created_at,updated_at,deleted_at FROM journal_entries WHERE payload->>'title'='Synthetic backup reflection'",
+      )
+    ).rows[0]
+    expect(reflection.payload).toMatchObject({
+      content: 'Revised content',
+      occurred_at: '2026-11-13T10:00:00Z',
+      tags: ['backup', 'reflection'],
+      favorite: true,
+      pinned: true,
+    })
+    expect(reflection.deleted_at).toBeNull()
+    expect(
+      (await restored.query('SELECT name FROM journal_areas WHERE id=$1', [reflection.area_id])).rows,
+    ).toEqual([{ name: 'Synthetic personal area' }])
+    expect((await journal.listJournalRevisions(target, reflection.id))[0].snapshot.content).toBe(
+      journalOriginalContent,
+    )
+    const attempts = (
+      await restored.query(
+        "SELECT id FROM journal_entries WHERE payload->>'title' LIKE 'Synthetic workbook %' ORDER BY payload->>'title'",
+      )
+    ).rows
+    expect(attempts).toHaveLength(3)
+    const states = []
+    for (const { id } of attempts) {
+      const attempt = await journal.getJournalEntry(target, id)
+      const workbook = attempt.workbook
+      if (!workbook) throw new Error('Expected restored workbook')
+      expect(workbook.definition).toEqual(JOURNAL_CATALOG[0])
+      expect(workbook.answers).toEqual({ [JOURNAL_CATALOG[0].sections[0].prompts[0].id]: workbookAnswer })
+      expect(workbook.completed_sections).not.toHaveLength(0)
+      expect(workbook.current_section).toBe(
+        JOURNAL_CATALOG[0].sections[JOURNAL_CATALOG[0].sections.length - 1].id,
+      )
+      expect(attempt.links).toEqual([
+        { kind: 'entry', record_id: reflection.id, label: 'Earlier reflection' },
+      ])
+      states.push(workbook.status)
+    }
+    expect(states.sort()).toEqual(['archived', 'completed', 'in_progress'])
+    const restoredJournalMedia = (
+      await restored.query(
+        'SELECT id,entry_id,filename,mime_type,size,prompt_id,bytes FROM journal_attachments ORDER BY filename',
+      )
+    ).rows
+    expect(
+      restoredJournalMedia.map(({ filename, mime_type, size, prompt_id, bytes }) => ({
+        filename,
+        mime_type,
+        size,
+        prompt_id,
+        bytes,
+      })),
+    ).toEqual([
+      {
+        filename: 'synthetic-image.png',
+        mime_type: 'image/png',
+        size: journalImageBytes.length,
+        prompt_id: JOURNAL_CATALOG[0].sections[0].prompts[0].id,
+        bytes: journalImageBytes,
+      },
+      {
+        filename: 'synthetic-recording.webm',
+        mime_type: 'audio/webm',
+        size: journalAudioBytes.length,
+        prompt_id: null,
+        bytes: journalAudioBytes,
+      },
+      {
+        filename: 'trashed-recording.webm',
+        mime_type: 'audio/webm',
+        size: journalAudioBytes.length,
+        prompt_id: null,
+        bytes: journalAudioBytes,
+      },
+    ])
+    for (const media of restoredJournalMedia) {
+      expect((await journal.getJournalAttachment(target, media.id)).bytes).toEqual(media.bytes)
+      await expect(journal.getJournalAttachment(other, media.id)).rejects.toMatchObject({ status: 404 })
+    }
+    const trashed = (
+      await restored.query(
+        "SELECT id,deleted_at FROM journal_entries WHERE payload->>'title'='Synthetic trashed entry'",
+      )
+    ).rows[0]
+    expect(trashed.deleted_at).toBeInstanceOf(Date)
+    expect((await journal.listJournalRevisions(target, trashed.id))[0].snapshot.content).toBe(
+      'Recoverable trash content',
+    )
+    expect(
+      (await restored.query("SELECT id FROM journal_entries WHERE payload->>'title'='OTHER TENANT JOURNAL'"))
+        .rows,
+    ).toEqual([])
+    expect(
+      (await restored.query('SELECT id FROM journal_attachments WHERE bytes=$1', [otherJournalBytes])).rows,
+    ).toEqual([])
+
+    expect((await restored.query('SELECT data,byte_size FROM feed_image')).rows).toEqual([
+      { data: storedImageBytes, byte_size: storedImageBytes.length },
+    ])
+    expect((await restored.query('SELECT data FROM uploaded_icons')).rows).toEqual(
+      (await pools[0].query('SELECT data FROM uploaded_icons')).rows,
+    )
+    expect((await restored.query('SELECT id FROM feed_image WHERE data=$1', [otherImageBytes])).rows).toEqual(
+      [],
+    )
     expect(
       (await restored.query("SELECT profile FROM people WHERE profile->>'name'='OTHER TENANT ONLY'")).rows,
     ).toEqual([])

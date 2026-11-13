@@ -18,7 +18,8 @@ RUN pnpm install --frozen-lockfile
 # Copy source and build
 COPY packages/api-spec/ packages/api-spec/
 COPY apps/web/ apps/web/
-RUN pnpm --filter @aurboda/api-spec build && pnpm --filter aurboda-web build
+ARG VITE_FOGHOUSE_PRIVACY_ENABLED=false
+RUN pnpm --filter @aurboda/api-spec build && VITE_FOGHOUSE_PRIVACY_ENABLED=${VITE_FOGHOUSE_PRIVACY_ENABLED} pnpm --filter aurboda-web build
 
 # Generate OpenAPI spec and HTML documentation
 RUN pnpm --filter @aurboda/api-spec generate:openapi && pnpm --filter @aurboda/api-spec generate:html

@@ -12,8 +12,8 @@ import {
   validateAccessToken,
 } from './oauth.ts'
 
-const createMockCentralDb = () =>
-  ({
+const createMockCentralDb = () => {
+  const db = {
     createOAuthClient: vi.fn(),
     getOAuthClient: vi.fn(),
     saveAuthorizationCode: vi.fn(),
@@ -22,7 +22,7 @@ const createMockCentralDb = () =>
     getOAuthToken: vi.fn(),
     revokeOAuthToken: vi.fn(),
     cleanupExpiredOAuth: vi.fn(),
-  }) as unknown as CentralDb & {
+  } as unknown as CentralDb & {
     createOAuthClient: ReturnType<typeof vi.fn>
     getOAuthClient: ReturnType<typeof vi.fn>
     saveAuthorizationCode: ReturnType<typeof vi.fn>
@@ -32,6 +32,9 @@ const createMockCentralDb = () =>
     revokeOAuthToken: ReturnType<typeof vi.fn>
     cleanupExpiredOAuth: ReturnType<typeof vi.fn>
   }
+  db.withOAuthLock = async (action) => action(db)
+  return db
+}
 
 const makePkce = () => {
   const verifier = 'test-code-verifier-that-is-long-enough'
@@ -93,7 +96,23 @@ describe('oauth service', () => {
           client_id: 'aur_test',
           username: 'testuser',
           code_challenge: pkce.challenge,
+          scope: 'read',
         }),
+      )
+    })
+
+    test('persists explicit write consent on the authorization code', async () => {
+      mockDb.getOAuthClient.mockResolvedValue({ redirect_uris: ['https://example.com/cb'] })
+      await createAuthorizationCode(deps, {
+        client_id: 'client',
+        username: 'alice',
+        redirect_uri: 'https://example.com/cb',
+        code_challenge: 'challenge',
+        code_challenge_method: 'S256',
+        scope: 'read write',
+      })
+      expect(mockDb.saveAuthorizationCode).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: 'read write', username: 'alice' }),
       )
     })
 
@@ -164,6 +183,7 @@ describe('oauth service', () => {
         code_challenge_method: 'S256',
         expires_at: new Date(Date.now() + 600_000),
         used: true,
+        scope: 'read',
       }
       mockDb.consumeAuthorizationCode.mockResolvedValue(authCode)
 
@@ -178,6 +198,8 @@ describe('oauth service', () => {
       expect(result.refresh_token).toMatch(/^aur_rt_/)
       expect(result.token_type).toBe('bearer')
       expect(result.expires_in).toBe(3600)
+      expect(result.scope).toBe('read')
+      expect(mockDb.saveOAuthToken.mock.calls.every(([token]) => token.scope === 'read')).toBe(true)
       expect(mockDb.saveOAuthToken).toHaveBeenCalledTimes(2)
     })
 

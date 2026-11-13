@@ -3,6 +3,7 @@ import { useCallback, useState } from 'preact/hooks'
 
 import type { BiologicalSex, HrZoneThresholds, UpdateSettingsInput } from '../../state/api'
 
+import { AiConnectionsSettings } from '../../components/AiConnectionsSettings'
 import { AvatarSettings } from '../../components/AvatarSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
@@ -313,6 +314,8 @@ export function Settings() {
       <MealPreferencesSettings />
 
       <PasskeySettings />
+
+      <AiConnectionsSettings />
 
       <NotificationsSettings />
 

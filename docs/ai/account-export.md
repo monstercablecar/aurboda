@@ -43,3 +43,21 @@ When adding persisted private features, extend the roundtrip fixtures with real 
 The test host lacks PostgreSQL client tools; temporary PATH wrappers ran genuine PostgreSQL 16.4 `pg_dump`/`psql` in the cached disposable PostGIS container image against test databases. Archive CRC validation and shell pipefail were included in the final successful restore run. Initial fixture validation mistakes were corrected before that run. Separately, read-only live tool-version checks confirmed application `pg_dump` 16.15 against PostgreSQL 16.4; no live database rows or private exports were read.
 
 Deployment completed the backup and matching source-manifest workflow. Public status matched the exact release, and both anonymous link issuance and an invalid download token returned 401. Transient restart errors resolved within the health loop. Protected record: `releases/20261112T221833Z.account-export-a537f53.YIEtzK` under the local installation. The full per-user dump mechanism and format were retained; production changes clarify coverage and prevent stale/duplicate frontend download actions.
+
+## November 13 integration follow-up
+
+Export format comments identify `private_postgresql`, version `1`; the SQL/gzip format, filename,
+full private schema and referenced shared-food trailer remain compatible. New HTTP tests cover
+Alice/Bob/admin-account issuance, ignored caller-supplied usernames and tampered capabilities.
+The real restore fixture now checks stored feed-image/icon bytes and exclusion of unrelated media.
+Those are existing database attachments, not original Journal attachments. The real integration
+suite could not start in this environment (no working container runtime); do not carry the earlier
+release's test results forward as a new pass.
+
+Journal storage was absent at initial base `a5baa639`. During this task the Journal agent published
+`37637a5f`, which was integrated using its six private tables and original BYTEA media. The real
+restore fixture now seeds all Journal tables and checks content, dates, areas/templates, links,
+workbook snapshots/answers/progress/status, revisions, trash and original image/audio bytes. No
+current Journal roundtrip pass is claimed: the suite requires a working container runtime.
+See [Journal integration and verification](journal-data-integration.md) for exact interfaces and
+remaining database/restore checks.

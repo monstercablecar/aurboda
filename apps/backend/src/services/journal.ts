@@ -12,9 +12,11 @@ import type {
   JournalAttachment,
   JournalRevision,
   JournalWorkbookState,
+  JournalCapabilities,
 } from '@aurboda/api-spec'
 
 import {
+  journalMcpAttachmentBytes,
   createJournalEntryBodySchema,
   updateJournalEntryBodySchema,
   journalEntriesQuerySchema,
@@ -186,12 +188,15 @@ export const deleteJournalEntry = (user: string, id: string, expected: string) =
     if (!old.deleted_at) throw httpError(409, 'Move this entry to trash before permanently deleting it.')
     await tx.query('DELETE FROM journal_entries WHERE id=$1', [id])
   })
+const checkJournalRange = (q: JournalEntriesQuery) => {
+  if (q.from && q.to && Date.parse(q.from) > Date.parse(q.to)) {
+    throw httpError(400, 'Start date must precede end date.')
+  }
+}
 export const listJournalEntries = (user: string, input: JournalEntriesQuery) =>
   transact(user, async (tx) => {
     const q = parse(journalEntriesQuerySchema, input)
-    if (q.from && q.to && Date.parse(q.from) > Date.parse(q.to)) {
-      throw httpError(400, 'Start date must precede end date.')
-    }
+    checkJournalRange(q)
     const values: unknown[] = []
     const where: string[] = [q.deleted === 'true' ? 'e.deleted_at IS NOT NULL' : 'e.deleted_at IS NULL']
     const add = (sql: string, value: unknown) => {
@@ -207,6 +212,7 @@ export const listJournalEntries = (user: string, input: JournalEntriesQuery) =>
       )
     }
     if (q.tag) add("jsonb_exists(e.payload->'tags', ?)", q.tag)
+    if (q.workbook_id) add("e.payload->'workbook'->'definition'->>'id' = ?", q.workbook_id)
     if (q.from) add("(e.payload->>'occurred_at')::timestamptz >= ?", q.from)
     if (q.to) add("(e.payload->>'occurred_at')::timestamptz <= ?", q.to)
     if (q.favorite) add("(e.payload->>'favorite')::boolean = ?", q.favorite === 'true')
@@ -456,3 +462,21 @@ export const deleteJournalAttachment = (user: string, id: string) =>
       throw httpError(404, 'Journal attachment not found.')
     }
   })
+
+export const getJournalCapabilities = (): JournalCapabilities => ({
+  schema_version: 1,
+  available: true,
+  filters: ['search', 'area_id', 'tag', 'from', 'to', 'favorite', 'kind', 'workbook_id', 'deleted'],
+  pagination: { default_per_page: 30, max_per_page: 100, first_page: 1 },
+  workbook_context: 'immutable_definition_and_answers',
+  revisions: true,
+  trash_filter: true,
+  attachments: {
+    metadata: true,
+    original_bytes: true,
+    mcp_max_bytes: journalMcpAttachmentBytes,
+    rest_max_bytes: JOURNAL_MAX_ATTACHMENT_BYTES,
+    rest_accepts_oauth_read: true,
+    transcription: false,
+  },
+})

@@ -139,6 +139,7 @@ import { getUserTimezone } from '../services/settings.ts'
 import { resolveDashboardView } from '../services/shared-dashboard-data.ts'
 import { resolveSharedExerciseData } from '../services/shared-exercise-data.ts'
 import { createTemplateLoader } from '../services/web-template.ts'
+import { createJournalReadAuth } from './journal-read-auth.ts'
 
 interface RestRoutesDeps {
   httpd: Express
@@ -251,7 +252,7 @@ export const mountRestRouters = ({
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))
   httpd.use('/resources', createResourcesRouter(authMiddleware, centralDb, apiBaseUrl))
-  httpd.use('/journal', createJournalRouter(authMiddleware))
+  httpd.use('/journal', createJournalRouter(authMiddleware, createJournalReadAuth(authMiddleware, centralDb)))
   httpd.use('/work', createWorkRouter(authMiddleware, activityNotifier))
   httpd.use('/people', createPeopleRouter(authMiddleware))
   httpd.use('/tasks', createNativeTasksRouter(authMiddleware))
