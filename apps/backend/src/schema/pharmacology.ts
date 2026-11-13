@@ -112,7 +112,10 @@ export const pharmacologyTables: Record<string, string> = {
   treatment_types_indexes: `CREATE INDEX IF NOT EXISTS idx_treatment_types_active_name ON treatment_types (active, display_name)`,
   treatment_types_seed: `
     INSERT INTO treatment_types (key, display_name, category, description, active, default_follow_up_hours)
-    VALUES ('ketamine', 'Ketamine', 'medicine_assisted_treatment', 'Editable default treatment type.', TRUE, '[24,48,72,168]'::jsonb)
+    VALUES
+      ('chamomile', 'Chamomile', 'wellness', 'Optional chamomile session journal.', TRUE, '[]'::jsonb),
+      ('meditation', 'Meditation', 'wellness', 'Optional meditation session journal.', TRUE, '[]'::jsonb),
+      ('ketamine', 'Ketamine', 'medicine_assisted_treatment', 'Editable default treatment type.', TRUE, '[24,48,72,168]'::jsonb)
     ON CONFLICT (key) DO NOTHING
   `,
   treatment_sessions: `
@@ -207,6 +210,9 @@ export const pharmacologyTables: Record<string, string> = {
       ('morning', 'Morning check-in', 'Editable daily morning assessment.', 'morning'),
       ('midday', 'Midday check-in', 'Editable daily midday assessment.', 'midday'),
       ('evening', 'Evening check-in', 'Editable daily evening assessment.', 'evening'),
+      ('session_preparation', 'Session preparation', 'Optional reflection before a session.', 'pre_treatment'),
+      ('session_reflection', 'Session reflection', 'Optional reflection after a session.', 'post_treatment'),
+      ('session_follow_up', 'Next-day reflection', 'Optional reflection the following day.', 'follow_up'),
       ('ketamine_pre_session', 'Ketamine pre-session', 'Preparation assessment.', 'pre_treatment'),
       ('ketamine_post_session', 'Ketamine post-session', 'Immediate post-session assessment.', 'post_treatment'),
       ('ketamine_next_day', 'Ketamine next-day integration', 'Next-day follow-up assessment.', 'follow_up')
@@ -252,6 +258,11 @@ export const pharmacologyTables: Record<string, string> = {
       ('evening','mental_fatigue','Mental fatigue','likert',TRUE,30,'assessment_evening_mental_fatigue','score','{}','{"min":1,"max":5,"step":1}'),
       ('evening','satisfaction_with_day','Satisfaction with the day','likert',TRUE,40,'assessment_evening_day_satisfaction','score','{}','{"min":1,"max":5,"step":1}'),
       ('evening','notes','Optional notes','long_text',FALSE,50,NULL,NULL,'{}','{}'),
+      ('session_preparation','intention','What would you like to make room for?','long_text',FALSE,10,NULL,NULL,'{}','{}'),
+      ('session_preparation','feelings','How are you feeling before the session?','long_text',FALSE,20,NULL,NULL,'{}','{}'),
+      ('session_reflection','experience','What did you notice during the session?','long_text',FALSE,10,NULL,NULL,'{}','{}'),
+      ('session_reflection','feelings','How are you feeling now?','long_text',FALSE,20,NULL,NULL,'{}','{}'),
+      ('session_follow_up','reflection','What stands out to you the following day?','long_text',FALSE,10,NULL,NULL,'{}','{}'),
       ('ketamine_pre_session','intention','Optional intention','long_text',FALSE,10,NULL,NULL,'{}','{}'),
       ('ketamine_pre_session','current_mood','Current mood','likert',FALSE,20,'assessment_ketamine_pre_mood','score','{}','{"min":1,"max":5,"step":1}'),
       ('ketamine_pre_session','current_energy','Current energy','likert',FALSE,30,'assessment_ketamine_pre_energy','score','{}','{"min":1,"max":5,"step":1}'),

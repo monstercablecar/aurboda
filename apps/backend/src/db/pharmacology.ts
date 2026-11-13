@@ -420,7 +420,7 @@ const treatmentTypeFromRow = (row: Row): TreatmentType =>
 const TREATMENT_TYPE_COLUMNS = 'id, key, display_name, category, description, active, default_follow_up_hours, created_at, updated_at'
 
 export const listTreatmentTypes = async (db: DbTarget): Promise<TreatmentType[]> => {
-  const result = await query(db, `SELECT ${TREATMENT_TYPE_COLUMNS} FROM treatment_types ORDER BY active DESC, display_name`)
+  const result = await query(db, `SELECT ${TREATMENT_TYPE_COLUMNS} FROM treatment_types ORDER BY active DESC, CASE key WHEN 'chamomile' THEN 0 WHEN 'meditation' THEN 1 WHEN 'ketamine' THEN 3 ELSE 2 END, display_name`)
   return result.rows.map(treatmentTypeFromRow)
 }
 export const createTreatmentType = async (db: DbTarget, input: CreateTreatmentTypeBody): Promise<TreatmentType> => {
@@ -513,7 +513,7 @@ export const getQuestionnaire = async (db: DbTarget, id: string): Promise<Questi
   return templateFromRow(result.rows[0], questions.get(id) ?? [])
 }
 export const listQuestionnaires = async (db: DbTarget): Promise<QuestionnaireTemplate[]> => {
-  const result = await query(db, `SELECT ${TEMPLATE_COLUMNS} FROM questionnaire_templates ORDER BY moment, display_name`)
+  const result = await query(db, `SELECT ${TEMPLATE_COLUMNS} FROM questionnaire_templates ORDER BY moment, CASE WHEN stable_key IN ('ketamine_pre_session', 'ketamine_post_session', 'ketamine_next_day') THEN 1 ELSE 0 END, display_name`)
   const ids = result.rows.map((row) => String(row.id))
   const questions = await getQuestions(db, ids)
   return result.rows.map((row) => templateFromRow(row, questions.get(String(row.id)) ?? []))

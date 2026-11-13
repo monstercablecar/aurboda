@@ -16,6 +16,21 @@ import { AssessmentForm } from './AssessmentForm'
 import { isoToLocalDateTime, localDateTimeToIso, treatmentStageLabel, treatmentUrl } from './model'
 import { PrnForm } from './PrnForm'
 
+const typeOrder = (key: string) => {
+  switch (key) {
+    case 'chamomile':
+      return 0
+    case 'meditation':
+      return 1
+    case 'ketamine':
+      return 3
+    default:
+      return 2
+  }
+}
+const ketamineTemplates = new Set(['ketamine_pre_session', 'ketamine_post_session', 'ketamine_next_day'])
+const sessionTemplates = new Set(['session_preparation', 'session_reflection', 'session_follow_up'])
+
 const optionalTimestamp = (value: string) => (value ? localDateTimeToIso(value) : undefined)
 
 const validateSessionTimes = (start: string, end: string) => {
@@ -39,8 +54,17 @@ export function TreatmentSessionForm({
   timezone: string
   treatmentTypes: TreatmentType[]
 }) {
-  const activeTypes = treatmentTypes.filter((type) => type.active || type.id === session?.treatment_type.id)
-  const [typeId, setTypeId] = useState(session?.treatment_type.id ?? activeTypes[0]?.id ?? '')
+  const activeTypes = treatmentTypes
+    .filter((type) => type.active || type.id === session?.treatment_type.id)
+    .sort(
+      (left, right) =>
+        typeOrder(left.key) - typeOrder(right.key) || left.display_name.localeCompare(right.display_name),
+    )
+  const [typeId, setTypeId] = useState(
+    session?.treatment_type.id ??
+      activeTypes.find((type) => type.key === 'chamomile' && type.active)?.id ??
+      '',
+  )
   const [plannedLocal, setPlannedLocal] = useState(() =>
     session?.planned_at ? isoToLocalDateTime(session.planned_at) : '',
   )
@@ -265,7 +289,14 @@ export function TreatmentJournal({
     ? administrations.filter((event) => event.treatment_session_id === selected.id)
     : []
   const treatmentTemplates = questionnaires
-    .filter((template) => template.enabled && momentOrder.includes(template.moment))
+    .filter((template) => {
+      if (!template.enabled || !momentOrder.includes(template.moment)) return false
+      const isKetamine = selected?.treatment_type.key === 'ketamine'
+      const hasSavedAnswers = sessionAssessments.some((assessment) => assessment.template_id === template.id)
+      if (ketamineTemplates.has(template.stable_key)) return isKetamine || hasSavedAnswers
+      if (sessionTemplates.has(template.stable_key)) return !isKetamine || hasSavedAnswers
+      return true
+    })
     .sort((left, right) => momentOrder.indexOf(left.moment) - momentOrder.indexOf(right.moment))
 
   return (
@@ -384,13 +415,19 @@ export function TreatmentJournal({
                 <li class={sessionAdministrations.length > 0 ? 'complete' : ''}>
                   <span class="stage-index" />
                   <div>
-                    <strong>Actual administration</strong>
+                    <strong>
+                      {selected.treatment_type.key === 'ketamine'
+                        ? 'Actual administration'
+                        : 'Substance record (optional)'}
+                    </strong>
                     <small>
                       {sessionAdministrations.length > 0
                         ? `${sessionAdministrations.length} linked`
                         : selected.status === 'canceled'
                           ? 'Session canceled'
-                          : 'Not recorded'}
+                          : selected.treatment_type.key === 'ketamine'
+                            ? 'Not recorded'
+                            : 'Optional'}
                     </small>
                   </div>
                   <button type="button" onClick={() => setLinkingAdministration(true)}>

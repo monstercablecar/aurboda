@@ -66,7 +66,7 @@ Reminder settings are stored as regimen metadata only. Notification delivery is 
 5. Save the regimen. It appears under **Treatments → Today** only on matching local dates; opening it does not record a dose.
 6. When the stack is actually taken, open it, deselect or adjust exceptions, verify the administration time, and confirm. Only the selected items become administration events.
 
-Use **Add PRN** for an as-needed administration, **Add context** for illness/travel/stress and similar observations, and **Journal → New session** for a treatment. The seeded ketamine type, pre-session/post-session/next-day forms, and default 24/48/72/168-hour follow-up interval metadata can be renamed or reconfigured from the Library.
+Use **Add PRN** for an as-needed administration, **Add context** for illness/travel/stress and similar observations, and **Journal → New session** for a treatment. New sessions initially select **Chamomile**, followed by **Meditation** in the type list. These are optional journaling examples, without seeded substances, doses, or follow-up schedules. Custom types follow, with **Ketamine** farther down and still available. If Chamomile is inactive or unavailable, the form requires an explicit type choice. All types remain editable in the Library; adding these defaults preserves existing type customizations and saved session facts. Ketamine retains its pre-session/post-session/next-day forms and 24/48/72/168-hour follow-up interval metadata.
 
 Questionnaires are also managed in the Library. The editor supports all response types, individual question enable/disable, scale bounds and anchors, choice lists, stable analytics metric names, and question ordering. Saving an edit creates immutable definition snapshots so prior responses retain their original meaning.
 
@@ -85,7 +85,7 @@ Assessment metric names come from the questionnaire editor. Substance exposure m
 - Follow-up intervals are stored on treatment sessions, but they do not yet create notification tasks automatically; later follow-up entries reuse the configurable follow-up questionnaire from the session journal.
 - Treatments does not perform medication-interaction checking, pharmacokinetic modeling, dosing guidance, or automatic regimen changes.
 - Its Insights view summarizes data quality and exposure coverage. Advanced adjusted models, automatic confounder control, and ranked causal claims are intentionally not generated; use Aurboda's existing Analyze tools for exploratory comparisons and interpret small or confounded samples cautiously.
-- Treatment questionnaires are presently available to all treatment session types. The seeded labels make the ketamine workflow clear, but per-treatment questionnaire assignment is not yet a separate configuration layer.
+- Chamomile, meditation, and other non-ketamine sessions offer optional **Session preparation**, **Session reflection**, and **Next-day reflection** text prompts. Ketamine sessions retain their dedicated questionnaires. Other enabled custom questionnaires remain available for every session type; general per-treatment assignment is not yet a separate configuration layer. Previously used questionnaires stay visible on their saved sessions, including legacy cross-type answers. Non-ketamine sessions mark substance records as optional. Existing questionnaire definitions and saved responses are preserved.
 
 ## Nutrition questionnaire ownership
 
