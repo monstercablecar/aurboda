@@ -28,4 +28,6 @@ The update also fixes the publication's duplicate import and lint errors without
 
 ## Deployment boundary
 
+The first Android CI run exposed invalid generated Kotlin defaults and enums in existing custom schemas. A tested postprocessor now preserves numeric/boolean enum wire values, constructs the default People payload, and quotes Kotlin's `context` keyword. Zod contracts and server defaults are unchanged. Android serialization regressions cover those cases; CI must verify the corrected generated models.
+
 No deployment has been performed. Upstream now seeds a `tags.pub` relay subscription on public HTTPS servers. Once accepted, that relay receives explicitly public Feed posts and their updates/deletions, not private tracking records or unlisted/followers-only posts. Admins can remove the relay; its seeded flag prevents startup from adding it again. Review this setting when deploying. Publishing this source does not subscribe the running server.
