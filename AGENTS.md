@@ -4,7 +4,7 @@ This is Brighton Marcroft's Foghouse fork of Aurboda. Read [fork scope and chang
 
 - Preserve Fredrik Liljegren's existing authorship and license. New Foghouse commits use the actual contributor's identity, never Fredrik's identity from the upstream cloud-session example.
 - `upstream` is `fiddur/aurboda`; `origin` is this user's fork. Confirm the remote before any write. No upstream PR, message, release or deployment is implied by a fork commit.
-- Keep `main` and `develop` unchanged during the initial publication. Work on `feat/foghouse-customizations`. This is a documented snapshot based on the November 9 release, not a claim that current upstream develop has been merged or reviewed.
+- The customization branch is `feat/foghouse-customizations`. The original publication used the November 9 release; the released-main integration and validation are recorded in `docs/upstream-main-sync.md`. Keep updates isolated until reviewed and tested. This does not imply current upstream `develop` is included.
 - Future contributions use focused branches and draft PRs into `develop`, merge upstream updates without rebasing, and retain the original review/test gates. Do not claim the upstream review automation is installed on this fork.
 - This fork does not distribute an Android APK. Preserve the upstream-only guards on Android and Docker publication workflows until a separate release setup is explicitly requested.
 - Never publish runtime configuration, account data, private dashboard links, database backups, agent state or raw verification logs. Existing local deployment guides contain historical paths and labels; adapt them rather than running them blindly.

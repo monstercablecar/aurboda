@@ -20,4 +20,12 @@ The initial publication inventory remains a historical inventory against Novembe
 
 ## Validation
 
-Validation is in progress. No deployment has been performed. The existing local Node 26/pnpm installation is reused; upstream did not change the package manifests or lockfile from the November 9 baseline. Final results and remaining limitations must be recorded before this update is treated as ready.
+The existing local Node 26/pnpm installation was reused; upstream did not change the package manifests or lockfile from the November 9 baseline. Shared API build, `pnpm check`, and web production build passed. Lint warnings and the existing large-chunk build warning remain.
+
+The full local web run passed 1,923 tests; one DST test was blocked by subprocess permissions. The backend unit run passed 4,714 tests, with 831 failures and 832 errors in the restricted environment, including denied server sockets. That is not an all-green backend result. Focused validation/privacy and MCP mutation tests passed (55 tests), as did dashboard queue/session/cache regressions (33 tests). GitHub CI is the full database and Android validation gate; its results are tracked in the fork's pull request.
+
+The update also fixes the publication's duplicate import and lint errors without changing feature behavior. The new dashboard saver is fenced by session generation: pending edits and callbacks from one account cannot continue after switching accounts. Every one of the 300 files originally added for Foghouse remains, as do the custom REST/MCP registrations, schema entries, and Work's `work_day` note origin.
+
+## Deployment boundary
+
+No deployment has been performed. Upstream now seeds a `tags.pub` relay subscription on public HTTPS servers. Once accepted, that relay receives explicitly public Feed posts and their updates/deletions, not private tracking records or unlisted/followers-only posts. Admins can remove the relay; its seeded flag prevents startup from adding it again. Review this setting when deploying. Publishing this source does not subscribe the running server.
