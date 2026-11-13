@@ -14,7 +14,7 @@ The task editor starts with essential fields and a checklist. Repeat and More de
 
 ## Workflow and cards
 
-Board settings can add, rename, reorder, recolor and remove columns, with up to 20 columns. Every column belongs to To do, In progress or Done, and each category must retain at least one column. These categories preserve completion and recurring-task behavior. Moving to Done completes a task; moving back reopens it. Move all tasks, including archived tasks, out of a column before deleting it or changing its category. Renaming, color and WIP changes preserve task placement.
+Board settings can add, rename, reorder, recolor and remove columns, with up to 21 columns (including the optional Onboarding column). Every column belongs to To do, In progress or Done, and each category must retain at least one column. These categories preserve completion and recurring-task behavior. Moving to Done completes a task; moving back reopens it. Move all tasks, including archived tasks, out of a column before deleting it or changing its category. Renaming, color and WIP changes preserve task placement.
 
 Work-in-progress (WIP) limits are advisory. The board shows the total active task count for each column, including tasks excluded by the current search or project filter, and warns when the limit is exceeded. A limit never silently prevents a save. The displayed card count reflects the current filters. Columns load 20 cards per page.
 

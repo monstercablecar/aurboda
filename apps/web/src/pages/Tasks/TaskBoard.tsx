@@ -16,6 +16,7 @@ import { currentSessionGeneration } from '../../state/sessionBoundary'
 import { columnOf, defaultFilters, positionBefore, readViews, type BoardFilters } from './board-model'
 import { BoardAppearance } from './BoardAppearance'
 import { BoardSettings } from './BoardSettings'
+import { TaskDescription } from './TaskDescription'
 import { TaskRecurrenceBadge } from './TaskRecurrenceBadge'
 import './TaskBoard.css'
 
@@ -197,7 +198,7 @@ function BoardCard({
           </button>
         </h4>
       </div>
-      {item.description && <p class="task-board-description">{item.description}</p>}
+      {item.description && <TaskDescription className="task-board-description" value={item.description} />}
       <CardMetadata item={item} />
       <details class="task-card-menu">
         <summary aria-label={`Task actions for ${item.title}`}>•••</summary>

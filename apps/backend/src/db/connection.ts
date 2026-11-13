@@ -4,6 +4,7 @@ import format from 'pg-format'
 
 import { createTableStatements, schemaFingerprint, tableCreationOrder } from '../schema.ts'
 import { normalizeStructuredActivity } from '../services/activitypub/quant-wire.ts'
+import { seedTaskOnboarding } from '../services/task-onboarding.ts'
 import { createRolePool, type Queryable, type UserDb, withTransaction } from './pool.ts'
 import { repairGarminSleepStages } from './repair-garmin-sleep-stages.ts'
 import { repairGarminSleepTimes } from './repair-garmin-sleep-times.ts'
@@ -333,7 +334,10 @@ export const initializeSchema = async (user: string) => {
     await query(db, createTableStatements[key])
   }
 
-  if (existing.rowCount === 0) await recordSchemaFingerprint(db, schemaFingerprint())
+  if (existing.rowCount === 0) {
+    await seedTaskOnboarding(db)
+    await recordSchemaFingerprint(db, schemaFingerprint())
+  }
 }
 
 /**
@@ -1774,6 +1778,8 @@ export const migrateSchema = async (user: string, opts?: { force?: boolean }): P
       )
     })
   }
+
+  await seedTaskOnboarding(db)
 
   // Last, and only on success: a sweep that threw must run again next time. A failed legacy tags step
   // withholds the fingerprint without failing the sweep, so the next boot retries the tags.

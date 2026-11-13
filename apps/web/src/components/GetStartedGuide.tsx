@@ -207,6 +207,7 @@ export function GetStartedGuide({ forceReview = false }: { forceReview?: boolean
     <>
       <OnboardingFlow
         steps={onboardingSteps(settings.onboarding_progress, settings.onboarding_manual_done, signalCopy)}
+        hiddenPages={settings.hidden_pages}
         chapter={chapter}
         selectedId={selectedId}
         busy={[busy, featureBusy].some(Boolean)}

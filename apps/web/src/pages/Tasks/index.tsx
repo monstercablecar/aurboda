@@ -24,6 +24,7 @@ import { auth } from '../../state/auth'
 import { currentSessionGeneration } from '../../state/sessionBoundary'
 import { workflowColumns, workflowLabel, workflowOf } from './task-workflow'
 import { TaskBoard } from './TaskBoard'
+import { TaskDescription, TaskDescriptionEditor } from './TaskDescription'
 import { TaskDetailsFields, TaskDetailsSummary, taskDetailsDraft, taskDetailsBody } from './TaskDetailsFields'
 import { TaskRecurrenceBadge, recurrenceLabels } from './TaskRecurrenceBadge'
 const priorities = ['No priority', 'Low', 'Medium', 'High']
@@ -131,15 +132,7 @@ export function TaskEditor({
               onInput={(e) => setTitle(e.currentTarget.value)}
             />
           </label>
-          <label>
-            Details
-            <textarea
-              rows={4}
-              maxLength={10000}
-              value={description}
-              onInput={(e) => setDescription(e.currentTarget.value)}
-            />
-          </label>
+          <TaskDescriptionEditor value={description} onChange={setDescription} />
           <div class="planning-form-row">
             <label>
               {columns?.length ? 'Board column' : 'Status'}
@@ -527,7 +520,7 @@ export function Tasks() {
                     </span>
                     <TaskRecurrenceBadge item={item} />
                     <TaskDetailsSummary item={item} />
-                    {item.description && <p>{item.description}</p>}
+                    {item.description && <TaskDescription value={item.description} />}
                     <p class="planning-muted">
                       {projects.data?.find((p) => p.id === item.project_id)?.title ?? 'Inbox'}
                       {item.priority > 0 && ` · ${priorities[item.priority]} priority`}

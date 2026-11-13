@@ -145,16 +145,23 @@
 .planning-page .task-drag-handle:active {
   cursor: grabbing;
 }
-.task-board-description {
+.task-description.task-board-description {
   color: var(--color-text-muted);
   font-size: 0.85rem;
   line-height: 1.5;
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
   display: -webkit-box;
+  margin: 0.75rem 0;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.task-description.task-board-description > :first-child {
+  margin-top: 0;
+}
+.task-description.task-board-description > :last-child {
+  margin-bottom: 0;
 }
 .task-board-meta {
   display: flex;

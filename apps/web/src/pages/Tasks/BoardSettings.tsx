@@ -135,7 +135,7 @@ export function BoardSettings({
       )}
       <div class="task-board-settings-footer">
         <button
-          disabled={busy || columns.length >= 20}
+          disabled={busy || columns.length >= 21}
           onClick={() =>
             setColumns([
               ...columns,
