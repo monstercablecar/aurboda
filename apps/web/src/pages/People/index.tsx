@@ -215,6 +215,9 @@ function PeopleForUser() {
           />
         ) : personId ? (
           <>
+            <a href={`/journal?new=1&source_kind=person&source_id=${encodeURIComponent(personId)}`}>
+              Continue reflecting in Journal
+            </a>
             <ErrorMessage error={dashboard.error} />
             {dashboard.isPending && <p role="status">Loading dashboard…</p>}
             {dashboard.isError && <button onClick={() => void dashboard.refetch()}>Try again</button>}

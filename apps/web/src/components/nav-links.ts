@@ -9,6 +9,7 @@ export const NAV_LINKS_PRIMARY = [
   { href: '/cpap', label: 'CPAP', icon: '😴' },
   { href: '/work', label: 'Work', icon: '💼' },
   { href: '/resources', label: 'Resources', icon: '📚' },
+  { href: '/journal', label: 'Journal', icon: '📖' },
   { href: '/people', label: 'PEOPLE', icon: '👥' },
   { href: '/simple-food', label: 'Simple food', icon: '🥗' },
   { href: '/assessments', label: 'Mental assessments', icon: '🧠' },

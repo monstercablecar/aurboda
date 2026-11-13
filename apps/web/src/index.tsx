@@ -105,6 +105,7 @@ const Assessments = lazyPage(() => import('./pages/Assessments/index'), 'Assessm
 const Treatments = lazyPage(() => import('./pages/Treatments/index'), 'Treatments')
 const CPAP = lazyPage(() => import('./pages/CPAP/index'), 'CPAP')
 const Resources = lazyPage(() => import('./pages/Resources/index'), 'Resources')
+const Journal = lazyPage(() => import('./pages/Journal/index'), 'Journal')
 const People = lazyPage(() => import('./pages/People/index'), 'People')
 const WorkMetrics = lazyPage(() => import('./pages/WorkMetrics/index'), 'WorkMetrics')
 const SimpleFood = lazyPage(() => import('./pages/SimpleFood/index'), 'SimpleFood')
@@ -149,6 +150,8 @@ function AppShell() {
             <Route path="/cpap" component={CPAP} />
             <Route path="/work" component={WorkMetrics} />
             <Route path="/people" component={People} />
+            <Route path="/journal" component={Journal} />
+            <Route path="/journal/prompted" component={Journal} />
             <Route path="/resources" component={Resources} />
             <Route path="/assessments" component={Assessments} />
             <Route path="/treatments" component={Treatments} />
