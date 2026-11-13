@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 
+import { pharmacologyTables } from '../schema/pharmacology.ts'
 import { getTimeline, getToday } from '../services/pharmacology.ts'
 import { cleanTestDb, getTestUser, startTestDb, stopTestDb } from '../test/db-test-helper.ts'
 import { query } from './connection.ts'
@@ -16,6 +17,9 @@ import {
   createTreatmentType,
   exportPharmacology,
   listAdministrations,
+  listTreatmentTypes,
+  getTreatmentSession,
+  listQuestionnaires,
   updateAdministration,
   updateContextEvent,
   updateSubstance,
@@ -35,6 +39,58 @@ describe('pharmacology database and service integration', () => {
   beforeAll(startTestDb, TIMEOUT)
   afterAll(stopTestDb)
   beforeEach(cleanTestDb)
+
+  test('seeds chamomile and meditation ahead of ketamine without duplicating defaults', async () => {
+    const user = getTestUser()
+    await query(user, pharmacologyTables.treatment_types_seed)
+    const first = await listTreatmentTypes(user)
+    expect(first.map((type) => type.key)).toEqual(['chamomile', 'meditation', 'ketamine'])
+    expect(first.slice(0, 2).every((type) => type.default_follow_up_hours.length === 0)).toBe(true)
+    expect(first[2].default_follow_up_hours).toEqual([24, 48, 72, 168])
+    await query(user, pharmacologyTables.treatment_types_seed)
+    expect(await listTreatmentTypes(user)).toEqual(first)
+  })
+
+  test('upgrades existing catalogs while preserving customized types, questionnaires and session facts', async () => {
+    const user = getTestUser()
+    const ketamine = await createTreatmentType(user, { key: 'ketamine', display_name: 'My existing treatment', category: 'medicine_assisted_treatment', active: true, default_follow_up_hours: [12] })
+    const chamomile = await createTreatmentType(user, { key: 'chamomile', display_name: 'My tea time', category: 'custom', active: false, default_follow_up_hours: [2] })
+    const custom = await createTreatmentType(user, { key: 'custom', display_name: 'Custom session', category: 'custom', active: true, default_follow_up_hours: [] })
+    const saved = await createTreatmentSession(user, { treatment_type_id: ketamine.id, actual_start: '2026-11-09T21:00:00Z', timezone: 'UTC', status: 'completed', adverse_events: [], metadata: {}, follow_up_hours: [12] })
+    const existing = await createQuestionnaire(user, {
+      stable_key: 'ketamine_pre_session', display_name: 'My preparation', moment: 'pre_treatment', enabled: false,
+      questions: [{ stable_key: 'intention', prompt: 'My original question', response_type: 'long_text', required: false, enabled: true, sort_order: 10, anchors: {}, config: {} }],
+    })
+    const answer = await createAssessment(user, { template_id: existing.id, treatment_session_id: saved.id, stage: 'pre_session', assessed_at: '2026-11-09T20:00:00Z', timezone: 'UTC', responses: [{ question_id: existing.questions[0].id, question_version: existing.questions[0].version, value: 'An existing reflection' }] })
+    const seed = async () => {
+      for (const key of ['treatment_types_seed', 'questionnaire_templates_seed', 'assessment_questions_seed', 'assessment_question_versions_seed']) await query(user, pharmacologyTables[key])
+    }
+    await seed()
+    const types = await listTreatmentTypes(user)
+    expect(types.map((type) => type.key)).toEqual(['meditation', 'custom', 'ketamine', 'chamomile'])
+    expect(types.find((type) => type.id === ketamine.id)).toEqual(ketamine)
+    expect(types.find((type) => type.id === chamomile.id)).toEqual(chamomile)
+    expect(types.find((type) => type.id === custom.id)).toEqual(custom)
+    expect(await getTreatmentSession(user, saved.id)).toEqual(saved)
+    const templates = await listQuestionnaires(user)
+    const original = templates.find((template) => template.id === existing.id)!
+    expect(original).toMatchObject({ display_name: 'My preparation', enabled: false })
+    expect(original.questions.find((question) => question.id === existing.questions[0].id)).toEqual(existing.questions[0])
+    const neutral = templates.filter((template) => ['session_preparation', 'session_reflection', 'session_follow_up'].includes(template.stable_key))
+    expect(neutral).toHaveLength(3)
+    expect(neutral.flatMap((template) => template.questions)).toHaveLength(5)
+    expect(neutral.flatMap((template) => template.questions).every((question) => !question.required && question.response_type === 'long_text' && !question.metric_name)).toBe(true)
+    const preparationIndex = templates.findIndex((template) => template.stable_key === 'session_preparation')
+    expect(preparationIndex).toBeLessThan(templates.findIndex((template) => template.stable_key === 'ketamine_pre_session'))
+    const snapshots = await query(user, 'SELECT question_id FROM assessment_question_versions WHERE question_id = ANY($1::uuid[])', [neutral.flatMap((template) => template.questions.map((question) => question.id))])
+    expect(snapshots.rows).toHaveLength(5)
+    const priorAnswer = await query(user, 'SELECT value FROM assessment_responses WHERE assessment_id = $1', [answer.id])
+    expect(priorAnswer.rows[0].value).toBe('An existing reflection')
+    await seed()
+    expect(await listTreatmentTypes(user)).toEqual(types)
+    expect(await listQuestionnaires(user)).toEqual(templates)
+    expect(await getTreatmentSession(user, saved.id)).toEqual(saved)
+  })
 
   test('preserves facts, handles partial/idempotent confirmation, corrections, projections, assessments, timeline, and export', async () => {
     const user = getTestUser()
