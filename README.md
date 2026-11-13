@@ -1,8 +1,10 @@
-# Aurboda, Foghouse fork
+# Aurboda — customized fork
 
 I'm building this around how I actually use Aurboda: work tracking, relationships, daily check-ins, tasks, and a place to keep useful resources. Some parts are experiments. I'd rather make the useful pieces easy to contribute back than drift away from the original project for no reason.
 
 Aurboda is Fredrik Liljegren's project. This fork keeps its history and AGPL license. His Android app and integration work remain the foundation; this repository does not publish a replacement APK.
+
+The application retains Aurboda's name and original visual identity. See [branding](docs/branding.md) for the presentation and deployment boundary.
 
 Start with [what changed](docs/foghouse-fork.md), the [file-by-file inventory](docs/fork-file-inventory.md), and [what has been checked](docs/fork-validation.md). This branch is an initial source snapshot, not an upstream-approved release. The upstream README follows and describes the original project; its image and release links still point upstream.
 

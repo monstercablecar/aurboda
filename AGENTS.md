@@ -1,8 +1,9 @@
-## Foghouse fork context
+## Fork context
 
-This is Brighton Marcroft's Foghouse fork of Aurboda. Read [fork scope and changes](docs/foghouse-fork.md) and [publication validation](docs/fork-validation.md) before making changes. The upstream instructions below remain the engineering baseline.
+This is Brighton Marcroft's customized Aurboda fork. Read [fork scope and changes](docs/foghouse-fork.md) and [publication validation](docs/fork-validation.md) before making changes. The upstream instructions below remain the engineering baseline.
 
-- Preserve Fredrik Liljegren's existing authorship and license. New Foghouse commits use the actual contributor's identity, never Fredrik's identity from the upstream cloud-session example.
+- Preserve Fredrik Liljegren's existing authorship and license. New fork commits use the actual contributor's identity, never Fredrik's identity from the upstream cloud-session example.
+- Keep the Aurboda product name and original icons on public and signed-in pages. Do not reintroduce host-specific product branding. Existing hosting identifiers, data keys and contributor provenance remain distinct from the application presentation; see [branding](docs/branding.md).
 - `upstream` is `fiddur/aurboda`; `origin` is this user's fork. Confirm the remote before any write. No upstream PR, message, release or deployment is implied by a fork commit.
 - The customization branch is `feat/foghouse-customizations`. The original publication used the November 9 release; the released-main integration and validation are recorded in `docs/upstream-main-sync.md`. Keep updates isolated until reviewed and tested. This does not imply current upstream `develop` is included.
 - Future contributions use focused branches and draft PRs into `develop`, merge upstream updates without rebasing, and retain the original review/test gates. Do not claim the upstream review automation is installed on this fork.

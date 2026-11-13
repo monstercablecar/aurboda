@@ -1,7 +1,6 @@
 import { useLocation } from 'preact-iso'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 
-import { brandForRoute } from '../branding'
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
 import {
   DATA_SOURCE_LINKS,
@@ -18,7 +17,6 @@ import { usePageVisibility } from './usePageVisibility'
 export function Header() {
   const { url } = useLocation()
   const isLoggedIn = auth.value.token
-  const brand = brandForRoute(url, Boolean(isLoggedIn))
   const isAdmin = auth.value.is_admin
   const visible = usePageVisibility()
   const primaryLinks = NAV_LINKS_PRIMARY.filter((link) => visible(link.href))
@@ -71,8 +69,8 @@ export function Header() {
         >
           ☰
         </button>
-        <a href="/" class="nav-mobile-brand" aria-label={`${brand.name} home`}>
-          <img src={brand.mark} alt="" width={28} height={28} />
+        <a href="/" class="nav-mobile-brand" aria-label="Aurboda home">
+          <img src="/logo.svg" alt="" width={28} height={28} />
         </a>
         <span class="nav-mobile-title">{pageTitleForPath(url)}</span>
         <span class="spacer" />
