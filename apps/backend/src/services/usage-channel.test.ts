@@ -46,6 +46,7 @@ describe('isMutatingMcpTool', () => {
     'log_administration',
     'submit_assessment',
     'void_administration',
+    'resend_post_updates',
   ])('%s mutates', (name) => {
     expect(isMutatingMcpTool(name)).toBe(true)
   })
@@ -57,6 +58,7 @@ describe('isMutatingMcpTool', () => {
     'describe_tools',
     'preview_deduction_rule',
     'discover_challenges',
+    'preview_challenge',
     'match_routes',
     'export_article_markdown',
   ])('%s reads', (name) => {

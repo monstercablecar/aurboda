@@ -5,10 +5,13 @@ on:
     branches:
       - main
       - develop
+      - fix/foghouse-released-main-sync
+      - feat/foghouse-customizations
   pull_request:
     branches:
       - main
       - develop
+      - feat/foghouse-customizations
 
 jobs:
   changes:

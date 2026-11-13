@@ -17,6 +17,7 @@ import {
   getActivityById,
   getActivitiesNeedingDetail,
   getAllActivityTypeNames,
+  getEffectiveActivitiesInRange,
   getNonSleepActivitiesMerged,
   getOverlappingActivities,
   getOverrideForActivity,
@@ -25,6 +26,7 @@ import {
   insertActivity,
   insertOverride,
   markActivityDetailSynced,
+  restoreActivity,
   restoreEmptyImportTombstone,
   restoreSetlessTombstone,
   softDeleteActivityByExternalId,
@@ -744,6 +746,10 @@ describe('Activities Integration Tests', () => {
 
       expect(activity).toBeNull()
     })
+
+    test('returns null for an id that is not a uuid, without reaching Postgres (#1536)', async () => {
+      expect(await getActivityById(getTestUser(), 'null')).toBeNull()
+    })
   })
 
   describe('deleteActivity', () => {
@@ -772,6 +778,32 @@ describe('Activities Integration Tests', () => {
 
       const result = await deleteActivity(user, nonExistentId)
       expect(result).toBe(false)
+    })
+
+    test('returns false for an id that is not a uuid', async () => {
+      expect(await deleteActivity(getTestUser(), 'null')).toBe(false)
+    })
+  })
+
+  describe('restoreActivity', () => {
+    test('restores a deleted activity once', async () => {
+      const user = getTestUser()
+      const activityId = randomUUID()
+      await insertActivity(user, {
+        activity_type: 'exercise',
+        id: activityId,
+        source: 'aurboda',
+        start_time: new Date('2024-01-15T10:00:00Z'),
+      })
+      await deleteActivity(user, activityId)
+
+      expect(await restoreActivity(user, activityId)).toBe(true)
+      expect(await restoreActivity(user, activityId)).toBe(false)
+      expect(await getActivityById(user, activityId)).not.toBeNull()
+    })
+
+    test('returns false for an id that is not a uuid', async () => {
+      expect(await restoreActivity(getTestUser(), 'null')).toBe(false)
     })
   })
 
@@ -1356,6 +1388,61 @@ describe('Activities Integration Tests', () => {
 
       const survivor = await getActivityById(user, override!.id!, true)
       expect(survivor).toBeNull()
+    })
+  })
+
+  describe('getEffectiveActivitiesInRange', () => {
+    const dayStart = new Date('2026-05-05T00:00:00Z')
+    const dayEnd = new Date('2026-05-05T23:59:59Z')
+
+    test('a synced row replaced by an override counts only under the override type', async () => {
+      const user = getTestUser()
+      const garminId = randomUUID()
+      await insertActivity(user, {
+        activity_type: 'other_workout',
+        end_time: new Date('2026-05-05T20:10:00Z'),
+        external_id: 'garmin-777',
+        id: garminId,
+        source: 'garmin',
+        start_time: new Date('2026-05-05T19:30:00Z'),
+      })
+      const override = await insertOverride(user, [garminId], {
+        activity_type: 'yoga',
+        data: { _retyped_by: randomUUID() },
+        end_time: new Date('2026-05-05T20:10:00Z'),
+        start_time: new Date('2026-05-05T19:30:00Z'),
+      })
+
+      const result = await getEffectiveActivitiesInRange(user, dayStart, dayEnd)
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ activity_type: 'yoga', id: override?.id })
+      expect(result[0].source_ids).toEqual(expect.arrayContaining([garminId, override?.id]))
+    })
+
+    test('the same session from two sources is one activity', async () => {
+      const user = getTestUser()
+      await insertActivity(user, {
+        activity_type: 'running',
+        end_time: new Date('2026-05-05T08:40:00Z'),
+        source: 'garmin',
+        start_time: new Date('2026-05-05T08:00:00Z'),
+      })
+      await insertActivity(user, {
+        activity_type: 'running',
+        end_time: new Date('2026-05-05T08:40:30Z'),
+        source: 'health_connect',
+        start_time: new Date('2026-05-05T08:00:30Z'),
+      })
+      await insertActivity(user, {
+        activity_type: 'meditation',
+        source: 'manual',
+        start_time: new Date('2026-05-05T09:00:00Z'),
+      })
+
+      const result = await getEffectiveActivitiesInRange(user, dayStart, dayEnd)
+
+      expect(result.map((a) => a.activity_type)).toEqual(['running', 'meditation'])
     })
   })
 

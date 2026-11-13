@@ -3,6 +3,7 @@ import type {
   ChallengeShare,
   DashboardShare,
   ExerciseShare,
+  FeedPostKind,
   FeedVisibility,
 } from '@aurboda/api-spec'
 /**
@@ -31,23 +32,28 @@ import {
   Create,
   Delete,
   Image,
+  InteractionPolicy,
+  InteractionRule,
   isActor,
   Mention,
   Note,
+  PUBLIC_COLLECTION,
+  QuoteAuthorization,
   Tombstone,
   Update,
 } from '@fedify/fedify/vocab'
 
-import type { FeedPostRecord } from '../../db/index.ts'
+import type { FeedPostRecord, FeedQuoteAuthorizationRecord } from '../../db/index.ts'
 
-import { hasLocations, hasTimeSeries } from '../../db/index.ts'
+import { deleteFeedQuoteAuthorizationsForPost, hasLocations, hasTimeSeries } from '../../db/index.ts'
+import { articleBlockFigureUrl } from '../article.ts'
 import { challengeWinners } from '../challenge-results.ts'
 import { CHART_HEIGHT, CHART_WIDTH } from '../charts/chart-svg.ts'
 import { formatExerciseLine, resolvePostExercises, toStructuredExercise } from '../feed-exercises.ts'
 import { resolveStandingsChart } from '../feed-structured-challenge.ts'
 import { resolveExerciseTrendSeries } from '../feed-structured-exercise.ts'
 import { getSettings } from '../settings.ts'
-import { articleImageAttachments, renderArticleContentHtml } from './article-object.ts'
+import { type ArticleFigure, articleFigureName, renderArticleNote } from './article-object.ts'
 import { identityToActorUri, identityToHandle, renderChallengeShareHtml } from './challenge-object.ts'
 import { dashboardNoteContent } from './dashboard-object.ts'
 import { exerciseNoteContent } from './exercise-object.ts'
@@ -73,12 +79,38 @@ export const recipients = (visibility: FeedVisibility, followers: URL): { to: UR
   return { cc: cc.map((u) => new URL(u)), to: to.map((u) => new URL(u)) }
 }
 
+/**
+ * FEP-044f quote policy for a Note. Mastodon reads a missing policy as "nobody
+ * may quote", so every Note declares one: anyone for public/unlisted posts, only
+ * the author (Mastodon's own form of "just me") for followers-only ones.
+ */
+export const quoteInteractionPolicy = (visibility: FeedVisibility, actorUri: URL): InteractionPolicy =>
+  new InteractionPolicy({
+    canQuote: new InteractionRule({
+      automaticApprovals: [isPubliclyVisible(visibility) ? PUBLIC_COLLECTION : actorUri],
+    }),
+  })
+
 export interface FeedDeliveryDeps {
   federation: Federation<void>
   /** Canonical web origin, e.g. `https://aurboda.net`. */
   origin: string
   /** Public API base, e.g. `https://aurboda.net/api` — image attachment URLs hang off this. */
   apiBaseUrl: string
+  listRelayRecipients?: () => Promise<RelayRecipient[]>
+  /** Records this server's public posts on the public tag pages (`services/public-tags.ts`). */
+  publicTagPosts?: LocalPublicTagPosts
+}
+
+/** This server's own public posts on the public tag pages: recorded on delivery, dropped on Delete. */
+export interface LocalPublicTagPosts {
+  record: (user: string, note: Note, ctx: Context<void>) => Promise<void>
+  remove: (user: string, objectUri: string) => Promise<void>
+}
+
+export interface RelayRecipient {
+  id: URL
+  inboxId: URL
 }
 
 export interface DeliverablePost {
@@ -241,6 +273,7 @@ const buildFeedNoteParts = async (
     // The AS2 activity window — the workout time; `published` stays the share time.
     endTime: activity.end_time === undefined ? null : dateToTemporalInstant(activity.end_time),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, actorUri),
     name,
     published: dateToTemporalInstant(post.created_at),
     startTime: dateToTemporalInstant(activity.start_time),
@@ -343,7 +376,11 @@ export const buildFeedUpdate = async (
  * (just the object id + addressing), so it stays synchronous and survives the
  * post row already being gone.
  */
-export const buildFeedDelete = (ctx: Context<void>, user: string, post: DeliverablePost): Delete => {
+export const buildFeedDelete = (
+  ctx: Context<void>,
+  user: string,
+  post: Pick<DeliverablePost, 'id' | 'visibility'>,
+): Delete => {
   const noteId = ctx.getObjectUri(Note, { identifier: user, postId: post.id })
   const { cc, to } = recipients(post.visibility, ctx.getFollowersUri(user))
   return new Delete({
@@ -363,7 +400,7 @@ export const deliverFeedPost = async (
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const create = await buildFeedCreate(ctx, user, post, activity, deps.apiBaseUrl)
-  await ctx.sendActivity({ identifier: user }, 'followers', create)
+  await fanOut(deps, ctx, user, create, { relayActivity: relayCreate(post, create) })
 }
 
 export const deliverFeedUpdate = async (
@@ -374,13 +411,14 @@ export const deliverFeedUpdate = async (
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const update = await buildFeedUpdate(ctx, user, post, activity, deps.apiBaseUrl)
-  await ctx.sendActivity({ identifier: user }, 'followers', update)
+  await fanOut(deps, ctx, user, update, { relayActivity: relayEdit(ctx, user, post, update) })
 }
 
 export const deliverFeedDelete = async (
   deps: FeedDeliveryDeps,
   user: string,
   post: DeliverablePost & {
+    kind?: FeedPostKind
     challenge?: ChallengeShare | null
     in_reply_to_actor_uri?: string | null
     in_reply_to_handle?: string | null
@@ -392,18 +430,75 @@ export const deliverFeedDelete = async (
   // reply to the inbox of the author it answered (neither need follow us), so
   // the Delete goes there too (#1074) — and, like Create/Update, independently
   // of the followers fan-out (#1079).
-  await sendToFollowersAndMentioned(
-    ctx,
-    user,
-    [
+  await fanOut(deps, ctx, user, del, {
+    mentions: [
       ...(post.challenge == null ? [] : challengeMentions(post.challenge)),
       ...replyMentions({
         in_reply_to_actor_uri: post.in_reply_to_actor_uri ?? null,
         in_reply_to_handle: post.in_reply_to_handle ?? null,
       }),
     ],
-    del,
+    // Whatever its visibility now: it may have been public once, and a relay
+    // ignores the Delete of an id it never saw.
+    relayActivity: post.kind === 'reply' ? null : del,
+  })
+}
+
+/**
+ * FEP-044f revocation of one of our stamps: a `Delete` of the `QuoteAuthorization` id, addressed to
+ * the actor whose quote it approved and to our followers, as Mastodon's own revocation is, so every
+ * server that verified the quote drops the approval, not only the quoting one.
+ */
+export const buildQuoteStampDelete = (
+  ctx: Context<void>,
+  user: string,
+  stamp: Pick<FeedQuoteAuthorizationRecord, 'actor_uri' | 'id'>,
+): Delete => {
+  const stampUri = ctx.getObjectUri(QuoteAuthorization, { identifier: user, stampId: stamp.id })
+  return new Delete({
+    actor: ctx.getActorUri(user),
+    ccs: [ctx.getFollowersUri(user)],
+    id: new URL(`${stampUri.href}#delete`),
+    object: stampUri,
+    tos: [new URL(stamp.actor_uri)],
+  })
+}
+
+/**
+ * Sends each stamp's `Delete` to its quoting actor and to our followers; best-effort, so it never
+ * throws for a failed send.
+ */
+export const deliverQuoteStampDeletes = async (
+  deps: Pick<FeedDeliveryDeps, 'federation' | 'origin'>,
+  user: string,
+  stamps: readonly Pick<FeedQuoteAuthorizationRecord, 'actor_uri' | 'id'>[],
+): Promise<void> => {
+  if (stamps.length === 0) return
+  const ctx = await deps.federation.createContext(new URL(deps.origin))
+  await Promise.all(
+    stamps.map(async (stamp) => {
+      const del = buildQuoteStampDelete(ctx, user, stamp)
+      await Promise.all([
+        deliverToMentioned(ctx, user, [{ actorUri: new URL(stamp.actor_uri), handle: stamp.actor_uri }], del),
+        ctx.sendActivity({ identifier: user }, 'followers', del).catch((error: unknown) => {
+          console.warn(`⚠️ Quote stamp Delete to ${user}'s followers failed:`, error)
+        }),
+      ])
+    }),
   )
+}
+
+/**
+ * A post that is no longer public or unlisted loses its stamps: the approvals are dropped and each
+ * quoting actor gets the stamp's `Delete`. A public or unlisted post is left alone.
+ */
+export const revokeQuoteStamps = async (
+  deps: Pick<FeedDeliveryDeps, 'federation' | 'origin'>,
+  user: string,
+  post: Pick<FeedPostRecord, 'id' | 'visibility'>,
+): Promise<void> => {
+  if (isPubliclyVisible(post.visibility)) return
+  await deliverQuoteStampDeletes(deps, user, await deleteFeedQuoteAuthorizationsForPost(user, post.id))
 }
 
 // Articles (long-form posts). An article federates as a `Note` — Mastodon
@@ -439,8 +534,22 @@ export const toDeliverableArticle = (post: FeedPostRecord): DeliverableArticle |
     : null
 
 /**
+ * One article figure as an attachment. A block figure's URL carries `v` (the
+ * post's last-edited epoch): Mastodon re-hosts attachments at receipt, so the URL
+ * itself must change for an `Update` to show the new chart.
+ */
+const articleFigureImage = (figure: ArticleFigure): Image =>
+  new Image({
+    height: figure.height,
+    mediaType: figure.media_type,
+    name: articleFigureName(figure),
+    url: new URL(figure.url),
+    width: figure.width,
+  })
+
+/**
  * Build the Fedify `Note` for an article: the Mastodon-compatible object (title
- * `name` + prose HTML `content` + chart/correlation PNG attachments), at the
+ * `name` + prose HTML `content` + numbered figure attachments), at the
  * post's canonical Note id, addressed per visibility. Synchronous — an article
  * carries no activity to resolve. A deleted article tombstones at this same id.
  */
@@ -453,20 +562,24 @@ export const buildArticleNote = (
   const noteId = ctx.getObjectUri(Note, { identifier: user, postId: post.id })
   const { cc, to } = recipients(post.visibility, ctx.getFollowersUri(user))
   const hashtags = noteHashtags(ctx, user, post.tags)
-  return new Note({
-    attachments: articleImageAttachments(
+  const { content, figures } = renderArticleNote(post.article, (index) =>
+    articleBlockFigureUrl(
       apiBaseUrl,
       user,
       post.id,
       post.visibility,
       post.image_token,
       post.updated_at,
-      post.article,
+      index,
     ),
+  )
+  return new Note({
+    attachments: figures.map(articleFigureImage),
     attribution: ctx.getActorUri(user),
     ccs: cc,
-    content: linkifyHashtags(renderArticleContentHtml(post.article), hashtags),
+    content: linkifyHashtags(content, hashtags),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, ctx.getActorUri(user)),
     name: post.article.title,
     published: dateToTemporalInstant(post.created_at),
     tags: hashtagObjects(hashtags),
@@ -519,11 +632,8 @@ export const deliverFeedArticlePost = async (
   post: DeliverableArticle,
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity(
-    { identifier: user },
-    'followers',
-    buildArticleNoteCreate(ctx, user, post, deps.apiBaseUrl),
-  )
+  const create = buildArticleNoteCreate(ctx, user, post, deps.apiBaseUrl)
+  await fanOut(deps, ctx, user, create, { relayActivity: relayCreate(post, create) })
 }
 
 export const deliverFeedArticleUpdate = async (
@@ -532,11 +642,8 @@ export const deliverFeedArticleUpdate = async (
   post: DeliverableArticle,
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity(
-    { identifier: user },
-    'followers',
-    buildArticleNoteUpdate(ctx, user, post, deps.apiBaseUrl),
-  )
+  const update = buildArticleNoteUpdate(ctx, user, post, deps.apiBaseUrl)
+  await fanOut(deps, ctx, user, update, { relayActivity: relayEdit(ctx, user, post, update) })
 }
 
 // Challenge shares (#994). A challenge invitation federates as a `Note` (like
@@ -700,6 +807,7 @@ export const buildChallengeNote = (
     ccs: cc,
     content: linkifyHashtags(renderChallengeShareHtml(post.challenge, post.message), hashtags),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, ctx.getActorUri(user)),
     name: post.challenge.name,
     published: dateToTemporalInstant(post.created_at),
     tags: [
@@ -801,23 +909,98 @@ const deliverToMentioned = async (
   }
 }
 
+/** Mastodon pushes public posts only to relays: not unlisted, not followers-only. */
+const toRelays = (post: { visibility: FeedVisibility }): boolean => post.visibility === 'public'
+
+const relayCreate = (post: { visibility: FeedVisibility }, create: Activity): Activity | null =>
+  toRelays(post) ? create : null
+
 /**
- * Fan an activity out to followers and to each tagged actor — as two
- * independent deliveries. Without an outbox queue Fedify awaits every follower
- * inbox and one dead instance rejects the whole send, which used to cancel the
- * mention delivery that exists precisely for people who don't follow us
- * (#1079). Both run concurrently; a followers failure still surfaces to the
- * caller after both have settled.
+ * What relays get for an edit: the Update while the post is public, else a
+ * public-addressed Delete, so a post narrowed from public is retracted from the
+ * relays and its narrowed content never reaches them. A post widened to public
+ * reaches them only as an Update, which a relay may ignore.
  */
-const sendToFollowersAndMentioned = async (
+const relayEdit = (
   ctx: Context<void>,
   user: string,
-  mentions: MentionRecipient[],
+  post: { id: string; visibility: FeedVisibility },
+  update: Activity,
+): Activity => (toRelays(post) ? update : buildFeedDelete(ctx, user, { id: post.id, visibility: 'public' }))
+
+/**
+ * Deliver to each accepted relay's inbox, signed by the post's author. Each relay
+ * is its own best-effort send, so a dead relay costs no other relay its copy.
+ */
+export const deliverToRelays = async (
+  deps: Pick<FeedDeliveryDeps, 'listRelayRecipients'>,
+  ctx: Context<void>,
+  user: string,
   activity: Activity,
+): Promise<void> => {
+  if (deps.listRelayRecipients == null) return
+  let relays: RelayRecipient[]
+  try {
+    relays = await deps.listRelayRecipients()
+  } catch (error) {
+    console.warn('⚠️ Relay list unavailable, posts not pushed to relays:', error)
+    return
+  }
+  await Promise.all(
+    relays.map((relay) =>
+      ctx.sendActivity({ identifier: user }, relay, activity).catch((error: unknown) => {
+        console.warn(`⚠️ Relay delivery to ${relay.inboxId.href} failed:`, error)
+      }),
+    ),
+  )
+}
+
+/**
+ * Mirror what the relays get onto the public tag pages: a public Create/Update of
+ * a top-level Note is recorded (when it carries a configured tag), a Delete —
+ * including the one that retracts a post narrowed from public — removes it.
+ */
+const recordPublicTagPost = async (
+  deps: Pick<FeedDeliveryDeps, 'publicTagPosts'>,
+  ctx: Context<void>,
+  user: string,
+  activity: Activity,
+): Promise<void> => {
+  const tagPosts = deps.publicTagPosts
+  if (tagPosts == null) return
+  try {
+    if (activity instanceof Delete) {
+      if (activity.objectId != null) await tagPosts.remove(user, activity.objectId.href)
+      return
+    }
+    if (!(activity instanceof Create) && !(activity instanceof Update)) return
+    const note = await activity.getObject()
+    if (note instanceof Note && note.replyTargetIds.length === 0) await tagPosts.record(user, note, ctx)
+  } catch (error) {
+    console.warn('⚠️ Public tag page record failed:', error)
+  }
+}
+
+/**
+ * Fan an activity out to followers, to each tagged actor and (`relayActivity`,
+ * when set) to the accepted relays — as independent deliveries. Without an outbox queue
+ * Fedify awaits every follower inbox and one dead instance rejects the whole
+ * send, which used to cancel the mention delivery that exists precisely for
+ * people who don't follow us (#1079). All run concurrently; a followers failure
+ * still surfaces to the caller after the others have settled.
+ */
+const fanOut = async (
+  deps: FeedDeliveryDeps,
+  ctx: Context<void>,
+  user: string,
+  activity: Activity,
+  { mentions = [], relayActivity }: { mentions?: MentionRecipient[]; relayActivity: Activity | null },
 ): Promise<void> => {
   const [followers] = await Promise.allSettled([
     ctx.sendActivity({ identifier: user }, 'followers', activity),
     mentions.length > 0 ? deliverToMentioned(ctx, user, mentions, activity) : Promise.resolve(),
+    relayActivity == null ? Promise.resolve() : deliverToRelays(deps, ctx, user, relayActivity),
+    relayActivity == null ? Promise.resolve() : recordPublicTagPost(deps, ctx, user, relayActivity),
   ])
   if (followers.status === 'rejected') throw followers.reason
 }
@@ -844,7 +1027,10 @@ export const deliverFeedChallengePost = async (
   const attachments = await deliveredChallengeAttachments(deps, user, post, hasStandings)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const create = buildChallengeNoteCreate(ctx, user, post, attachments)
-  await sendToFollowersAndMentioned(ctx, user, challengeMentions(post.challenge), create)
+  await fanOut(deps, ctx, user, create, {
+    mentions: challengeMentions(post.challenge),
+    relayActivity: relayCreate(post, create),
+  })
 }
 
 /** An edit re-sends the attachment under the new `v`, so Mastodon fetches the chart afresh. */
@@ -857,7 +1043,10 @@ export const deliverFeedChallengeUpdate = async (
   const attachments = await deliveredChallengeAttachments(deps, user, post, hasStandings)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const update = buildChallengeNoteUpdate(ctx, user, post, attachments)
-  await sendToFollowersAndMentioned(ctx, user, challengeMentions(post.challenge), update)
+  await fanOut(deps, ctx, user, update, {
+    mentions: challengeMentions(post.challenge),
+    relayActivity: relayEdit(ctx, user, post, update),
+  })
 }
 
 // Exercise shares (#1398). An exercise's progress federates as a `Note` (like a challenge
@@ -948,6 +1137,7 @@ export const buildExerciseNote = (
     ccs: cc,
     content: linkifyHashtags(content, hashtags),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, ctx.getActorUri(user)),
     name: post.exercise.name,
     published: dateToTemporalInstant(post.created_at),
     tags: hashtagObjects(hashtags),
@@ -1027,11 +1217,8 @@ export const deliverFeedExercisePost = async (
 ): Promise<void> => {
   const { attachments, content } = await preparedExerciseNote(deps, user, post, hooks)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity(
-    { identifier: user },
-    'followers',
-    buildExerciseNoteCreate(ctx, user, post, content, attachments),
-  )
+  const create = buildExerciseNoteCreate(ctx, user, post, content, attachments)
+  await fanOut(deps, ctx, user, create, { relayActivity: relayCreate(post, create) })
 }
 
 /** An edit re-sends the attachment under the new `v`, so Mastodon fetches the trend afresh. */
@@ -1043,11 +1230,8 @@ export const deliverFeedExerciseUpdate = async (
 ): Promise<void> => {
   const { attachments, content } = await preparedExerciseNote(deps, user, post, hooks)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity(
-    { identifier: user },
-    'followers',
-    buildExerciseNoteUpdate(ctx, user, post, content, attachments),
-  )
+  const update = buildExerciseNoteUpdate(ctx, user, post, content, attachments)
+  await fanOut(deps, ctx, user, update, { relayActivity: relayEdit(ctx, user, post, update) })
 }
 
 // A dashboard Note's content is resolved from the stored config snapshot before the Note is built,
@@ -1092,6 +1276,7 @@ export const buildDashboardNote = (
     ccs: cc,
     content: linkifyHashtags(content, hashtags),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, ctx.getActorUri(user)),
     name: post.dashboard.name,
     published: dateToTemporalInstant(post.created_at),
     tags: hashtagObjects(hashtags),
@@ -1148,7 +1333,8 @@ export const deliverFeedDashboardPost = async (
 ): Promise<void> => {
   const html = await content(user, post)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity({ identifier: user }, 'followers', buildDashboardNoteCreate(ctx, user, post, html))
+  const create = buildDashboardNoteCreate(ctx, user, post, html)
+  await fanOut(deps, ctx, user, create, { relayActivity: relayCreate(post, create) })
 }
 
 export const deliverFeedDashboardUpdate = async (
@@ -1159,7 +1345,8 @@ export const deliverFeedDashboardUpdate = async (
 ): Promise<void> => {
   const html = await content(user, post)
   const ctx = await deps.federation.createContext(new URL(deps.origin))
-  await ctx.sendActivity({ identifier: user }, 'followers', buildDashboardNoteUpdate(ctx, user, post, html))
+  const update = buildDashboardNoteUpdate(ctx, user, post, html)
+  await fanOut(deps, ctx, user, update, { relayActivity: relayEdit(ctx, user, post, update) })
 }
 
 // Replies (comments). A reply federates as a `Note` with `inReplyTo` pointing at
@@ -1245,6 +1432,7 @@ export const buildReplyNote = (ctx: Context<void>, user: string, post: Deliverab
     ccs: cc,
     content: linkifyHashtags(renderReplyContent(post), hashtags),
     id: noteId,
+    interactionPolicy: quoteInteractionPolicy(post.visibility, ctx.getActorUri(user)),
     published: dateToTemporalInstant(post.created_at),
     replyTarget: new URL(post.in_reply_to_uri),
     tags: [
@@ -1298,7 +1486,7 @@ export const deliverFeedReplyPost = async (
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const create = buildReplyNoteCreate(ctx, user, post)
-  await sendToFollowersAndMentioned(ctx, user, replyMentions(post, authorInbox), create)
+  await fanOut(deps, ctx, user, create, { mentions: replyMentions(post, authorInbox), relayActivity: null })
 }
 
 export const deliverFeedReplyUpdate = async (
@@ -1308,5 +1496,5 @@ export const deliverFeedReplyUpdate = async (
 ): Promise<void> => {
   const ctx = await deps.federation.createContext(new URL(deps.origin))
   const update = buildReplyNoteUpdate(ctx, user, post)
-  await sendToFollowersAndMentioned(ctx, user, replyMentions(post), update)
+  await fanOut(deps, ctx, user, update, { mentions: replyMentions(post), relayActivity: null })
 }

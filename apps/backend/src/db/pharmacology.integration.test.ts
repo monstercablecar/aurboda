@@ -207,7 +207,10 @@ describe('pharmacology database and service integration', () => {
 
     await query(user, `UPDATE context_events SET intensity = NULL, updated_at = NOW() WHERE id = $1`, [entry.id])
     const refreshed = await updateContextEvent(user, entry.id, { notes: 'No intensity now' })
-    expect(refreshed?.intensity).toBeNull()
+    expect(refreshed).not.toBeNull()
+    expect(refreshed?.intensity).toBeUndefined()
+    const stored = await query(user, 'SELECT intensity FROM context_events WHERE id = $1', [entry.id])
+    expect(stored.rows[0].intensity).toBeNull()
     eventProjection = await query(user, `SELECT deleted_at FROM time_series WHERE source=$1 AND metric='simple_food_fullness'`, [`sfctx:${entry.id}`])
     expect(eventProjection.rows[0].deleted_at).not.toBeNull()
   })

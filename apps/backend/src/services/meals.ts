@@ -2,7 +2,6 @@ import { type FrequentFoodItem, type FrequentMeal, NUTRIENT_FIELD_NAMES } from '
 
 import {
   deleteMeal as dbDeleteMeal,
-  deleteNotesForEntity as dbDeleteNotesForEntity,
   findMealsContainingFoodItem,
   type FoodItemPortionRow,
   getFoodItemPortionById,
@@ -312,9 +311,9 @@ const round2 = (n: number): number => Math.round(n * 100) / 100
 
 /**
  * Build a junction row by snapshotting the canonical food item's nutrient
- * values scaled by quantity. Name, icon, and sensitivity flags are NOT
- * snapshotted — they're resolved at read time so user edits propagate to
- * past meals.
+ * values scaled by quantity. Name, icon, and sensitivity flags are resolved
+ * at read time so user edits propagate to past meals; the name and icon
+ * written here are only the fallback for an id that later resolves nowhere.
  *
  * `effectiveValues` carries the per-default-quantity nutrients to snapshot.
  * Callers should compute it via `getEffectiveNutrients(detail)` so composite
@@ -339,6 +338,8 @@ export const buildScaledJunctionItem = (
   const usingPortion = isUsingPortion(fi, portion)
   const junctionItem: Record<string, unknown> = {
     food_item_id: canonical.id,
+    food_item_name: canonical.name,
+    food_item_icon: canonical.icon as string | undefined,
     quantity: usingPortion ? fi.portion_count! : fi.quantity,
     sort_order: sortOrder,
     unit: usingPortion ? portion.label_unit : fi.unit,
@@ -642,6 +643,8 @@ export async function resnapshotMealsForFoodItem(
   const passThroughLink = (link: MealFoodItemLink): Record<string, unknown> => {
     const out: Record<string, unknown> = {
       food_item_id: link.food_item_id,
+      food_item_name: link.legacy_food_item_name,
+      food_item_icon: link.legacy_food_item_icon,
       quantity: link.quantity,
       sort_order: link.sort_order,
       unit: link.unit,
@@ -820,13 +823,5 @@ export async function deleteMealById(
   id: string,
 ): Promise<{ success: boolean; error?: string }> {
   const deleted = await dbDeleteMeal(user, id)
-  if (!deleted) {
-    return { error: 'Meal not found', success: false }
-  }
-  // A meal row is removed for good — unlike a soft-deleted activity, it cannot
-  // be restored — so its comments have nothing left to hang off. Left behind
-  // they would keep drawing a Timeline bubble whose "On this meal" link 404s,
-  // and list forever as loose day-level notes in the daily summary.
-  await dbDeleteNotesForEntity(user, 'meal', id)
-  return { success: true }
+  return deleted ? { success: true } : { error: 'Meal not found', success: false }
 }

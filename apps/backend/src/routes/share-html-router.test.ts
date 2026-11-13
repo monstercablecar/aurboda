@@ -3,6 +3,7 @@ import supertest from 'supertest'
 import { describe, expect, test } from 'vitest'
 
 import type { ResolvedChallenge } from '../services/challenge-card.ts'
+import type { ResolvedPost } from '../services/post-card.ts'
 
 import { createShareHtmlRouter, HOME_PAGE_PATH, type ShareHtmlDeps } from './share-html-router.ts'
 
@@ -14,10 +15,10 @@ const buildApp = (overrides: Partial<ShareHtmlDeps> = {}) => {
     apiBaseUrl: 'https://aurboda.net/api',
     loadTemplate: async () => template,
     profileExists: async () => false,
-    resolveArticle: async () => null,
     resolveChallenge: async () => null,
     resolveDashboard: async () => null,
     resolveExercise: async () => null,
+    resolvePost: async () => null,
     webHost: 'https://aurboda.net',
     ...overrides,
   }
@@ -29,7 +30,11 @@ const buildApp = (overrides: Partial<ShareHtmlDeps> = {}) => {
 describe('GET /u/:username/:slug', () => {
   test('renders rich meta for a public dashboard', async () => {
     const app = buildApp({
-      resolveDashboard: async () => ({ is_public: true, name: 'My Training' }),
+      resolveDashboard: async () => ({
+        is_public: true,
+        name: 'My Training',
+        updated_at: '2026-10-01T08:00:00.000Z',
+      }),
     })
     const res = await supertest(app).get('/u/fiddur/abc123')
     expect(res.status).toBe(200)
@@ -45,6 +50,7 @@ describe('GET /u/:username/:slug', () => {
         is_public: true,
         name: 'Month in data',
         period_label: 'October 2026',
+        updated_at: '2026-10-01T08:00:00.000Z',
       }),
     })
     const res = await supertest(app).get('/u/fiddur/abc123')
@@ -58,6 +64,7 @@ describe('GET /u/:username/:slug', () => {
         description: 'Two years of training and its effect on sleep.',
         is_public: true,
         name: 'My Training',
+        updated_at: '2026-10-01T08:00:00.000Z',
       }),
     })
     const res = await supertest(app).get('/u/fiddur/abc123')
@@ -68,7 +75,11 @@ describe('GET /u/:username/:slug', () => {
 
   test('does not leak an unlisted (non-public) dashboard name', async () => {
     const app = buildApp({
-      resolveDashboard: async () => ({ is_public: false, name: 'Secret Dashboard' }),
+      resolveDashboard: async () => ({
+        is_public: false,
+        name: 'Secret Dashboard',
+        updated_at: '2026-10-01T08:00:00.000Z',
+      }),
     })
     const res = await supertest(app).get('/u/fiddur/abc123')
     expect(res.status).toBe(200)
@@ -159,7 +170,11 @@ describe('GET /u/:username/:slug', () => {
   test('does not look up an exercise when a dashboard holds the slug', async () => {
     let asked = false
     const app = buildApp({
-      resolveDashboard: async () => ({ is_public: false, name: 'Hidden' }),
+      resolveDashboard: async () => ({
+        is_public: false,
+        name: 'Hidden',
+        updated_at: '2026-10-01T08:00:00.000Z',
+      }),
       resolveExercise: async () => {
         asked = true
         return exercise
@@ -181,7 +196,7 @@ describe('GET /u/:username/:slug', () => {
     const app = buildApp({
       resolveDashboard: async () => {
         called = true
-        return { is_public: true, name: 'x' }
+        return { is_public: true, name: 'x', updated_at: '2026-10-01T08:00:00.000Z' }
       },
     })
     const res = await supertest(app).get('/u/Invalid..Name/abc')
@@ -192,7 +207,11 @@ describe('GET /u/:username/:slug', () => {
   test('serves a minimal document when the template is unavailable', async () => {
     const app = buildApp({
       loadTemplate: async () => null,
-      resolveDashboard: async () => ({ is_public: true, name: 'My Training' }),
+      resolveDashboard: async () => ({
+        is_public: true,
+        name: 'My Training',
+        updated_at: '2026-10-01T08:00:00.000Z',
+      }),
     })
     const res = await supertest(app).get('/u/fiddur/abc')
     expect(res.text).toContain('property="og:title" content="My Training — Aurboda"')
@@ -246,17 +265,29 @@ describe('GET the welcome page', () => {
     expect(res.text).toContain('<div id="app"></div>')
     expect(res.headers['cache-control']).toBe('no-cache')
   })
+
+  test('answers 503 without the template, so nginx serves the static SPA instead (#1533)', async () => {
+    const res = await supertest(buildApp({ loadTemplate: async () => null })).get(HOME_PAGE_PATH)
+    expect(res.status).toBe(503)
+    expect(res.text).not.toContain('<html')
+  })
 })
 
 describe('GET /blog', () => {
   test('renders the official feed meta with Atom discovery when it is on', async () => {
     const app = buildApp({
-      readOfficialFeed: async () => ({ tags: ['aurboda', 'qs'], users: ['fiddur', 'alice'] }),
+      readOfficialFeed: async () => ({
+        remote_authors: ['bob@peer.example'],
+        tags: ['aurboda', 'qs'],
+        users: ['fiddur', 'alice'],
+      }),
     })
     const res = await supertest(app).get('/blog')
     expect(res.text).toContain('<title>aurboda.net blog</title>')
     expect(res.text).toContain('<link rel="canonical" href="https://aurboda.net/blog">')
-    expect(res.text).toContain('content="Posts from fiddur and alice tagged #aurboda or #qs."')
+    expect(res.text).toContain(
+      'content="Posts from fiddur, alice and @bob@peer.example tagged #aurboda or #qs."',
+    )
     expect(res.text).toContain(
       'type="application/atom+xml" title="aurboda.net blog" href="https://aurboda.net/api/public/official-feed.atom">',
     )
@@ -264,7 +295,10 @@ describe('GET /blog', () => {
   })
 
   test('renders default meta when the official feed is off', async () => {
-    for (const app of [buildApp(), buildApp({ readOfficialFeed: async () => ({ tags: [], users: [] }) })]) {
+    for (const app of [
+      buildApp(),
+      buildApp({ readOfficialFeed: async () => ({ remote_authors: [], tags: [], users: [] }) }),
+    ]) {
       const res = await supertest(app).get('/blog')
       expect(res.text).toContain('<title>Aurboda</title>')
       expect(res.text).not.toContain('application/atom+xml')
@@ -308,38 +342,70 @@ describe('GET /u/:username/articles', () => {
 
 describe('GET /u/:username/posts/:postId', () => {
   const postId = '11111111-2222-4333-8444-555555555555'
+  const publicPost = (overrides: Partial<Extract<ResolvedPost, { is_public: true }>> = {}): ResolvedPost => ({
+    created_at: '2026-11-01T07:30:00.000Z',
+    description: 'Felt great today',
+    is_public: true,
+    kind: 'activity',
+    title: 'Morning run',
+    updated_at: '2026-11-01T08:00:00.000Z',
+    ...overrides,
+  })
 
-  test('renders article meta for a public article', async () => {
+  test('renders article meta for a public article, with the post card as its image', async () => {
     const app = buildApp({
-      resolveArticle: async () => ({
-        excerpt: 'Two weeks of sleep data.',
-        is_public: true,
-        title: 'Sleep & HRV',
-      }),
+      resolvePost: async () =>
+        publicPost({ description: 'Two weeks of sleep data.', kind: 'article', title: 'Sleep & HRV' }),
     })
     const res = await supertest(app).get(`/u/fiddur/posts/${postId}`)
     expect(res.text).toContain('<title>Sleep &amp; HRV — Aurboda</title>')
     expect(res.text).toContain('property="og:type" content="article"')
     expect(res.text).toContain('property="og:description" content="Two weeks of sleep data."')
     expect(res.text).toContain(`property="og:url" content="https://aurboda.net/u/fiddur/posts/${postId}"`)
+    expect(res.text).toContain(
+      `property="og:image" content="https://aurboda.net/u/fiddur/posts/${postId}/opengraph-image.png"`,
+    )
     expect(res.text).toContain('href="https://aurboda.net/api/public/fiddur/articles.atom"')
+    expect(res.text).toContain('"@type":"Article"')
     expect(res.headers['cache-control']).toBe('public, max-age=300')
   })
 
-  test('does not describe an unlisted article', async () => {
-    const app = buildApp({
-      resolveArticle: async () => ({ excerpt: 'Secret words', is_public: false, title: 'Hidden title' }),
-    })
+  test('renders post meta for a public activity post', async () => {
+    const app = buildApp({ resolvePost: async () => publicPost() })
     const res = await supertest(app).get(`/u/fiddur/posts/${postId}`)
-    expect(res.text).not.toContain('Hidden title')
-    expect(res.text).not.toContain('Secret words')
-    expect(res.text).toContain('<title>Aurboda</title>')
+    expect(res.text).toContain('<title>Morning run — Aurboda</title>')
+    expect(res.text).toContain('property="og:title" content="Morning run — Aurboda"')
+    expect(res.text).toContain('property="og:type" content="article"')
+    expect(res.text).toContain('property="og:description" content="Felt great today"')
+    expect(res.text).toContain(
+      `property="og:image" content="https://aurboda.net/u/fiddur/posts/${postId}/opengraph-image.png"`,
+    )
+    expect(res.text).toContain('"@type":"SocialMediaPosting"')
+    expect(res.text).toContain('"datePublished":"2026-11-01T07:30:00.000Z"')
+    expect(res.text).not.toContain('application/atom+xml')
+    expect(res.headers['cache-control']).toBe('public, max-age=300')
   })
 
-  test('falls back to default meta for a non-article post or a malformed id without resolving it', async () => {
+  test('falls back to a generic description for a post with nothing to say', async () => {
+    const app = buildApp({
+      resolvePost: async () => publicPost({ description: '', kind: 'reply', title: 'Hi' }),
+    })
+    const res = await supertest(app).get(`/u/fiddur/posts/${postId}`)
+    expect(res.text).toContain('property="og:description" content="A post by fiddur on Aurboda."')
+  })
+
+  test('does not describe an unlisted or followers-only post', async () => {
+    const app = buildApp({ resolvePost: async () => ({ is_public: false }) })
+    const res = await supertest(app).get(`/u/fiddur/posts/${postId}`)
+    expect(res.text).toContain('<title>Aurboda</title>')
+    expect(res.text).toContain('content="https://aurboda.net/og-default.png"')
+    expect(res.headers['cache-control']).toBe('public, max-age=60')
+  })
+
+  test('falls back to default meta for an unknown post or a malformed id without resolving it', async () => {
     let calls = 0
     const app = buildApp({
-      resolveArticle: async () => {
+      resolvePost: async () => {
         calls++
         return null
       },

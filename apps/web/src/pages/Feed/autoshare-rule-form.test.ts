@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dataFilterToRow,
   emptyRuleFormState,
+  formStateTagsText,
   formStateToAddBody,
   formStateToUpdateBody,
   ruleToFormState,
@@ -196,6 +197,25 @@ describe('formStateToUpdateBody', () => {
       'pace_avg',
     ])
   })
+
+  it('keeps stored series keys it does not recognise, after the known ones', () => {
+    const original = rule({ series_metrics: ['future_series', 'speed', 'heart_rate'] })
+    expect(formStateToUpdateBody(ruleToFormState(original), original).series_metrics).toEqual([
+      'heart_rate',
+      'speed',
+      'future_series',
+    ])
+  })
+
+  it('rounds a tiny positive minimum duration up to one second', () => {
+    const original = rule()
+    const body = (minMinutes: string) =>
+      formStateToUpdateBody({ ...ruleToFormState(original), minMinutes }, original).min_duration_seconds
+    expect(body('0.001')).toBe(1)
+    expect(body('0.5')).toBe(30)
+    expect(body('0')).toBe(0)
+    expect(body('')).toBeNull()
+  })
 })
 
 describe('formStateToAddBody', () => {
@@ -229,5 +249,24 @@ describe('formStateToAddBody', () => {
       max_duration_seconds: 7200,
       source: 'garmin',
     })
+  })
+})
+
+describe('formStateTagsText', () => {
+  it('adds the message hashtags to the default tags', () => {
+    expect(formStateTagsText({ ...emptyRuleFormState(), message: '#aurboda #strengthtraining' })).toBe(
+      'your default tags + #aurboda #strengthtraining',
+    )
+  })
+
+  it('counts the message hashtags when own tags are empty', () => {
+    expect(
+      formStateTagsText({
+        ...emptyRuleFormState(),
+        message: '#aurboda #strengthtraining',
+        ownTags: true,
+        tagsText: '',
+      }),
+    ).toBe('#aurboda #strengthtraining')
   })
 })

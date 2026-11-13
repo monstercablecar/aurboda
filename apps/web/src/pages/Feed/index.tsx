@@ -19,6 +19,7 @@ import { ArticleDrafts } from './ArticleDrafts'
 import { AutoShareRulesPanel } from './AutoShareRulesPanel'
 import { type FeedTab, feedTabFromQuery, feedTabUrl } from './feed-tab'
 import { FeedPostCard, type PostAuthor } from './FeedPostCard'
+import { FollowedTagsPanel } from './FollowedTagsPanel'
 import { FollowersPanel } from './FollowersPanel'
 import { FollowingPanel } from './FollowingPanel'
 import { HomeTimeline } from './HomeTimeline'
@@ -75,7 +76,9 @@ function OwnPostCard({ post, author }: { post: FeedPost; author: PostAuthor }) {
         }
       />
 
-      {editing && isArticle && <ArticleEditorDialog post={post} onClose={() => setEditing(false)} />}
+      {editing && isArticle && (
+        <ArticleEditorDialog post={post} author={author} onClose={() => setEditing(false)} />
+      )}
 
       {exporting && isArticle && <ArticleExportDialog postId={post.id} onClose={() => setExporting(false)} />}
 
@@ -149,6 +152,7 @@ const FeedTabPanel = ({ author, tab }: { author: PostAuthor; tab: FeedTab }) => 
     return (
       <div class="feed-manage">
         <FollowingPanel />
+        <FollowedTagsPanel />
         <FollowersPanel />
         <AutoShareRulesPanel />
       </div>
@@ -193,6 +197,7 @@ export function Feed() {
         <ArticleEditorDialog
           key={composer.draft?.id ?? 'new'}
           draft={composer.draft}
+          author={author}
           onClose={() => setComposer(null)}
         />
       )}

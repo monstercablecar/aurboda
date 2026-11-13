@@ -57,6 +57,11 @@
   margin-bottom: 0;
 }
 
+.comment-content img {
+  max-width: 100%;
+  height: auto;
+}
+
 .comment-footer {
   display: flex;
   align-items: center;
@@ -141,6 +146,13 @@
   border-radius: 3px;
   background: transparent;
   color: inherit;
+}
+
+.comment-times-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  color: #ef4444;
 }
 
 .comment-edit-form,

@@ -19,6 +19,8 @@ import {
   buildOfficialFeedUrl,
   buildPostUrl,
   buildProfileUrl,
+  buildPublicTagAtomUrl,
+  buildPublicTagUrl,
 } from './share-urls.ts'
 
 export const ATOM_CONTENT_TYPE = 'application/atom+xml; charset=utf-8'
@@ -132,6 +134,8 @@ interface AtomAuthor {
 }
 
 interface AtomEntryXml extends AtomArticleEntry {
+  /** The entry's Atom `<id>`: a permalink for our own posts, the note's id for a tag page's. */
+  entry_id: string
   url: string
   author?: AtomAuthor
 }
@@ -158,7 +162,7 @@ const buildAtom = ({ author, entries, now, pageUrl, selfUrl, title }: AtomDocume
   const entryXml = entries.map((entry) =>
     [
       '  <entry>',
-      `    <id>${escapeXml(entry.url)}</id>`,
+      `    <id>${escapeXml(entry.entry_id)}</id>`,
       `    <title type="text">${escapeXml(entry.title)}</title>`,
       `    ${link('alternate', 'text/html', entry.url)}`,
       ...(entry.author ? [`    ${authorXml(entry.author)}`] : []),
@@ -198,7 +202,10 @@ export const blogTitle = (username: string): string => `${username}'s blog — A
 export const buildArticlesAtom = ({ apiBaseUrl, entries, now, username, webHost }: AtomFeedInput): string =>
   buildAtom({
     author: { name: username, uri: buildProfileUrl(webHost, username) },
-    entries: entries.map((entry) => ({ ...entry, url: buildPostUrl(webHost, username, entry.id) })),
+    entries: entries.map((entry) => {
+      const url = buildPostUrl(webHost, username, entry.id)
+      return { ...entry, entry_id: url, url }
+    }),
     now,
     pageUrl: buildBlogUrl(webHost, username),
     selfUrl: buildArticlesAtomUrl(apiBaseUrl, username),
@@ -214,20 +221,113 @@ export const officialFeedTitle = (webHost: string): string => {
   }
 }
 
+/** A post on a public tag page: from any server, its HTML already sanitised. */
+export interface AtomTagEntry {
+  note_uri: string
+  url: string | null
+  actor_uri: string
+  handle: string | null
+  display_name: string | null
+  content: string
+  images: { url: string; name?: string }[]
+  published_at: Date
+  updated_at: Date
+}
+
+interface TagFeedAtomInput {
+  webHost: string
+  apiBaseUrl: string
+  tag: string
+  entries: AtomTagEntry[]
+  now: Date
+}
+
+export const publicTagFeedTitle = (webHost: string, tag: string): string => {
+  try {
+    return `#${tag} on ${new URL(webHost).host}`
+  } catch {
+    return `#${tag}`
+  }
+}
+
+/** A remote post's title: the first line of its text, else its author. */
+export const remoteEntryTitle = (entry: Pick<AtomTagEntry, 'content'>, authorName: string): string => {
+  const firstLine = entry.content
+    .split(/<\/p>|<br\s*\/?>|\n/i)
+    .map((line) => textOf(line).trim())
+    .find((line) => line !== '')
+  return firstLine ? truncate(firstLine) : authorName
+}
+
+const tagAuthorName = (entry: AtomTagEntry): string => entry.display_name ?? entry.handle ?? entry.actor_uri
+
+const tagEntryHtml = (entry: AtomTagEntry): string =>
+  [
+    entry.content,
+    ...entry.images.map(
+      (image) => `<p><img src="${escapeXml(image.url)}" alt="${escapeXml(image.name ?? '')}"/></p>`,
+    ),
+  ].join('')
+
+export const buildTagFeedAtom = ({ apiBaseUrl, entries, now, tag, webHost }: TagFeedAtomInput): string =>
+  buildAtom({
+    entries: entries.map((entry) => {
+      const name = tagAuthorName(entry)
+      return {
+        author: { name, uri: entry.actor_uri },
+        created_at: entry.published_at,
+        entry_id: entry.note_uri,
+        html: tagEntryHtml(entry),
+        id: entry.note_uri,
+        title: name,
+        updated_at: entry.updated_at,
+        url: entry.url ?? entry.note_uri,
+      }
+    }),
+    now,
+    pageUrl: buildPublicTagUrl(webHost, tag),
+    selfUrl: buildPublicTagAtomUrl(apiBaseUrl, tag),
+    title: publicTagFeedTitle(webHost, tag),
+  })
+
+/** An official-feed entry: a local user's post, or one by an author on another server. */
+export type OfficialFeedAtomEntry =
+  | ({ origin: 'local' } & AtomPostEntry)
+  | ({ origin: 'remote' } & AtomTagEntry)
+
 interface OfficialFeedAtomInput {
   webHost: string
   apiBaseUrl: string
-  entries: AtomPostEntry[]
+  entries: OfficialFeedAtomEntry[]
   now: Date
+}
+
+const officialFeedEntryXml = (webHost: string, entry: OfficialFeedAtomEntry): AtomEntryXml => {
+  if (entry.origin === 'remote') {
+    const name = tagAuthorName(entry)
+    return {
+      author: { name, uri: entry.actor_uri },
+      created_at: entry.published_at,
+      entry_id: entry.note_uri,
+      html: tagEntryHtml(entry),
+      id: entry.note_uri,
+      title: remoteEntryTitle(entry, name),
+      updated_at: entry.updated_at,
+      url: entry.url ?? entry.note_uri,
+    }
+  }
+  const url = buildPostUrl(webHost, entry.username, entry.id)
+  return {
+    ...entry,
+    author: { name: entry.username, uri: buildProfileUrl(webHost, entry.username) },
+    entry_id: url,
+    url,
+  }
 }
 
 export const buildOfficialFeedAtom = ({ apiBaseUrl, entries, now, webHost }: OfficialFeedAtomInput): string =>
   buildAtom({
-    entries: entries.map((entry) => ({
-      ...entry,
-      author: { name: entry.username, uri: buildProfileUrl(webHost, entry.username) },
-      url: buildPostUrl(webHost, entry.username, entry.id),
-    })),
+    entries: entries.map((entry) => officialFeedEntryXml(webHost, entry)),
     now,
     pageUrl: buildOfficialFeedUrl(webHost),
     selfUrl: buildOfficialFeedAtomUrl(apiBaseUrl),

@@ -1,4 +1,7 @@
+import type { PublicTagFollow, RelayStyle } from '@aurboda/api-spec'
+
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import { useLocation } from 'preact-iso'
 import { useCallback, useState } from 'preact/hooks'
 
@@ -7,21 +10,36 @@ import type { AdminSettings, InvitationResult, SignupMode } from '../../state/ap
 import { formatTagsInput, parseTagFilterInput } from '../../components/hashtags'
 import { ImportPanel } from '../../components/ImportPanel'
 import {
+  formatHandlesInput,
   formatUsernamesInput,
+  listsAuthors,
   officialFeedSummary,
+  parseHandlesInput,
   parseUsernamesInput,
 } from '../../components/official-feed'
+import {
+  hasTagsPubRelay,
+  relayStateLabel,
+  relayStateTitle,
+  relayStyleLabel,
+  TAGS_PUB_RELAY,
+} from '../../components/relays'
 import { type SaveStatus, SaveStatusIndicator } from '../../components/SaveStatusIndicator'
 import { TagsInput } from '../../components/TagsInput'
 import '../../components/ShareActivityDialog.css'
 import {
+  addRelay,
   apiErrorMessage,
   fetchAdminSettings,
+  fetchRelays,
   generateInvitation,
   officialFeedPath,
+  publicTagPath,
+  removeRelay,
   updateAdminSettings,
 } from '../../state/api'
-import { auth, officialFeedEnabled } from '../../state/auth'
+import { auth, contactFediverse, contactReddit, officialFeedEnabled, publicTagPages } from '../../state/auth'
+import { apiErrorText } from '../../utils/profile'
 import './style.css'
 
 const signupModeDescriptions: Record<SignupMode, string> = {
@@ -647,6 +665,102 @@ function SentrySection() {
   )
 }
 
+interface SupportContactsForm {
+  fediverse: string
+  reddit: string
+}
+
+const supportContactsForm = (settings: AdminSettings): SupportContactsForm => ({
+  fediverse: settings.contact_fediverse ? `@${settings.contact_fediverse}` : '',
+  reddit: settings.contact_reddit ? `u/${settings.contact_reddit}` : '',
+})
+
+const saveErrorText = (err: unknown): string =>
+  apiErrorText(
+    axios.isAxiosError(err) ? (err.response?.data as { error?: unknown } | undefined)?.error : undefined,
+    getErrorMessage(err),
+  )
+
+function SupportContactsSection() {
+  const { data: settings } = useQuery({ queryFn: fetchAdminSettings, queryKey: ['adminSettings'] })
+  return settings ? <SupportContactsSettingsForm settings={settings} /> : null
+}
+
+function SupportContactsSettingsForm({ settings }: { settings: AdminSettings }) {
+  const queryClient = useQueryClient()
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [form, setForm] = useState<SupportContactsForm>(() => supportContactsForm(settings))
+
+  const save = async (e: Event) => {
+    e.preventDefault()
+    setSaveStatus({ status: 'saving' })
+    try {
+      const result = await updateAdminSettings({
+        contact_fediverse: form.fediverse.trim(),
+        contact_reddit: form.reddit.trim(),
+      })
+      queryClient.setQueryData(['adminSettings'], result)
+      contactFediverse.value = result.contact_fediverse || null
+      contactReddit.value = result.contact_reddit || null
+      setForm(supportContactsForm(result))
+      setSaveStatus({ status: 'saved', time: new Date() })
+    } catch (err) {
+      setSaveStatus({ error: saveErrorText(err), status: 'error' })
+    }
+  }
+
+  return (
+    <section class="settings-section">
+      <div class="section-header-row">
+        <h2>Support contacts</h2>
+        <SaveStatusIndicator state={saveStatus} />
+      </div>
+      <p class="section-description">
+        Shown on the Help, Privacy and Terms pages so users can reach you outside GitHub. Leave empty to hide.
+      </p>
+      <form onSubmit={save}>
+        <div class="form-field">
+          <label for="contact-fediverse">Fediverse handle</label>
+          <input
+            id="contact-fediverse"
+            type="text"
+            maxLength={255}
+            placeholder="@name@example.social"
+            autocapitalize="off"
+            spellcheck={false}
+            value={form.fediverse}
+            onInput={(e) =>
+              setForm((current) => ({ ...current, fediverse: (e.target as HTMLInputElement).value }))
+            }
+          />
+          <p class="field-description">
+            Users can mention or message you from Mastodon or any fediverse app.
+          </p>
+        </div>
+        <div class="form-field">
+          <label for="contact-reddit">Reddit username</label>
+          <input
+            id="contact-reddit"
+            type="text"
+            maxLength={255}
+            placeholder="u/name"
+            autocapitalize="off"
+            spellcheck={false}
+            value={form.reddit}
+            onInput={(e) =>
+              setForm((current) => ({ ...current, reddit: (e.target as HTMLInputElement).value }))
+            }
+          />
+          <p class="field-description">Users are offered a private message to you on Reddit.</p>
+        </div>
+        <button type="submit" class="generate-button" disabled={saveStatus.status === 'saving'}>
+          Save contacts
+        </button>
+      </form>
+    </section>
+  )
+}
+
 function OfficialFeedSection() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({
@@ -656,20 +770,26 @@ function OfficialFeedSection() {
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
   const [usersText, setUsersText] = useState<string | null>(null)
+  const [remoteText, setRemoteText] = useState<string | null>(null)
   const [tagsText, setTagsText] = useState<string | null>(null)
 
-  const configured = settings?.official_feed ?? { tags: [], users: [] }
+  const configured = settings?.official_feed ?? { remote_authors: [], tags: [], users: [] }
+  const configuredOn = listsAuthors(configured)
   const usersValue = usersText ?? formatUsernamesInput(configured.users)
+  const remoteValue = remoteText ?? formatHandlesInput(configured.remote_authors)
   const tagsValue = tagsText ?? formatTagsInput(configured.tags)
 
   const save = useCallback(
-    async (users: string[], tags: string[]) => {
+    async (users: string[], remoteAuthors: string[], tags: string[]) => {
       setSaveStatus({ status: 'saving' })
       try {
-        const result = await updateAdminSettings({ official_feed: { tags, users } })
+        const result = await updateAdminSettings({
+          official_feed: { remote_authors: remoteAuthors, tags, users },
+        })
         queryClient.setQueryData(['adminSettings'], result)
-        officialFeedEnabled.value = result.official_feed.users.length > 0
+        officialFeedEnabled.value = listsAuthors(result.official_feed)
         setUsersText(null)
+        setRemoteText(null)
         setTagsText(null)
         setSaveStatus({ status: 'saved', time: new Date() })
       } catch (err) {
@@ -687,9 +807,9 @@ function OfficialFeedSection() {
           <label for="official-feed-users">Users</label>
           <SaveStatusIndicator state={saveStatus} />
         </div>
-        {configured.users.length > 0 && (
+        {configuredOn && (
           <p class="connected-status">
-            <a href={officialFeedPath}>{officialFeedSummary(configured.users, configured.tags)}</a>
+            <a href={officialFeedPath}>{officialFeedSummary(configured)}</a>
           </p>
         )}
         <input
@@ -702,6 +822,20 @@ function OfficialFeedSection() {
           spellcheck={false}
         />
         <p class="field-description">Usernames separated by commas or spaces.</p>
+        <label for="official-feed-remote-authors">Authors on other servers</label>
+        <input
+          id="official-feed-remote-authors"
+          type="text"
+          value={remoteValue}
+          onInput={(e) => setRemoteText((e.target as HTMLInputElement).value)}
+          placeholder="@name@example.social"
+          autocapitalize="off"
+          spellcheck={false}
+        />
+        <p class="field-description">
+          Fediverse handles, e.g. @fiddur@aurboda.net. Their public posts with one of the tags reach this
+          server through the tag actor host (Federation → tag actor host). Needs at least one tag.
+        </p>
         <TagsInput
           id="official-feed-tags"
           legend="Tags"
@@ -713,22 +847,282 @@ function OfficialFeedSection() {
           <button
             type="button"
             class="generate-button"
-            onClick={() => save(parseUsernamesInput(usersValue), parseTagFilterInput(tagsValue))}
+            onClick={() =>
+              save(
+                parseUsernamesInput(usersValue),
+                parseHandlesInput(remoteValue),
+                parseTagFilterInput(tagsValue),
+              )
+            }
           >
             Save
           </button>
-          {configured.users.length > 0 && (
-            <button type="button" class="clear-button" onClick={() => save([], [])}>
+          {configuredOn && (
+            <button type="button" class="clear-button" onClick={() => save([], [], [])}>
               Clear
             </button>
           )}
         </div>
         <p class="field-description">
-          Public posts by these users are the instance blog at <a href={officialFeedPath}>/blog</a>, with an
-          Atom feed, linked from the front page and footer. Empty users turns it off.
+          Public posts by these authors are the instance blog at <a href={officialFeedPath}>/blog</a>, with an
+          Atom feed, linked from the front page and footer. No users and no authors on other servers turns it
+          off.
         </p>
       </div>
     </section>
+  )
+}
+
+const tagFollowTitle: Record<PublicTagFollow['state'], string> = {
+  accepted: 'The tag actor accepted the follow; its posts are arriving.',
+  pending: 'Followed, not yet accepted. Saving again re-sends the follow.',
+  unresolved: 'The tag actor could not be found on the tag actor host.',
+}
+
+function PublicTagPagesSection() {
+  const queryClient = useQueryClient()
+  const { data: settings } = useQuery({
+    queryFn: fetchAdminSettings,
+    queryKey: ['adminSettings'],
+  })
+
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [tagsText, setTagsText] = useState<string | null>(null)
+  const [daysText, setDaysText] = useState<string | null>(null)
+
+  const configured = settings?.public_tag_pages ?? []
+  const followStates = new Map((settings?.public_tag_follows ?? []).map((f) => [f.tag, f.state]))
+  const tagsValue = tagsText ?? formatTagsInput(configured)
+  const daysValue = daysText ?? String(settings?.public_tag_retention_days ?? 30)
+  const host = settings?.tag_actor_host ?? 'tags.pub'
+
+  const save = useCallback(
+    async (tags: string[], days: number) => {
+      setSaveStatus({ status: 'saving' })
+      try {
+        const result = await updateAdminSettings({ public_tag_pages: tags, public_tag_retention_days: days })
+        queryClient.setQueryData(['adminSettings'], result)
+        publicTagPages.value = result.public_tag_pages
+        setTagsText(null)
+        setDaysText(null)
+        setSaveStatus({ status: 'saved', time: new Date() })
+      } catch (err) {
+        setSaveStatus({ error: apiErrorMessage(err, getErrorMessage(err)), status: 'error' })
+      }
+    },
+    [queryClient],
+  )
+
+  return (
+    <section class="settings-section">
+      <h2>Public tag pages</h2>
+      <div class="form-field">
+        <div class="section-header-row">
+          <span>Tags</span>
+          <SaveStatusIndicator state={saveStatus} />
+        </div>
+        {configured.length > 0 && (
+          <p class="connected-status">
+            {configured.map((tag, i) => (
+              <span key={tag}>
+                {i > 0 && ', '}
+                <a href={publicTagPath(tag)}>#{tag}</a>
+                {followStates.has(tag) && (
+                  <span
+                    class={`tag-follow-badge tag-follow-${followStates.get(tag)}`}
+                    title={tagFollowTitle[followStates.get(tag) ?? 'unresolved']}
+                  >
+                    {followStates.get(tag)}
+                  </span>
+                )}
+              </span>
+            ))}
+          </p>
+        )}
+        <TagsInput
+          id="public-tag-pages"
+          legend="Tags"
+          note={`Each tag gets a public page at /tags/<tag> with posts from every server that ${host} sees. The server follows <tag>@${host} for each.`}
+          value={tagsValue}
+          onInput={setTagsText}
+        />
+        <label for="public-tag-retention">Keep posts for (days)</label>
+        <input
+          id="public-tag-retention"
+          type="number"
+          min="1"
+          max="365"
+          value={daysValue}
+          onInput={(e) => setDaysText((e.target as HTMLInputElement).value)}
+        />
+        <div class="api-key-input-row">
+          <button
+            type="button"
+            class="generate-button"
+            onClick={() => save(parseTagFilterInput(tagsValue), Number(daysValue))}
+          >
+            Save
+          </button>
+          {configured.length > 0 && (
+            <button type="button" class="clear-button" onClick={() => save([], Number(daysValue))}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FederationSection() {
+  const queryClient = useQueryClient()
+  const { data: settings } = useQuery({
+    queryFn: fetchAdminSettings,
+    queryKey: ['adminSettings'],
+  })
+
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [hostText, setHostText] = useState<string | null>(null)
+  const configured = settings?.tag_actor_host ?? 'tags.pub'
+  const value = hostText ?? configured
+
+  const save = useCallback(
+    async (host: string) => {
+      setSaveStatus({ status: 'saving' })
+      try {
+        const result = await updateAdminSettings({ tag_actor_host: host })
+        queryClient.setQueryData(['adminSettings'], result)
+        setHostText(null)
+        setSaveStatus({ status: 'saved', time: new Date() })
+      } catch (err) {
+        setSaveStatus({ error: apiErrorMessage(err, getErrorMessage(err)), status: 'error' })
+      }
+    },
+    [queryClient],
+  )
+
+  return (
+    <section class="settings-section">
+      <h2>Federation</h2>
+      <div class="form-field">
+        <div class="section-header-row">
+          <label for="tag-actor-host">Tag actor host</label>
+          <SaveStatusIndicator state={saveStatus} />
+        </div>
+        <div class="api-key-input-row">
+          <input
+            id="tag-actor-host"
+            type="text"
+            value={value}
+            onInput={(e) => setHostText((e.target as HTMLInputElement).value)}
+            placeholder="tags.pub"
+            autocapitalize="off"
+            spellcheck={false}
+          />
+        </div>
+        <button type="button" class="generate-button" onClick={() => save(value)}>
+          Save
+        </button>
+        <p class="field-description">
+          Users who follow a hashtag follow <code>&lt;tag&gt;@{configured}</code>; tags.pub is the public tag
+          relay run by the Social Web Foundation. Empty resets it to tags.pub.
+        </p>
+      </div>
+      <RelaysField />
+    </section>
+  )
+}
+
+function RelaysField() {
+  const queryClient = useQueryClient()
+  const { data: relays = [] } = useQuery({ queryFn: fetchRelays, queryKey: ['adminRelays'] })
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [url, setUrl] = useState('')
+  const [style, setStyle] = useState<RelayStyle>('mastodon')
+
+  const run = useCallback(
+    async (action: () => Promise<unknown>, after?: () => void) => {
+      setSaveStatus({ status: 'saving' })
+      try {
+        await action()
+        await queryClient.invalidateQueries({ queryKey: ['adminRelays'] })
+        after?.()
+        setSaveStatus({ status: 'saved', time: new Date() })
+      } catch (err) {
+        setSaveStatus({ error: apiErrorMessage(err, getErrorMessage(err)), status: 'error' })
+      }
+    },
+    [queryClient],
+  )
+
+  const add = (body: { url: string; style: RelayStyle }) =>
+    run(
+      () => addRelay(body),
+      () => setUrl(''),
+    )
+
+  return (
+    <div class="form-field">
+      <div class="section-header-row">
+        <label for="relay-url">Relays</label>
+        <SaveStatusIndicator state={saveStatus} />
+      </div>
+      {relays.length > 0 && (
+        <ul class="relay-list">
+          {relays.map((relay) => (
+            <li key={relay.id} class="relay-row">
+              <span class="relay-url">{relay.url}</span>
+              <span class="relay-style">{relayStyleLabel(relay.style)}</span>
+              <span class={`relay-state relay-state-${relay.state}`} title={relayStateTitle(relay)}>
+                {relayStateLabel(relay.state)}
+                {relay.last_error != null && ' ⚠'}
+              </span>
+              <button type="button" class="clear-button" onClick={() => run(() => removeRelay(relay.id))}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div class="api-key-input-row">
+        <input
+          id="relay-url"
+          type="url"
+          value={url}
+          onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
+          placeholder="https://relay.example/inbox"
+          autocapitalize="off"
+          spellcheck={false}
+        />
+        <select
+          aria-label="Relay style"
+          value={style}
+          onChange={(e) => setStyle((e.target as HTMLSelectElement).value as RelayStyle)}
+        >
+          <option value="mastodon">Mastodon</option>
+          <option value="litepub">LitePub</option>
+        </select>
+      </div>
+      <div class="relay-actions">
+        <button
+          type="button"
+          class="generate-button"
+          disabled={url.trim() === ''}
+          onClick={() => add({ style, url: url.trim() })}
+        >
+          Add relay
+        </button>
+        {!hasTagsPubRelay(relays) && (
+          <button type="button" class="generate-button" onClick={() => add(TAGS_PUB_RELAY)}>
+            Add the tags.pub relay
+          </button>
+        )}
+      </div>
+      <p class="field-description">
+        Public posts of every user on this server are pushed to accepted relays. A Mastodon-style relay takes
+        its inbox URL, a LitePub relay its actor URL. tags.pub is one-way: it takes posts and sends none back.
+      </p>
+    </div>
   )
 }
 
@@ -879,7 +1273,13 @@ export function AdminSettings() {
 
       <SentrySection />
 
+      <SupportContactsSection />
+
       <OfficialFeedSection />
+
+      <PublicTagPagesSection />
+
+      <FederationSection />
 
       <section class="settings-section">
         <h2>Shared Food Library</h2>

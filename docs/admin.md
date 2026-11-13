@@ -1,7 +1,7 @@
 # Server administration
 
 The first user to sign up becomes an admin. Admins manage server-wide settings (signup mode,
-integration credentials, Sentry, plans and billing) from the web app's Admin Settings page. Those
+integration credentials, Sentry, plans and billing, support contacts, federation) from the web app's Admin Settings page. Those
 settings, the admin list and the records below live in the central database (`CENTRAL_DB`, default
 `aurboda`), not in any user's own database.
 
@@ -184,8 +184,9 @@ their account. No new data is stored until the plan is renewed:
   pulls (Oura, Garmin, Gravl, RescueTime, Last.fm, calendars) skip the user. Strava jobs queued
   before the account turned read-only are checked again when they run and complete without fetching.
 - Inbound ActivityPub posts and replies (`Create`/`Update` of a Note, boosts of other people's
-  posts) are acknowledged but not stored. Follows, unfollows, accepts, deletes, profile updates and
-  likes or boosts of the user's own posts are still processed.
+  posts) are acknowledged but not stored. Follows, unfollows, accepts, deletes, profile updates,
+  likes or boosts of the user's own posts and quote requests (`QuoteRequest`) for them are still
+  processed.
 - The Android app's sync stops its run at the first `402` without retrying, keeps the queued data
   for when the plan is renewed, and shows the server's message in its sync status. A `402` never
   logs the app out (a `401` does).
@@ -201,3 +202,102 @@ end, or leave a note. The Users table has a **Plan** column (exempt, trial until
 grace, read-only) to sort by end date. REST: `PATCH /admin/users/:username/plan` with any of `plan`,
 `paid_until`, `trial_ends_at` and `plan_note` (`null` clears a date or the note); MCP: the admin-only
 `set_user_plan`.
+
+## Support contacts
+
+How users reach the person who runs the server outside GitHub, set under **Support contacts** on
+the Admin Settings page (REST `GET`/`PATCH /admin/settings`). Both are empty by default; an empty
+value hides it.
+
+| Setting             | Accepted input                                                                       | Stored as                                  |
+| ------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `contact_fediverse` | `@name@host` or `name@host`                                                          | `name@host`                                |
+| `contact_reddit`    | `name`, `u/name`, `/u/name` or a `reddit.com/user/name` URL (`www.`, `old.` or none) | `name` (3–20 of letters, digits, `_`, `-`) |
+
+Anything else is refused with `400`. When either is set, the Help page gets a **Contact the
+server's admin** section, and the Contact sections of the Privacy Policy and Terms of Service name
+them next to the Aurboda project on GitHub (without them, those say to contact the administrator of
+the server). A fediverse handle on this server links to the local public profile at `/u/<name>`,
+one elsewhere to `https://<host>/@<name>`; the Reddit username links to a new private message. The
+public `GET /status` carries both as `contact_fediverse` and `contact_reddit` (null when unset).
+
+## Federation
+
+**Tag actor host** (`tag_actor_host`, Admin Settings → **Federation**, `PATCH /admin/settings`):
+the host whose actors users follow to follow a hashtag. Following `#running` follows
+`running@<host>`; the default, used when it is unset or empty, is `tags.pub`, the public tag relay
+run by the Social Web Foundation. The value is a bare hostname (trimmed and lowercased; a scheme,
+path, port, `@` or whitespace is refused with `400`). Changing it affects new tag follows only:
+existing ones keep following the actor they followed. See
+[Following a hashtag](features/feed.md#hashtags).
+
+**Relays** (Admin Settings → **Federation** → Relays; REST `GET/POST /admin/relays`,
+`DELETE /admin/relays/:id`; MCP `list_relays`, `add_relay`, `remove_relay`, all admin-only). A
+relay is a fediverse service that redistributes the public posts it receives, so servers whose
+users never followed anyone here still see them. The server subscribes through its **instance
+actor**, an `Application` at `<origin>/actor` (WebFinger `acct:<host>@<host>`), with its own key
+pair in the central `instance_actor` table. Two styles:
+
+- **Mastodon** (tags.pub, FediBuzz, pub-relay, Activity-Relay): enter the relay's **inbox URL**.
+  The instance actor sends it a `Follow` of the Public collection.
+- **LitePub** (Pleroma/Akkoma relays): enter the relay's **actor URL**. It is resolved for its
+  inbox and followed directly; the relay follows the instance actor back, which is accepted only
+  for an added relay's actor.
+
+A relay starts **Pending** and becomes **Accepted** (or **Rejected**) when it answers. A Follow that
+could not be delivered keeps the relay pending with the error shown on its badge; remove it and
+add it again to retry. Removing a relay sends it an `Undo` of the Follow. Only https URLs that
+resolve to public addresses are taken (`400`); an already added relay is `409`; a LitePub actor
+that cannot be resolved is `422`.
+
+Once a relay is accepted, every **public** post of every user on this server (its `Create`,
+`Update` and `Delete`) is also delivered to the relay's inbox, signed by the post's author.
+Unlisted and followers-only posts, replies, likes and boosts are never pushed. Whatever a relay
+sends back (LitePub relays forward other servers' posts as `Announce`s) is dropped: nothing reaches
+anyone's timeline through a relay. The tags.pub relay is
+`https://tags.pub/user/_____relay_____/inbox` (Mastodon style); it is one-way, taking posts and
+sending none, and lets [hashtag](features/feed.md#hashtags) followers anywhere see posts from here.
+Every server subscribes to it **by default**, once: on the first startup on a public https origin
+(`WEB_HOST` not http, `localhost`, `*.localhost` or a loopback address), upgrades included, the
+server adds it as if an admin had, and records that in the internal `default_relays_seeded` server
+setting. A server that already has it counts as done; a failed add is tried again on the next
+startup. To opt out, remove it under Relays: a removed relay stays removed.
+When a post stops being public, or is deleted, the relays get a `Delete` of it; deleting an
+account sends its actor `Delete` to the relays as well as to its followers. A one-way relay like
+tags.pub is cheap; a full (two-way) relay forwards its whole firehose to `/inbox`, where each
+activity is signature-verified and dropped.
+
+**Re-send post Updates** (REST `POST /admin/federation/resend-post-updates`; MCP
+`resend_post_updates`, both admin-only) re-sends the `Update` of every public and unlisted post of
+every user on this server to the same audience an edit reaches, so remote servers refresh their
+copy. Run it once after upgrading to a release with quote posts: Mastodon cached "nobody may quote"
+for posts federated before their Notes declared a quote policy, and the `Update` carries the policy.
+Like an edit, the `Update` reaches only the servers of the author's followers (and the relays, for
+a public post): a server that cached a post without anyone there following its author, say through a
+boost or a search, keeps the old policy.
+Only `Update`s are sent, so running it again is harmless. It answers `202` with the number of posts
+(`posts`) at once and delivers them one after another in the background; a post whose delivery takes
+over a minute counts as failed and the run moves on. The server log has a line when the run starts
+(posts) and when it ends (posts, failed). A second request while one is still delivering is `409`.
+
+**Public tag pages** (`public_tag_pages`, `public_tag_retention_days`, Admin Settings → **Public
+tag pages**, `PATCH /admin/settings`): up to 20 hashtags, each with a public page at
+`/tags/<tag>` listing the public posts carrying it from every server the tag actor host sees, plus
+this server's own. Saving the list makes the instance actor follow `<tag>@<tag actor host>` (e.g.
+`aurboda@tags.pub`) for every added tag, as it follows a relay, and unfollow (`Undo{Follow}`) every
+removed one; the follow is pending until the tag actor accepts, and only an accepted tag actor's
+`Announce`s are kept. A tag whose actor cannot be resolved still stays in the setting, with no
+follow, and is tried again on the next save that lists it; a pending follow is re-sent on every
+save, and changing the tag actor host moves every follow to the new host. The section shows a
+badge per tag (`public_tag_follows`): **accepted**, **pending**, or **unresolved**. There is no
+moderation of tag pages yet beyond removing the tag; a follow-up issue tracks hiding posts and
+blocking actors and domains. Posts are kept for
+`public_tag_retention_days` (1–365, default 30) by publication time; a nightly job (`23 3 * * *`)
+re-applies the follows, then drops older ones (but the official feed's remote posts) and the ones
+that carry no followed tag any more. The instance actor also follows the
+[official feed](features/feed.md#official-feed)'s tags while it lists authors on other servers;
+those tags get no page. This server's own public
+posts are added as they are published from then on: posts published before a tag was configured
+are not backfilled. `GET /status` lists the tags (`public_tag_pages`) so the front page, `/blog`
+and the logged-out web can link the pages. See
+[Public tag pages](features/feed.md#public-tag-pages).

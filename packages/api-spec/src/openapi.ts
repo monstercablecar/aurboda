@@ -9,9 +9,19 @@ import { peoplePaths } from './people-paths.ts'
 import { isAllowedWhenReadOnly } from './read-only.ts'
 import { resourcesPaths } from './resources-paths.ts'
 import { activitiesResponseSchema } from './schemas/activities.ts'
-import { deleteAccountBodySchema, loginBodySchema, loginResponseSchema } from './schemas/admin.ts'
+import {
+  addRelayBodySchema,
+  deleteAccountBodySchema,
+  loginBodySchema,
+  loginResponseSchema,
+  relayResponseSchema,
+  relaysResponseSchema,
+  resendPostUpdatesResponseSchema,
+} from './schemas/admin.ts'
 import {
   challengeParticipationsResponseSchema,
+  challengePreviewQuerySchema,
+  challengePreviewResponseSchema,
   challengesResponseSchema,
   discoverChallengesResponseSchema,
   challengeStandingsResponseSchema,
@@ -21,6 +31,14 @@ import {
 import { iso8601DateTimeSchema, metricTypeSchema } from './schemas/common.ts'
 import { dailySummaryQuerySchema, dailySummaryResponseSchema } from './schemas/daily-summary.ts'
 import { exportDumpLinkResponseSchema, exportDumpQuerySchema } from './schemas/export.ts'
+import {
+  FEED_IMAGE_MAX_EDGE,
+  feedImageResponseSchema,
+  feedImagesResponseSchema,
+  MAX_FEED_IMAGE_BYTES,
+  MAX_FEED_IMAGES_PER_ACCOUNT,
+} from './schemas/feed-images.ts'
+import { publicTagPostsQuerySchema, publicTagPostsResponseSchema } from './schemas/feed.ts'
 import {
   goalHistoryQuerySchema,
   goalHistoryResponseSchema,
@@ -273,6 +291,34 @@ const openApiDocument = createDocument({
         tags: ['Challenges'],
       },
     },
+    '/challenges/preview': {
+      get: {
+        description:
+          'What joining a challenge by its URL would join (name, host, window, what it counts), read from its host — this or another instance — without joining.',
+        requestParams: { query: challengePreviewQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: challengePreviewResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not a challenge URL',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such challenge on this instance',
+          },
+          502: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The host could not be read, or this instance cannot score its challenge',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Preview a challenge by URL',
+        tags: ['Challenges'],
+      },
+    },
     '/challenges/participations/mine': {
       get: {
         description: 'List the challenges the authenticated user has joined (possibly on other instances).',
@@ -285,6 +331,142 @@ const openApiDocument = createDocument({
         security: [{ bearerAuth: [] }],
         summary: 'List my challenge participations',
         tags: ['Challenges'],
+      },
+    },
+    '/public/tags/{tag}/posts': {
+      get: {
+        description:
+          "A public tag page: public posts carrying `#{tag}`, from this server and others, newest first. Fed by the instance actor following the tag's actor on the tag actor host, plus this server's own public posts with the tag; posts older than the retention are dropped. Only tags the admin configured have a page. No authentication.",
+        requestParams: {
+          path: z.object({ tag: z.string().meta({ description: 'The hashtag, without `#`' }) }),
+          query: publicTagPostsQuerySchema,
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: publicTagPostsResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The tag has no public page',
+          },
+        },
+        summary: 'List a public tag page',
+        tags: ['Feed'],
+      },
+    },
+    '/public/tags/{tag}.atom': {
+      get: {
+        description:
+          'The Atom feed of a public tag page: its newest posts, each linking to the original. No authentication.',
+        requestParams: {
+          path: z.object({ tag: z.string().meta({ description: 'The hashtag, without `#`' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/atom+xml': { schema: z.string() } },
+            description: 'Atom feed',
+          },
+          404: { description: 'The tag has no public page' },
+        },
+        summary: 'Atom feed of a public tag page',
+        tags: ['Feed'],
+      },
+    },
+    '/feed/images': {
+      get: {
+        description:
+          'List the pictures the authenticated user has added to what they write, newest first, with the cap on how many one account may store.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: feedImagesResponseSchema } },
+            description: 'Successful response',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List my pictures',
+        tags: ['Feed'],
+      },
+      post: {
+        description: `Store a picture (PNG, JPEG, WebP or GIF, at most ${MAX_FEED_IMAGE_BYTES / 1024 / 1024} MB) and get back its public URL, to embed in markdown as \`![description](url)\`. It is stored as WebP with its longest edge at most ${FEED_IMAGE_MAX_EDGE} px, turned upright, and without its metadata; an animated GIF keeps its first frame. One account may store ${MAX_FEED_IMAGES_PER_ACCOUNT} pictures.`,
+        requestBody: {
+          content: {
+            'multipart/form-data': {
+              schema: z.object({
+                image: z.string().meta({ description: 'The picture file', format: 'binary' }),
+              }),
+            },
+          },
+        },
+        responses: {
+          201: {
+            content: { 'application/json': { schema: feedImageResponseSchema } },
+            description: 'The stored picture',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No file uploaded',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The account already stores as many pictures as it may',
+          },
+          413: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The file is too large',
+          },
+          415: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not a picture Aurboda can use',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Add a picture',
+        tags: ['Feed'],
+      },
+    },
+    '/feed/images/{id}': {
+      delete: {
+        description:
+          'Delete a stored picture. Markdown that embeds its URL shows a broken picture afterwards.',
+        requestParams: { path: z.object({ id: z.string().uuid().meta({ description: 'Picture ID' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Deleted',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Picture not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Delete a picture',
+        tags: ['Feed'],
+      },
+    },
+    '/public/{username}/images/{id}.webp': {
+      get: {
+        description:
+          'A stored picture, as WebP. No authentication: anyone with the link can see it. Cached for a year, since a picture never changes.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Picture ID' }),
+            username: z.string().meta({ description: 'Username of the writer' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'image/webp': { schema: z.string().meta({ format: 'binary' }) } },
+            description: 'The picture',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Picture not found',
+          },
+        },
+        summary: 'Get a picture',
+        tags: ['Feed'],
       },
     },
     '/public/{username}/{slug}/standings': {
@@ -1563,6 +1745,88 @@ const openApiDocument = createDocument({
         tags: ['Settings'],
       },
     },
+    '/admin/federation/resend-post-updates': {
+      post: {
+        description:
+          "Re-send the Update of every public and unlisted post of every user on this server, so remote servers refresh their copy (such as the quote policy Mastodon cached as 'nobody' for posts federated before it was declared). Only Updates are sent, so repeating it is harmless. The posts are listed at once and delivered one after another in the background. Admin-only.",
+        responses: {
+          202: {
+            content: { 'application/json': { schema: resendPostUpdatesResponseSchema } },
+            description: 'The number of posts whose Update is being re-sent',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'A re-send is already running on this server',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Re-send post Updates',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/relays': {
+      get: {
+        description:
+          'The fediverse relays this server subscribes to, with their state. Accepted relays receive the public posts of every user on this server. Admin-only.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: relaysResponseSchema } },
+            description: 'Every relay, oldest first',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List relays',
+        tags: ['Auth'],
+      },
+      post: {
+        description:
+          'Subscribe to a relay: the instance actor sends it a Follow and the relay stays pending until it answers. Style mastodon takes the relay inbox URL, litepub the relay actor URL. Admin-only.',
+        requestBody: { content: { 'application/json': { schema: addRelayBodySchema } } },
+        responses: {
+          201: {
+            content: { 'application/json': { schema: relayResponseSchema } },
+            description: 'The added relay',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not an https URL, or one that resolves to a private address',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The relay is already added',
+          },
+          422: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No relay actor could be resolved at the litepub URL',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Add a relay',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/relays/{id}': {
+      delete: {
+        description:
+          'Unsubscribe from a relay: sends it an Undo of the Follow and stops pushing posts to it. Admin-only.',
+        requestParams: {
+          path: z.object({ id: z.string().uuid().meta({ description: 'Relay id' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Relay removed',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Relay not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Remove a relay',
+        tags: ['Auth'],
+      },
+    },
     '/admin/users/{username}/plan': {
       patch: {
         description:
@@ -2033,6 +2297,7 @@ const openApiDocument = createDocument({
     { description: 'Sleep, exercise, meditation sessions', name: 'Activities' },
     { description: 'Media plays (videos, music, podcasts)', name: 'Media' },
     { description: 'Federated challenges: hosted, joined, and public standings', name: 'Challenges' },
+    { description: 'Social feed: posts, timeline and public tag pages', name: 'Feed' },
     { description: 'Named and detected locations', name: 'Locations' },
     { description: 'RescueTime productivity data', name: 'Productivity' },
     { description: 'User settings and preferences', name: 'Settings' },

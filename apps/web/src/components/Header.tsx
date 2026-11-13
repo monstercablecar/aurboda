@@ -5,6 +5,7 @@ import { brandForRoute } from '../branding'
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
 import {
   DATA_SOURCE_LINKS,
+  HELP_LINK,
   isSharingActive,
   NAV_LINKS_PRIMARY,
   NAV_LINKS_SECONDARY,
@@ -153,6 +154,13 @@ export function Header() {
             )}
             <div class="drawer-spacer" />
             <a
+              href={HELP_LINK.href}
+              class={url === HELP_LINK.href ? 'active' : undefined}
+              onClick={closeDrawer}
+            >
+              {HELP_LINK.label}
+            </a>
+            <a
               href="/settings"
               class={url === '/settings' ? 'active user-link' : 'user-link'}
               onClick={closeDrawer}
@@ -173,6 +181,13 @@ export function Header() {
                 Sign up
               </a>
             )}
+            <a
+              href={HELP_LINK.href}
+              class={url === HELP_LINK.href ? 'active' : undefined}
+              onClick={closeDrawer}
+            >
+              {HELP_LINK.label}
+            </a>
           </>
         )}
       </nav>

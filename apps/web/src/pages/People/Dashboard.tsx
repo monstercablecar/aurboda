@@ -342,8 +342,9 @@ export function PersonDashboard({
         body.type === 'goal' &&
         body.payload.goal_status === 'completed' &&
         previous?.payload.goal_status !== 'completed'
-      )
+      ) {
         setCelebration(nextCelebration('goal-complete'))
+      }
       setEventEditor(null)
       await refresh()
     },

@@ -19,6 +19,7 @@
 import { z } from 'zod'
 
 import { maxPostTags, normalizeTag } from '../hashtags.ts'
+import { normalizeFediverseHandle } from '../support-contacts.ts'
 import { challengeResultSchema } from './challenges.ts'
 import {
   activityTypeSchema,
@@ -27,7 +28,7 @@ import {
   iso8601DateTimeSchema,
   metricTypeSchema,
 } from './common.ts'
-import { selectorSchema } from './correlations.ts'
+import { activityImpactTypeSchema, selectorSchema } from './correlations.ts'
 import { dashboardConfigSchema, periodKeySchema } from './dashboard.ts'
 import {
   feedStructuredDashboardShareSchema,
@@ -463,6 +464,41 @@ export const articleCorrelationBlockSchema = z
   .meta({ description: 'A correlation scatter over a locked window', id: 'ArticleCorrelationBlock' })
 
 /**
+ * An impact block: HRV, heart rate and stress in the window before, during and
+ * after each session of one activity over a locked `[start, end]` period — the
+ * Analyze page's impact chart. `activity` names one grouping key exactly, as the
+ * Analyze context table lists it. Like a chart block, the period is re-resolved
+ * live and inherits the article's default window when `start`/`end` are omitted.
+ */
+export const articleImpactBlockSchema = z
+  .object({
+    activity: z.string().min(1).max(200).meta({
+      description: 'The activity, location or category, exactly as the Analyze context table lists it',
+    }),
+    activity_type: activityImpactTypeSchema,
+    caption: z.string().max(280).optional().meta({ description: 'Optional caption shown under the chart' }),
+    end: iso8601DateTimeSchema
+      .optional()
+      .meta({ description: "Window end (ISO 8601); inherits the article's default window if omitted" }),
+    start: iso8601DateTimeSchema
+      .optional()
+      .meta({ description: "Window start (ISO 8601); inherits the article's default window if omitted" }),
+    type: z.literal('impact'),
+    window_minutes: z
+      .number()
+      .int()
+      .min(10)
+      .max(1440)
+      .optional()
+      .meta({ description: 'Minutes before and after each session (10-1440, default 30)' }),
+  })
+  .meta({
+    description:
+      'The impact of an activity on HRV, heart rate and stress around its sessions, over a locked window',
+    id: 'ArticleImpactBlock',
+  })
+
+/**
  * A challenge block: a challenge embedded by its public URL (one hosted here or
  * on another instance), rendered with its live standings and a link to join.
  * It has no time window — the challenge's own window applies.
@@ -488,9 +524,10 @@ export const articleBlockSchema = z
     articleChartBlockSchema,
     articleCorrelationBlockSchema,
     articleChallengeBlockSchema,
+    articleImpactBlockSchema,
   ])
   .meta({
-    description: 'An article content block (prose, chart, correlation, or challenge)',
+    description: 'An article content block (prose, chart, correlation, challenge, or impact)',
     id: 'ArticleBlock',
   })
 
@@ -499,12 +536,12 @@ export type ArticleBlock = z.infer<typeof articleBlockSchema>
 export const articleContentSchema = z
   .object({
     blocks: z.array(articleBlockSchema).max(100).meta({ description: 'Ordered content blocks' }),
-    default_end: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window end inherited by chart and correlation blocks (ISO 8601)' }),
-    default_start: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window start inherited by chart and correlation blocks (ISO 8601)' }),
+    default_end: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window end inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
+    default_start: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window start inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
     title: z.string().min(1).max(200).meta({ description: 'Article title' }),
   })
   .meta({ id: 'ArticleContent' })
@@ -595,6 +632,10 @@ export const feedPostSchema = z
     like_count: z.number().int().optional().meta({
       description: 'How many remote actors favourited (`Like`d) this post; absent on single-post responses',
     }),
+    quote_count: z.number().int().optional().meta({
+      description:
+        'How many remote posts quote this post under an approval we granted (FEP-044f); absent on single-post responses',
+    }),
     message: z
       .string()
       .optional()
@@ -677,22 +718,36 @@ export const feedPostsResponseSchema = baseResponseSchema
 
 export type FeedPostsResponse = z.infer<typeof feedPostsResponseSchema>
 
-/** At most this many users, and this many tags, in the official feed setting. */
+/** At most this many users, remote authors and tags, each, in the official feed setting. */
 export const officialFeedMaxEntries = 20
+
+/** A fediverse handle as an admin types it: `@name@host` or `name@host`, stored as `name@host`. */
+export const fediverseHandleInputSchema = z
+  .string()
+  .max(255)
+  .refine((value) => (normalizeFediverseHandle(value) ?? '') !== '', {
+    message: 'A fediverse handle, e.g. @name@example.social',
+  })
+  .meta({ description: 'A fediverse handle, e.g. `@name@example.social` (stored as `name@example.social`)' })
 
 export const officialFeedSettingSchema = z
   .object({
+    remote_authors: z.array(fediverseHandleInputSchema).max(officialFeedMaxEntries).default([]).meta({
+      description:
+        "Authors on other servers (`user@host`) whose public posts carrying one of `tags` are listed; the server follows each tag's actor on the tag actor host to receive them. Needs at least one tag.",
+    }),
     tags: z.array(hashtagInputSchema).max(officialFeedMaxEntries).meta({
       description:
         'Only posts carrying at least one of these hashtags (lowercase, without `#`); empty lists every public post of the users',
     }),
     users: z.array(z.string().min(1)).max(officialFeedMaxEntries).meta({
-      description: 'Local usernames whose public posts make up the feed; empty turns the official feed off',
+      description:
+        'Local usernames whose public posts make up the feed; the feed is off when both this and `remote_authors` are empty',
     }),
   })
   .meta({
     description:
-      "The instance's official feed, linked from the front page as its blog: public posts by these users that carry one of these tags",
+      "The instance's official feed, linked from the front page as its blog: public posts by these users and remote authors that carry one of these tags",
     id: 'OfficialFeedSetting',
   })
 
@@ -705,40 +760,6 @@ export const officialFeedQuerySchema = z
   .meta({ description: 'Query of the official feed listing', id: 'OfficialFeedQuery' })
 
 export type OfficialFeedQuery = z.infer<typeof officialFeedQuerySchema>
-
-/** A post on the instance's official feed: as on its author's public profile, plus who wrote it. */
-export const officialFeedPostSchema = feedPostSchema
-  .extend({
-    author_username: z.string().meta({ description: "The post author's local username" }),
-  })
-  .meta({ description: 'A post in the official feed, with its author', id: 'OfficialFeedPost' })
-
-export type OfficialFeedPost = z.infer<typeof officialFeedPostSchema>
-
-export const officialFeedResponseSchema = baseResponseSchema
-  .extend({
-    next_cursor: z
-      .string()
-      .nullable()
-      .optional()
-      .meta({ description: 'Cursor for the next page; null on the last page' }),
-    posts: z.array(officialFeedPostSchema),
-    tags: z
-      .array(z.string())
-      .optional()
-      .meta({ description: 'The hashtags a post needs one of to be listed (empty: any); absent on errors' }),
-    users: z
-      .array(z.string())
-      .optional()
-      .meta({ description: 'The usernames whose posts are listed; absent on errors' }),
-  })
-  .meta({
-    description:
-      "A page of the instance's official feed: public posts by the chosen users with one of the chosen tags",
-    id: 'OfficialFeedResponse',
-  })
-
-export type OfficialFeedResponse = z.infer<typeof officialFeedResponseSchema>
 
 /**
  * The share PREVIEW returns the exact federated `content` HTML a
@@ -808,17 +829,15 @@ export type DashboardSharePreviewResponse = z.infer<typeof dashboardSharePreview
 
 export const createArticleBodySchema = z
   .object({
-    blocks: z
-      .array(articleBlockSchema)
-      .max(100)
-      .default([])
-      .meta({ description: 'Ordered content blocks (prose, charts, correlations)' }),
-    default_end: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window end inherited by chart and correlation blocks (ISO 8601)' }),
-    default_start: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window start inherited by chart and correlation blocks (ISO 8601)' }),
+    blocks: z.array(articleBlockSchema).max(100).default([]).meta({
+      description: 'Ordered content blocks (prose, charts, correlations, challenges, impact charts)',
+    }),
+    default_end: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window end inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
+    default_start: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window start inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
     tags: postTagsInputSchema.optional().meta({
       description:
         'Hashtags for the article, replacing your default tags; `#tags` typed in the title and prose are always added. Omit to use your default tags.',
@@ -884,15 +903,25 @@ export const articleDraftChallengeBlockSchema = articleChallengeBlockSchema
     id: 'ArticleDraftChallengeBlock',
   })
 
+export const articleDraftImpactBlockSchema = articleImpactBlockSchema
+  .extend({
+    activity: z.string().min(1).max(200).optional().meta({ description: 'The activity, once chosen' }),
+  })
+  .meta({
+    description: 'An impact block in a draft; the activity may be unset',
+    id: 'ArticleDraftImpactBlock',
+  })
+
 export const articleDraftBlockSchema = z
   .discriminatedUnion('type', [
     articleProseBlockSchema,
     articleDraftChartBlockSchema,
     articleDraftCorrelationBlockSchema,
     articleDraftChallengeBlockSchema,
+    articleDraftImpactBlockSchema,
   ])
   .meta({
-    description: 'A draft article block (prose, chart, correlation, or challenge)',
+    description: 'A draft article block (prose, chart, correlation, challenge, or impact)',
     id: 'ArticleDraftBlock',
   })
 
@@ -901,12 +930,12 @@ export type ArticleDraftBlock = z.infer<typeof articleDraftBlockSchema>
 export const articleDraftContentSchema = z
   .object({
     blocks: z.array(articleDraftBlockSchema).max(100).meta({ description: 'Ordered content blocks' }),
-    default_end: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window end inherited by chart and correlation blocks (ISO 8601)' }),
-    default_start: iso8601DateTimeSchema
-      .optional()
-      .meta({ description: 'Default window start inherited by chart and correlation blocks (ISO 8601)' }),
+    default_end: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window end inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
+    default_start: iso8601DateTimeSchema.optional().meta({
+      description: 'Default window start inherited by chart, correlation and impact blocks (ISO 8601)',
+    }),
     tags: postTagsInputSchema.optional().meta({
       description:
         'Hashtags the article gets when published, replacing your default tags; absent uses the defaults. `#tags` typed in the text are always added.',
@@ -994,6 +1023,93 @@ export const publishArticleDraftBodySchema = z
 
 export type PublishArticleDraftBody = z.infer<typeof publishArticleDraftBodySchema>
 
+export const previewArticleBodySchema = z
+  .object({
+    article: articleDraftContentSchema.meta({
+      description:
+        'The article as written so far (may be incomplete); only its complete blocks are previewed',
+    }),
+    include_images: z.boolean().optional().meta({
+      description:
+        'Also draw each figure Mastodon shows, as SVG markup in `attachments[].image_svg` (meant for UIs)',
+    }),
+    visibility: feedVisibilitySchema.default('public'),
+  })
+  .meta({
+    description: 'Preview what an article (draft) would federate as; creates nothing',
+    id: 'PreviewArticleBody',
+  })
+
+export type PreviewArticleBody = z.infer<typeof previewArticleBodySchema>
+
+export const articlePreviewAttachmentSchema = z
+  .object({
+    block_index: z.number().int().optional().meta({
+      description: "The figure's block index in `article.blocks`; absent for an image in the prose",
+    }),
+    figure: z.number().int().meta({ description: 'The 1-based figure number, in document order' }),
+    height: z.number().int().optional().meta({ description: 'Image height in pixels, when known' }),
+    image_svg: z.string().nullable().optional().meta({
+      description:
+        'With `include_images`, for a block figure Mastodon shows: the image as SVG markup, `null` when the block has no data to draw',
+    }),
+    media_type: z.string().optional().meta({ description: 'Image media type, when known' }),
+    name: z.string().meta({ description: 'The alt text the attachment carries (`Figure N: label`)' }),
+    shown_in_mastodon: z.boolean().meta({
+      description: "Whether Mastodon shows it; false beyond Mastodon's four-attachment limit",
+    }),
+    url: z.string().optional().meta({
+      description: "A prose image's own URL; absent for a block figure, whose post does not exist yet",
+    }),
+    width: z.number().int().optional().meta({ description: 'Image width in pixels, when known' }),
+  })
+  .meta({ description: 'One image the article Note would attach', id: 'ArticlePreviewAttachment' })
+
+export type ArticlePreviewAttachment = z.infer<typeof articlePreviewAttachmentSchema>
+
+export const articlePreviewResponseSchema = baseResponseSchema
+  .extend({
+    attachments: z
+      .array(articlePreviewAttachmentSchema)
+      .optional()
+      .meta({ description: 'The images the Note would attach, numbered as in the text' }),
+    content: z
+      .string()
+      .optional()
+      .meta({ description: 'The AS2 `content` HTML the article would federate with' }),
+    mastodon: z
+      .object({
+        attachment_limit: z
+          .number()
+          .int()
+          .meta({ description: 'How many attachments Mastodon shows on one status' }),
+        content: z.string().meta({
+          description:
+            '`content` as Mastodon keeps it after its sanitiser, without the trailing paragraph of hashtags',
+        }),
+        hashtag_bar: z.array(z.string()).meta({
+          description: 'Tags Mastodon shows as a bar under the media (lowercase, without `#`)',
+        }),
+      })
+      .optional()
+      .meta({ description: "An emulation of how Mastodon's web UI shows the status" }),
+    name: z.string().optional().meta({ description: 'The Note `name` (the title)' }),
+    notes: z
+      .array(z.string())
+      .optional()
+      .meta({ description: 'What Mastodon changes for this post, in plain sentences' }),
+    publish_error: z.string().nullable().optional().meta({
+      description: 'What still keeps the article from publishing; `null` when it is publishable',
+    }),
+    tags: z.array(z.string()).optional().meta({
+      description:
+        'The hashtags the article would carry (lowercase, without `#`): the explicit or default ones plus typed ones',
+    }),
+  })
+  .meta({ id: 'ArticlePreviewResponse' })
+
+export type ArticlePreviewResponse = z.infer<typeof articlePreviewResponseSchema>
+
 export const followActorBodySchema = z
   .object({
     handle: z.string().trim().min(1).max(512).meta({
@@ -1051,6 +1167,36 @@ export const followingResponseSchema = baseResponseSchema
   .meta({ id: 'FollowingResponse' })
 
 export type FollowingResponse = z.infer<typeof followingResponseSchema>
+
+export const followTagBodySchema = z
+  .object({
+    tag: z.string().trim().min(1).max(80).meta({
+      description: 'The hashtag to follow, with or without `#`',
+      example: '#running',
+    }),
+  })
+  .meta({ id: 'FollowTagBody' })
+
+export type FollowTagBody = z.infer<typeof followTagBodySchema>
+
+/** A followed hashtag: the follow of its tag actor (`<tag>@<tag actor host>`), plus the tag. */
+export const followedTagSchema = followingActorSchema
+  .extend({ tag: z.string().meta({ description: 'The followed hashtag, lowercase without `#`' }) })
+  .meta({ id: 'FollowedTag' })
+
+export type FollowedTag = z.infer<typeof followedTagSchema>
+
+export const followTagResponseSchema = baseResponseSchema
+  .extend({ followed_tag: followedTagSchema.optional() })
+  .meta({ id: 'FollowTagResponse' })
+
+export type FollowTagResponse = z.infer<typeof followTagResponseSchema>
+
+export const followedTagsResponseSchema = baseResponseSchema
+  .extend({ followed_tags: z.array(followedTagSchema) })
+  .meta({ id: 'FollowedTagsResponse' })
+
+export type FollowedTagsResponse = z.infer<typeof followedTagsResponseSchema>
 
 export const followerStatusValues = ['pending', 'accepted', 'all'] as const
 
@@ -1135,6 +1281,10 @@ export const timelineBoostedBySchema = z
     actor_uri: z.string().meta({ description: "The booster's ActivityPub actor URI" }),
     display_name: z.string().nullable().meta({ description: "The booster's display name, if known" }),
     handle: z.string().nullable().meta({ description: "The booster's `@user@host` handle, if known" }),
+    tag: z.string().optional().meta({
+      description:
+        'Set when the booster is a followed tag actor: the tag (lowercase, no `#`), so the card can show `#tag` instead of a boost line',
+    }),
   })
   .meta({ id: 'TimelineBoostedBy' })
 
@@ -1188,6 +1338,10 @@ export const timelineEntrySchema = z
       description:
         'Native structured data (an activity share’s typed metrics/series, an article’s title + resolved blocks, or a challenge’s document + standings snapshot), present only for posts from Aurboda instances — drives a native render instead of the HTML.',
     }),
+    tags: z.array(z.string()).meta({
+      description:
+        "The post's hashtags, lowercase without `#`, as the origin declared them (plus the followed tag on a card boosted by a tag actor)",
+    }),
     url: z.string().nullable().meta({ description: 'Link to the original post' }),
   })
   .meta({ id: 'TimelineEntry' })
@@ -1205,6 +1359,120 @@ export const timelineEntryResponseSchema = baseResponseSchema
 
 export type TimelineEntryResponse = z.infer<typeof timelineEntryResponseSchema>
 
+export const publicTagPostsQuerySchema = z
+  .object({
+    cursor: z.string().optional().meta({ description: "Opaque cursor from a previous page's `next_cursor`" }),
+  })
+  .meta({ description: 'Query of a public tag page listing', id: 'PublicTagPostsQuery' })
+
+export type PublicTagPostsQuery = z.infer<typeof publicTagPostsQuerySchema>
+
+export const publicTagPostSchema = timelineEntrySchema
+  .pick({
+    actor_uri: true,
+    avatar_url: true,
+    content: true,
+    display_name: true,
+    handle: true,
+    id: true,
+    images: true,
+    object_uri: true,
+    published_at: true,
+    received_at: true,
+    tags: true,
+    url: true,
+  })
+  .meta({
+    description: 'A post on a public tag page, shown as the home timeline shows a remote post',
+    id: 'PublicTagPost',
+  })
+
+export type PublicTagPost = z.infer<typeof publicTagPostSchema>
+
+export const publicTagPostsResponseSchema = baseResponseSchema
+  .extend({
+    next_cursor: z
+      .string()
+      .nullable()
+      .meta({ description: 'Cursor for the next page; null on the last page' }),
+    posts: z.array(publicTagPostSchema).meta({
+      description:
+        'Public posts carrying the tag, from this server and others, newest first (content sanitised server-side)',
+    }),
+    retention_days: z.number().int().meta({ description: 'How many days a post stays listed' }),
+    tag: z.string().meta({ description: 'The tag, lowercase without `#`' }),
+  })
+  .meta({
+    description:
+      "A page of a public tag page: public posts carrying the hashtag that this server's instance actor received from the tag's actor, plus this server's own",
+    id: 'PublicTagPostsResponse',
+  })
+
+export type PublicTagPostsResponse = z.infer<typeof publicTagPostsResponseSchema>
+
+/** A post on the instance's official feed by a local user: as on its author's public profile, plus who wrote it. */
+export const officialFeedPostSchema = feedPostSchema
+  .extend({
+    author_username: z.string().meta({ description: "The post author's local username" }),
+    origin: z.literal('local').meta({ description: 'A post by a local user' }),
+  })
+  .meta({
+    description: 'A post in the official feed by a local user, with its author',
+    id: 'OfficialFeedPost',
+  })
+
+export type OfficialFeedPost = z.infer<typeof officialFeedPostSchema>
+
+/** A post on the instance's official feed by an author on another server, as a public tag page shows it. */
+export const officialFeedRemotePostSchema = publicTagPostSchema
+  .extend({
+    origin: z.literal('remote').meta({ description: 'A post by an author on another server' }),
+  })
+  .meta({
+    description: 'A post in the official feed by an author on another server',
+    id: 'OfficialFeedRemotePost',
+  })
+
+export type OfficialFeedRemotePost = z.infer<typeof officialFeedRemotePostSchema>
+
+export const officialFeedEntrySchema = z
+  .discriminatedUnion('origin', [officialFeedPostSchema, officialFeedRemotePostSchema])
+  .meta({
+    description:
+      "A post in the official feed: `origin` `local` for a local user's post, `remote` for one by an author on another server",
+    id: 'OfficialFeedEntry',
+  })
+
+export type OfficialFeedEntry = z.infer<typeof officialFeedEntrySchema>
+
+export const officialFeedResponseSchema = baseResponseSchema
+  .extend({
+    next_cursor: z
+      .string()
+      .nullable()
+      .optional()
+      .meta({ description: 'Cursor for the next page; null on the last page' }),
+    posts: z.array(officialFeedEntrySchema),
+    remote_authors: z.array(z.string()).optional().meta({
+      description: 'The authors on other servers (`user@host`) whose posts are listed; absent on errors',
+    }),
+    tags: z
+      .array(z.string())
+      .optional()
+      .meta({ description: 'The hashtags a post needs one of to be listed (empty: any); absent on errors' }),
+    users: z
+      .array(z.string())
+      .optional()
+      .meta({ description: 'The usernames whose posts are listed; absent on errors' }),
+  })
+  .meta({
+    description:
+      "A page of the instance's official feed: public posts by the chosen users and remote authors with one of the chosen tags",
+    id: 'OfficialFeedResponse',
+  })
+
+export type OfficialFeedResponse = z.infer<typeof officialFeedResponseSchema>
+
 export const timelineQuerySchema = z
   .object({
     cursor: z.string().optional().meta({ description: "Opaque cursor from a previous page's `next_cursor`" }),
@@ -1215,6 +1483,13 @@ export const timelineQuerySchema = z
       .max(50)
       .default(20)
       .meta({ description: 'Max entries to return (1–50, default 20)' }),
+    tag: z
+      .string()
+      .max(80)
+      .transform((value) => normalizeTag(value))
+      .refine((value): value is string => value != null, { message: 'Not a valid hashtag' })
+      .optional()
+      .meta({ description: 'Only entries carrying this hashtag, e.g. `running` or `#running`' }),
   })
   .meta({ id: 'TimelineQuery' })
 
@@ -1300,26 +1575,40 @@ export const feedReactionKindSchema = z.enum(['like', 'announce']).meta({
 
 export type FeedReactionKind = z.infer<typeof feedReactionKindSchema>
 
+export const feedPostReactionKindSchema = z.enum(['like', 'announce', 'quote']).meta({
+  description:
+    'Kind of reaction on one of your posts: `like` (a favourite), `announce` (a boost) or `quote` (a remote post quoting it under an approval we granted, FEP-044f)',
+  id: 'FeedPostReactionKind',
+})
+
+export type FeedPostReactionKind = z.infer<typeof feedPostReactionKindSchema>
+
 /**
- * One remote actor's reaction to one of the owner's own feed posts, recorded
- * from an inbound `Like`/`Announce`. The presentation fields are a best-effort
- * snapshot taken when the reaction arrived (a remote server need not be
- * reachable later).
+ * One remote actor's reaction to one of the owner's own feed posts: an inbound
+ * `Like`/`Announce`, or a quote we approved. A like's or boost's presentation
+ * fields are a best-effort snapshot taken when it arrived; a quote's are
+ * resolved from whatever this instance has cached for the actor.
  */
 export const feedPostReactionSchema = z
   .object({
     actor_uri: z.string().meta({ description: "The reacting actor's ActivityPub actor URI" }),
     avatar_url: z.string().nullable().meta({ description: "The actor's avatar URL, if known" }),
-    created_at: iso8601DateTimeSchema.meta({ description: 'When the reaction was received (ISO 8601)' }),
+    created_at: iso8601DateTimeSchema.meta({
+      description: 'When the reaction was received, or the quote approved (ISO 8601)',
+    }),
     display_name: z.string().nullable().meta({ description: "The actor's display name, if known" }),
     handle: z.string().nullable().meta({ description: "The actor's `@user@host` handle, if known" }),
-    kind: feedReactionKindSchema,
+    kind: feedPostReactionKindSchema,
+    url: z
+      .string()
+      .optional()
+      .meta({ description: "The quoting post's id (URL), present only for `quote` reactions" }),
   })
   .meta({ id: 'FeedPostReaction' })
 
 export type FeedPostReaction = z.infer<typeof feedPostReactionSchema>
 
-/** Who liked / boosted one of the owner's posts, newest first. */
+/** Who liked, boosted or quoted one of the owner's posts, newest first. */
 export const feedPostReactionsResponseSchema = baseResponseSchema
   .extend({ reactions: z.array(feedPostReactionSchema) })
   .meta({ id: 'FeedPostReactionsResponse' })
@@ -1386,7 +1675,7 @@ export type FeedPostStructuredResponse = z.infer<typeof feedPostStructuredRespon
 
 /**
  * Response for the article markdown-export endpoint: a paste-ready rendering of
- * the article's title + prose, with each chart/correlation block as a link to
+ * the article's title + prose, with each chart/correlation/impact block as a link to
  * its rendered PNG (the C1 block-image endpoint) — meant for pasting into a
  * text-only destination like r/QuantifiedSelf. `markdown` is absent (with
  * `success: false`) for an unknown id or a non-article post.
@@ -1394,7 +1683,7 @@ export type FeedPostStructuredResponse = z.infer<typeof feedPostStructuredRespon
 export const articleExportResponseSchema = baseResponseSchema
   .extend({
     markdown: z.string().optional().meta({
-      description: 'Paste-ready markdown: title + prose + one image link per chart/correlation block',
+      description: 'Paste-ready markdown: title + prose + one image link per data block',
     }),
   })
   .meta({ id: 'ArticleExportResponse' })

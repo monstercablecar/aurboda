@@ -72,11 +72,17 @@ export function ImportPanel() {
   })
   useEffect(() => {
     const job = trackedJob.data
-    if (!startedJobId || job?.id !== startedJobId || (job.status !== 'completed' && job.status !== 'failed'))
+    if (
+      !startedJobId ||
+      job?.id !== startedJobId ||
+      (job.status !== 'completed' && job.status !== 'failed')
+    ) {
       return
+    }
     setStartedJobId(null)
-    if (job.status === 'completed' && job.processed_items > 0 && job.skipped_items === 0)
+    if (job.status === 'completed' && job.processed_items > 0 && job.skipped_items === 0) {
       setCelebration(nextCelebration('import'))
+    }
     void queryClient.invalidateQueries({ queryKey: ['importJobs', 'livsmedelsverket'] })
   }, [startedJobId, trackedJob.data, queryClient])
 

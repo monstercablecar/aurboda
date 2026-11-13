@@ -38,7 +38,7 @@ import { renderDashboardShareHtml } from './activitypub/dashboard-object.ts'
 import { renderExerciseShareHtml } from './activitypub/exercise-object.ts'
 import { resolveActivityScalars } from './activitypub/feed-activity.ts'
 import { type HashtagLinks, hashtagLinks, linkifyHashtags } from './activitypub/hashtag-html.ts'
-import { feedPostContent, formatActivityWindow } from './activitypub/object.ts'
+import { activityHeadline, feedPostContent, formatActivityWindow } from './activitypub/object.ts'
 import {
   formatExerciseLine,
   resolvePostExercises,
@@ -147,6 +147,16 @@ export const resolveFeedActivity = async (
   const activity = await getActivityById(user, activityId)
   if (activity == null) return null
   return expandFeedActivityWindow(user, activity)
+}
+
+/**
+ * The headline a post's shared activity federates under (its current title, else its type), or
+ * null if the activity is gone. One or two primary-key reads, without the window expansion.
+ */
+export const feedActivityHeadline = async (user: string, activityId: string): Promise<string | null> => {
+  const activity = await getActivityById(user, activityId)
+  if (activity == null) return null
+  return activityHeadline(await headlineTitle(user, activity), activity.activity_type)
 }
 
 const postHashtags = (
@@ -365,7 +375,7 @@ export interface FeedPageOpts extends SerializeFeedPostOpts {
 }
 
 /**
- * Attach `like_count` / `boost_count` to a page of serialised posts from ONE
+ * Attach `like_count` / `boost_count` / `quote_count` to a page of serialised posts from ONE
  * grouped count query. Best-effort: the counts are decoration, so a failed
  * lookup leaves the page uncounted rather than failing the listing.
  */
@@ -385,6 +395,7 @@ const withReactionCounts = async (
     ...post,
     boost_count: tally.get(`announce:${post.id}`) ?? 0,
     like_count: tally.get(`like:${post.id}`) ?? 0,
+    quote_count: tally.get(`quote:${post.id}`) ?? 0,
   }))
 }
 

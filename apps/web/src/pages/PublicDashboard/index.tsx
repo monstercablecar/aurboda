@@ -18,16 +18,19 @@ import type {
 } from '@aurboda/api-spec'
 
 import { periodLabel } from '@aurboda/api-spec'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRoute } from 'preact-iso'
 import { useState } from 'preact/hooks'
 
 import { AttributionLink } from '../../components/AttributionLink'
 import { EditableDashboard } from '../../components/EditableDashboard'
+import { readPeriodParam, writePeriodParam } from '../../components/periodParam'
 import { PeriodDashboardBar, PeriodSwitcher } from '../../components/PeriodSwitcher'
 import { CopyLinkButton, NativeShareButton } from '../../components/ShareControls'
 import { ShareDashboardPeriodDialog } from '../../components/ShareDashboardPeriodDialog'
+import { useDashboardDraft } from '../../components/useDashboardDraft'
 import { usePeriodDashboard } from '../../components/usePeriodDashboard'
+import { useScrollRestore } from '../../components/useScrollRestore'
 import { PublicWidgetRenderer } from '../../components/widgets'
 import {
   fetchPublicResource,
@@ -51,15 +54,20 @@ function OwnerSharedDashboard({ username, slug }: { username: string; slug: stri
   const listQuery = useQuery({
     queryFn: listSharedDashboards,
     queryKey: ['sharedDashboards'],
+    refetchOnWindowFocus: false,
     staleTime: 60 * 1000,
   })
 
-  const saveMutation = useMutation({
-    mutationFn: ({ id, config }: { id: string; config: DashboardConfig }) =>
-      updateSharedDashboard(id, { config }),
-    onError: () => alert('Failed to save the dashboard. Please try again.'),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(['sharedDashboards'], (old: typeof listQuery.data) =>
+  const share = listQuery.data?.find((d) => d.slug === slug)
+
+  const draft = useDashboardDraft(share?.id ?? '', (id, config) => updateSharedDashboard(id, { config }), {
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sharedDashboards'] })
+      alert('Failed to save the dashboard. Please try again.')
+    },
+    onSaved: async (_id, updated) => {
+      await queryClient.cancelQueries({ queryKey: ['sharedDashboards'] })
+      queryClient.setQueryData(['sharedDashboards'], (old: SharedDashboard[] | undefined) =>
         old?.map((d) => (d.id === updated.id ? updated : d)),
       )
       void queryClient.invalidateQueries({ queryKey: ['dashboardData', updated.id] })
@@ -74,7 +82,6 @@ function OwnerSharedDashboard({ username, slug }: { username: string; slug: stri
     )
   }
 
-  const share = listQuery.data?.find((d) => d.slug === slug)
   if (!share) {
     return (
       <div class="public-dashboard">
@@ -114,8 +121,10 @@ function OwnerSharedDashboard({ username, slug }: { username: string; slug: stri
 
       <OwnerSharedDashboardBody
         share={share}
+        config={draft.config ?? share.config}
+        isSaving={draft.config !== null}
         isEditing={isEditing}
-        onChange={(next) => saveMutation.mutate({ config: next, id: share.id })}
+        onChange={draft.submit}
       />
     </div>
   )
@@ -123,15 +132,20 @@ function OwnerSharedDashboard({ username, slug }: { username: string; slug: stri
 
 function OwnerSharedDashboardBody({
   share,
+  config,
+  isSaving,
   isEditing,
   onChange,
 }: {
   share: SharedDashboard
+  config: DashboardConfig
+  isSaving: boolean
   isEditing: boolean
   onChange: (next: DashboardConfig) => void
 }) {
-  const period = usePeriodDashboard(share.id, share.config, (key) => fetchSharedDashboardData(share.id, key))
+  const period = usePeriodDashboard(share.id, config, (key) => fetchSharedDashboardData(share.id, key))
   const [sharingPeriod, setSharingPeriod] = useState<string | null>(null)
+  useScrollRestore(share.id, period?.period)
   return (
     <>
       {period && <PeriodDashboardBar state={period} onShare={setSharingPeriod} />}
@@ -145,11 +159,12 @@ function OwnerSharedDashboardBody({
         />
       )}
       <EditableDashboard
-        config={share.config}
+        config={config}
         isEditing={isEditing}
         boardId={share.id}
         onChange={onChange}
         widgetData={period?.widgetData}
+        widgetDataLoading={period ? period.isFetching || isSaving : undefined}
         periodLabel={period?.periodLabel}
       />
     </>
@@ -244,16 +259,21 @@ function VisitorDashboard({
   data: PublicSharedDashboardResponse
   config: DashboardConfig
 }) {
-  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null)
   const latest = data.period_lock === 'browsable' ? data.period : null
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(() => {
+    const fromUrl = readPeriodParam()
+    return fromUrl === latest ? null : fromUrl
+  })
 
   const periodQuery = useQuery({
     enabled: Boolean(latest) && selectedPeriod !== null,
     placeholderData: keepPreviousData,
     queryFn: () => fetchPublicResource(username, slug, selectedPeriod ?? undefined),
     queryKey: ['publicResource', username, slug, selectedPeriod],
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
     retry: false,
-    staleTime: 60 * 1000,
+    staleTime: Infinity,
   })
 
   const browsing: PeriodBrowsing | null = latest
@@ -261,11 +281,16 @@ function VisitorDashboard({
         earliest: data.period_from,
         isError: periodQuery.isError,
         latest,
-        select: (key) => setSelectedPeriod(key === latest ? null : key),
+        select: (key) => {
+          const next = key === latest ? null : key
+          setSelectedPeriod(next)
+          writePeriodParam(next)
+        },
       }
     : null
   const answered = periodQuery.data
   const shown = browsing && selectedPeriod !== null && answered && 'config' in answered ? answered : data
+  useScrollRestore(`${username}/${slug}`, shown.period)
 
   return (
     <ReadOnlyDashboard
@@ -278,6 +303,17 @@ function VisitorDashboard({
     />
   )
 }
+
+/**
+ * Refetch on focus only what can change while open: not a finished period, and not a failed fetch
+ * (an owner's private dashboard 404s here), whose refetch flips the query back to loading and
+ * remounts the owner's board, scrolling it to the top.
+ */
+const refetchWhileOpen = ({
+  state,
+}: {
+  state: { data?: Awaited<ReturnType<typeof fetchPublicResource>> }
+}): boolean => state.data !== undefined && !('config' in state.data && state.data.period)
 
 /**
  * A challenge, or an exercise (whose owner edits it on the private exercise page), renders the same for
@@ -307,6 +343,8 @@ export function PublicResource() {
   const query = useQuery({
     queryFn: () => fetchPublicResource(username, slug),
     queryKey: ['publicResource', username, slug],
+    refetchOnReconnect: refetchWhileOpen,
+    refetchOnWindowFocus: refetchWhileOpen,
     retry: false,
     staleTime: 60 * 1000,
   })

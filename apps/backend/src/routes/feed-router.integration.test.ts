@@ -5,6 +5,8 @@ import express from 'express'
 import supertest from 'supertest'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 
+import type { ArticlePreviewer } from '../services/article-preview.ts'
+
 /**
  * Integration test for the owner-facing article routes on the feed router
  * (`POST /feed/articles`, `PATCH /feed/articles/:postId`) against a live
@@ -15,12 +17,14 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi 
  */
 import { insertActivity } from '../db/activities/index.ts'
 import { createChallenge, createChallengeParticipation, deleteChallenge } from '../db/challenges.ts'
+import { listFeedQuoteAuthorizations, upsertFeedQuoteAuthorization } from '../db/feed-quotes.ts'
 import { upsertFeedPostReaction } from '../db/feed-reactions.ts'
 import { createFeedPost } from '../db/feed.ts'
 import { createSharedDashboard } from '../db/shared-dashboards.ts'
 import { createSharedExercise } from '../db/shared-exercises.ts'
 import { insertTimeSeries } from '../db/time-series.ts'
 import { upsertTimelineEntry } from '../db/timeline.ts'
+import { createArticlePreviewer } from '../services/article-preview.ts'
 import { configureStructuredChallenge } from '../services/feed-structured-challenge.ts'
 import { cleanTestDb, getTestUser, startTestDb, stopTestDb } from '../test/db-test-helper.ts'
 import { type FeedDeliver, createFeedRouter } from './feed-router.ts'
@@ -32,10 +36,18 @@ const auth: RequestHandler = (req, _res, next) => {
   next()
 }
 
-const startApp = (deliver?: FeedDeliver, apiBaseUrl?: string, webHost?: string) => {
+const startApp = (
+  deliver?: FeedDeliver,
+  apiBaseUrl?: string,
+  webHost?: string,
+  previewArticle?: ArticlePreviewer,
+) => {
   const app = express()
   app.use(express.json())
-  app.use('/feed', createFeedRouter(auth, deliver, undefined, apiBaseUrl, undefined, webHost))
+  app.use(
+    '/feed',
+    createFeedRouter(auth, deliver, undefined, apiBaseUrl, undefined, webHost, undefined, previewArticle),
+  )
   const server = app.listen(0)
   const port = (server.address() as AddressInfo).port
   const close = () =>
@@ -97,6 +109,39 @@ describe('Article feed routes (integration)', () => {
     expect(res.body.error).toContain('no time window')
   })
 
+  test('POST /feed/articles stores an impact block and reads it back', async () => {
+    const impact = {
+      activity: 'meditation',
+      activity_type: 'activity_type',
+      caption: 'Evening meditation',
+      type: 'impact',
+      window_minutes: 120,
+    }
+    const res = await app.request
+      .post('/feed/articles')
+      .send({ ...articleBody(), blocks: [...articleBody().blocks, impact] })
+    expect(res.status).toBe(200)
+    expect(res.body.post.article.blocks[2]).toEqual(impact)
+    const list = await app.request.get('/feed')
+    const stored = list.body.posts.find((p: { id: string }) => p.id === res.body.post.id)
+    expect(stored.article.blocks[2]).toEqual(impact)
+  })
+
+  test('POST /feed/articles rejects an impact block with no window or a bad window_minutes (400)', async () => {
+    const noWindow = await app.request.post('/feed/articles').send({
+      blocks: [{ activity: 'meditation', activity_type: 'activity_type', type: 'impact' }],
+      title: 'Broken',
+      visibility: 'public',
+    })
+    expect(noWindow.status).toBe(400)
+    expect(noWindow.body.error).toContain('Impact block 1 (meditation) has no time window')
+    const shortWindow = await app.request.post('/feed/articles').send({
+      ...articleBody(),
+      blocks: [{ activity: 'meditation', activity_type: 'activity_type', type: 'impact', window_minutes: 5 }],
+    })
+    expect(shortWindow.status).toBe(400)
+  })
+
   test('PATCH /feed/articles/:postId replaces provided fields', async () => {
     const created = await app.request.post('/feed/articles').send(articleBody())
     const id = created.body.post.id
@@ -138,6 +183,41 @@ describe('Article feed routes (integration)', () => {
     expect(del.status).toBe(200)
     const list = await app.request.get('/feed')
     expect(list.body.posts.map((p: { id: string }) => p.id)).not.toContain(created.body.post.id)
+  })
+
+  test('DELETE /feed/:postId hands the post’s quote stamps to the Delete fan-out', async () => {
+    const deliver: FeedDeliver = {
+      created: vi.fn(),
+      createdArticle: vi.fn(),
+      createdChallenge: vi.fn(),
+      createdDashboard: vi.fn(),
+      createdExercise: vi.fn(),
+      createdReply: vi.fn(),
+      deleted: vi.fn(),
+      updated: vi.fn(),
+      updatedArticle: vi.fn(),
+      updatedChallenge: vi.fn(),
+      updatedDashboard: vi.fn(),
+      updatedExercise: vi.fn(),
+      updatedReply: vi.fn(),
+    }
+    const spied = startApp(deliver)
+    try {
+      const user = getTestUser()
+      const created = await spied.request.post('/feed/articles').send(articleBody())
+      const postId = created.body.post.id as string
+      const stamp = await upsertFeedQuoteAuthorization(user, {
+        actor_uri: 'https://mastodon.example/users/alice',
+        post_id: postId,
+        quote_uri: 'https://mastodon.example/users/alice/statuses/1',
+        request_uri: null,
+      })
+      expect((await spied.request.delete(`/feed/${postId}`)).status).toBe(200)
+      expect(deliver.deleted).toHaveBeenCalledWith(user, expect.objectContaining({ id: postId }), [stamp])
+      expect(await listFeedQuoteAuthorizations(user, postId)).toEqual([])
+    } finally {
+      await spied.close()
+    }
   })
 
   test('article fan-out: create → createdArticle; generic PATCH /:postId → updatedArticle (not updated)', async () => {
@@ -226,6 +306,40 @@ describe('GET /feed/articles/:postId/export (Reddit/markdown export, C4)', () =>
     expect(res.body.markdown).toContain('*Resting HR — not enough data in this window.*')
   })
 
+  test('links an impact block whose window has a session, and notes one without (#1604)', async () => {
+    const user = getTestUser()
+    const sessionStart = new Date('2026-07-02T18:00:00Z')
+    await insertActivity(user, {
+      activity_type: 'meditation',
+      end_time: new Date(sessionStart.getTime() + 20 * 60_000),
+      source: 'manual',
+      start_time: sessionStart,
+    })
+    await insertTimeSeries(
+      user,
+      Array.from({ length: 16 }, (_, i) => ({
+        metric: 'heart_rate' as const,
+        source: 'garmin' as const,
+        time: new Date(sessionStart.getTime() + (i * 5 - 30) * 60_000),
+        value: 60 + i,
+      })),
+    )
+    const created = await withBase.request.post('/feed/articles').send({
+      ...articleBody(),
+      blocks: [
+        { activity: 'meditation', activity_type: 'activity_type', type: 'impact' },
+        { activity: 'yoga', activity_type: 'activity_type', type: 'impact' },
+      ],
+    })
+    const postId = created.body.post.id
+    const res = await withBase.request.get(`/feed/articles/${postId}/export`)
+    expect(res.status).toBe(200)
+    expect(res.body.markdown).toContain(
+      `![Impact of meditation](https://aurboda.example/api/public/${user}/feed/${postId}/blocks/0/image.png`,
+    )
+    expect(res.body.markdown).toContain('*Impact of yoga — not enough data in this window.*')
+  })
+
   test('404s for a non-article post', async () => {
     const activityPost = await createFeedPost(getTestUser(), {
       activity_id: null,
@@ -297,6 +411,15 @@ describe('POST /feed/activities/:id/preview (live share preview — #902)', () =
     const shared = await app.request.post(`/feed/activities/${activityId}/share`).send(selection)
     expect(shared.status).toBe(200)
     expect(shared.body.post.content).toBe(preview.body.content)
+  })
+
+  test('answers 404 for an activity id that is not a uuid (#1536)', async () => {
+    const selection = { included_metrics: ['duration'], visibility: 'public' }
+    for (const path of ['/feed/activities/null/share', '/feed/activities/null/preview']) {
+      const res = await app.request.post(path).send(selection)
+      expect(res.status).toBe(404)
+      expect(res.body).toEqual({ error: 'Activity not found', success: false })
+    }
   })
 
   test('404s for an unknown activity', async () => {
@@ -812,12 +935,40 @@ describe('Feed post reactions (integration)', () => {
     expect(res.body.reactions[0]).not.toHaveProperty('post_id')
   })
 
+  test('GET /feed/:postId/reactions lists an approved quote as kind `quote` with the quoting post url', async () => {
+    const user = getTestUser()
+    const created = await post()
+    await upsertFeedPostReaction(user, {
+      actor_uri: 'https://mastodon.example/users/alice',
+      handle: '@alice@mastodon.example',
+      kind: 'like',
+      post_id: created.id,
+    })
+    await upsertFeedQuoteAuthorization(user, {
+      actor_uri: 'https://mastodon.example/users/alice',
+      post_id: created.id,
+      quote_uri: 'https://mastodon.example/users/alice/statuses/7',
+      request_uri: null,
+    })
+
+    const res = await app.request.get(`/feed/${created.id}/reactions`)
+    expect(res.status).toBe(200)
+    expect(res.body.reactions[0]).toMatchObject({
+      actor_uri: 'https://mastodon.example/users/alice',
+      handle: '@alice@mastodon.example',
+      kind: 'quote',
+      url: 'https://mastodon.example/users/alice/statuses/7',
+    })
+    expect(res.body.reactions[1]).toMatchObject({ kind: 'like' })
+    expect(res.body.reactions[1]).not.toHaveProperty('url')
+  })
+
   test('GET /feed/:postId/reactions 404s an unknown or non-UUID post id', async () => {
     expect((await app.request.get('/feed/00000000-0000-0000-0000-000000000000/reactions')).status).toBe(404)
     expect((await app.request.get('/feed/not-a-uuid/reactions')).status).toBe(404)
   })
 
-  test('GET /feed attaches like_count / boost_count to the listing', async () => {
+  test('GET /feed attaches like_count / boost_count / quote_count to the listing', async () => {
     const user = getTestUser()
     const counted = await post()
     const uncounted = await post()
@@ -831,16 +982,24 @@ describe('Feed post reactions (integration)', () => {
       kind: 'like',
       post_id: counted.id,
     })
+    await upsertFeedQuoteAuthorization(user, {
+      actor_uri: 'https://remote.example/users/bob',
+      post_id: counted.id,
+      quote_uri: 'https://remote.example/users/bob/statuses/1',
+      request_uri: null,
+    })
 
     const res = await app.request.get('/feed')
     const byId = Object.fromEntries(
-      res.body.posts.map((p: { id: string; like_count: number; boost_count: number }) => [
-        p.id,
-        { boost: p.boost_count, like: p.like_count },
-      ]),
+      res.body.posts.map(
+        (p: { id: string; like_count: number; boost_count: number; quote_count: number }) => [
+          p.id,
+          { boost: p.boost_count, like: p.like_count, quote: p.quote_count },
+        ],
+      ),
     )
-    expect(byId[counted.id]).toEqual({ boost: 0, like: 2 })
-    expect(byId[uncounted.id]).toEqual({ boost: 0, like: 0 })
+    expect(byId[counted.id]).toEqual({ boost: 0, like: 2, quote: 1 })
+    expect(byId[uncounted.id]).toEqual({ boost: 0, like: 0, quote: 0 })
   })
 })
 
@@ -1094,6 +1253,16 @@ describe('Article drafts (/feed/article-drafts)', () => {
     expect(res.body.post.visibility).toBe('unlisted')
   })
 
+  test('publishing a draft whose impact block has no activity is a 400', async () => {
+    const created = await app.request.post('/feed/article-drafts').send({
+      article: { ...draftArticle(), blocks: [{ activity_type: 'activity_type', type: 'impact' }] },
+    })
+    expect(created.status).toBe(200)
+    const res = await app.request.post(`/feed/article-drafts/${created.body.draft.id}/publish`).send({})
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe('Impact block 1 has no activity — pick one before publishing.')
+  })
+
   test('publishing an incomplete draft is a 400 and keeps the draft', async () => {
     const created = await app.request
       .post('/feed/article-drafts')
@@ -1322,5 +1491,71 @@ describe('Article challenge blocks (#1484)', () => {
     })
     expect(res.status).toBe(400)
     expect(res.body.error).toBe('Block 2: challenge not found.')
+  })
+})
+
+describe('Article preview (POST /feed/articles/preview)', () => {
+  const WEB_HOST = 'https://aurboda.example'
+  const chartDeps = {
+    getArticleChartSeries: async () => [],
+    getArticleImpact: vi.fn(),
+    getChallengeRaceByUrl: async () => null,
+    getCorrelationScatter: async () => null,
+  }
+  let app: ReturnType<typeof startApp>
+
+  beforeAll(async () => {
+    await startTestDb()
+    app = startApp(undefined, undefined, WEB_HOST, createArticlePreviewer({ chartDeps, webHost: WEB_HOST }))
+  }, CONTAINER_TIMEOUT)
+
+  afterAll(async () => {
+    await app.close()
+    await stopTestDb()
+  })
+
+  beforeEach(async () => {
+    await cleanTestDb()
+  })
+
+  test('previews a simple draft and creates no post and no draft', async () => {
+    const res = await app.request.post('/feed/articles/preview').send({
+      article: {
+        blocks: [
+          { markdown: 'Morning coffee, then #yoga.', type: 'prose' },
+          { metric: 'heart_rate', type: 'chart' },
+        ],
+        title: 'Coffee and yoga',
+      },
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(res.body.name).toBe('Coffee and yoga')
+    expect(res.body.content).toContain('<p><strong>Coffee and yoga</strong></p>')
+    expect(res.body.content).toContain('Morning coffee')
+    expect(res.body.tags).toContain('yoga')
+    expect(res.body.attachments).toEqual([])
+    expect(res.body.publish_error).toMatch(/^Chart block 2 /)
+    expect(res.body.mastodon.content).toContain('#<span>yoga</span>')
+
+    expect((await app.request.get('/feed')).body.posts).toEqual([])
+    expect((await app.request.get('/feed/article-drafts')).body.drafts).toEqual([])
+  })
+
+  test('rejects a body without an article', async () => {
+    expect((await app.request.post('/feed/articles/preview').send({})).status).toBe(400)
+  })
+
+  test('requires authentication', async () => {
+    const unauthenticated = express()
+    unauthenticated.use(express.json())
+    const deny: RequestHandler = (_req, res) => {
+      res.status(401).json({ error: 'Unauthorized', success: false })
+    }
+    unauthenticated.use('/feed', createFeedRouter(deny))
+    const res = await supertest(unauthenticated)
+      .post('/feed/articles/preview')
+      .send({ article: { blocks: [], title: 'x' } })
+    expect(res.status).toBe(401)
   })
 })

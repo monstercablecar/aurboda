@@ -16,8 +16,9 @@ export const saveWorkDay = async (body: WorkDayBody) => {
     }
     return response.data.data
   } catch (error) {
-    if (axios.isAxiosError<WorkDayResponse>(error) && typeof error.response?.data.error === 'string')
+    if (axios.isAxiosError<WorkDayResponse>(error) && typeof error.response?.data.error === 'string') {
       throw new Error(`${error.response.data.error} Your draft is retained.`)
+    }
     throw error
   }
 }

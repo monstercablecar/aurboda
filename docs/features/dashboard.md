@@ -69,7 +69,7 @@ A summary of the most recent sleep that ended within the last 36 hours, for a qu
 
 ### Activity Summary
 
-Shows workout, sleep, and meditation statistics for a configurable recent period. Each category displays as a colored sub-card with an icon, a primary value (count or average), and a secondary detail line (total minutes or nights tracked). Individual categories can be toggled off.
+Shows workout, sleep, and meditation statistics for a configurable recent period. Each category displays as a colored sub-card with an icon, a primary value (count or average), and a secondary detail line (total minutes or nights tracked). Individual categories can be toggled off. Each category is the roll-up of the `exercise`, `meditation` or `sleep` activity type with its subtypes (so naps count as sleep), the same figures an [activity card](#activity-card) of that type shows for the same window; a hidden category is not queried.
 
 **Configuration:** Lookback period (1-30 days, default 7), toggle for each category (workouts, sleep, meditation).
 
@@ -77,7 +77,7 @@ Shows workout, sleep, and meditation statistics for a configurable recent period
 
 A full-width EMA (Exponential Moving Average) trend chart for any tag or metric. Shows a smoothed trend line over time with the current rate displayed. Useful for tracking things like supplement intake frequency, weight changes, or exercise patterns over weeks or months.
 
-**Configuration:** Source type (tag or metric), pattern (tag regex or metric name), half-life (default 15 days), lookback period (default 90 days), display period (daily/weekly/monthly), aggregation method (count/sum/mean).
+**Configuration:** Source type (tag or metric), pattern (tag regex or metric name), half-life (default 15 days), lookback period (default 90 days) or a fixed start date (`since`, see below), display period (daily/weekly/monthly), aggregation method (count/sum/mean).
 
 A trend chart can instead show a **measure's decaying best** (an activity type's `measure`, with `filter_field` and `filter_value` for one exercise): the running best that decays with the half-life (default 120 days) between sessions. Display period and aggregation do not apply, and the title defaults to the exercise and measure, e.g. "Squat · Best e1RM". Add one from an exercise's Trend chart menu or from the Chart Explorer's **Trend (best)**.
 
@@ -86,6 +86,8 @@ A trend chart can instead show a **measure's decaying best** (an activity type's
 A full-width bar chart of bucketed values (`GET /chart-data`) for an activity type, metric or screentime category, optionally broken down into one stacked series per value of a categorical field.
 
 **Configuration:** Source type, pattern, bucket size, lookback period, aggregation (count/sum/mean/max), optional breakdown fields. For an activity type with list items (strength sets), `measure` charts that measure of each session instead of its duration or count, `filter_field`/`filter_value` (e.g. `sets.exercise` = `Bench Press`) take it over one exercise's items, and a `sets.exercise` breakdown gives one series per exercise (see [Activity Types: Exercises and measures](activity-types.md#exercises-and-measures)).
+
+A trend or bar chart can have a fixed start instead of a rolling lookback: `since` (`YYYY-MM-DD`) charts from that date up to today and wins over `lookback_days`. Bars start at the date's midnight and a trend looks back the whole days from the date to today, in the viewer's timezone on your own board and in the owner's timezone on a shared one. The Chart Explorer's **Since…** range saves it this way. A period dashboard's window still overrides it, as it does every lookback.
 
 ### Combined Chart
 
@@ -179,10 +181,12 @@ One source's total over the card's window as the headline, with its change again
 period on a period dashboard, then its top entries: music plays by artist, album or track
 (`1,760 plays`, `506 artists`), screen time by app (`151 h`, `4.9 h/day`, `38 apps`; categories
 excluded from screen time are left out) or visits by place (`55 visits`, `12 places`). Add one from a
-metrics section's add-widget dialog (source, limit, title) or through the API or MCP.
+metrics section's add-widget dialog (source, plays from, limit, title) or through the API or MCP.
 
 **Configuration:** `source` (`media_artist`, `media_album`, `media_track`, `screentime_app` or
-`place`), `limit` (1--10, default 3; a place list shows at most 5), optional `lookback_days` (default
+`place`), optional `media_source` for a `media_*` source (`lastfm` for Last.fm scrobbles only,
+`mpris` for the MPRIS logger only; all plays when absent, see
+[Querying media](../media.md#querying)), `limit` (1--10, default 3; a place list shows at most 5), optional `lookback_days` (default
 30; a period dashboard uses its period) and optional `title` (default "Top artists", "Top albums",
 "Top tracks", "Top apps" or "Top places"). Data comes from `GET /media/plays/top` (MCP:
 `query_top_media`), `GET /productivity/top-apps` (`query_top_apps`) and
@@ -190,15 +194,16 @@ metrics section's add-widget dialog (source, limit, title) or through the API or
 
 ### Places Card
 
-Nights at home, nights away, distinct places and visits over the card's window, with changes against
-the previous period for the last three on a period dashboard, then the five most visited places. A
-night counts as away when there was an overnight stay at a named or detected place other than home; a
-night without a detectable stay counts as neither (see [Places summary](places.md#places-summary)).
+Where the nights of the card's window were spent: one row per named place with its nights, then the
+nights elsewhere (at a place that is not a named location) and the nights without location data, then
+the number of distinct named places, with changes against the previous period on a period dashboard
+(the nights per place, the nights elsewhere and the distinct places). Below them, the five named places
+with the most nights and the hours spent at each. A night goes to the place the user was at 03:00 the
+next morning, a phone at rest included (see [Places summary](places.md#places-summary)).
 
-**Configuration:** optional `home_location` (the place that counts as home, default `Home`, matched
-case-insensitively), optional `lookback_days` (default 30; a period dashboard uses its period) and
-optional `title` (default "Places"). Data comes from `GET /locations/places-summary` (MCP:
-`get_places_summary`).
+**Configuration:** optional `lookback_days` (default 30; a period dashboard uses its period) and
+optional `title` (default "Places"). The schema still accepts `home_location`, which the editor no
+longer offers. Data comes from `GET /locations/places-summary` (MCP: `get_places_summary`).
 
 ### Correlation Impact
 
@@ -222,7 +227,7 @@ Widgets are organized into sections, each with a title and a layout type:
 | **Charts**   | Single column, full width                                     | Trend charts, combined charts, correlation charts                                                   |
 | **Links**    | Responsive grid of smaller tiles (minimum 140px wide)         | Quick-link navigation                                                                               |
 
-Sections are collapsible -- click the section header to toggle between expanded and collapsed. On wide screens, multiple sections can appear side by side.
+Sections are collapsible -- click the section header to toggle between expanded and collapsed. On wide screens, multiple sections can appear side by side. In edit mode each section header has up and down arrows to reorder the sections.
 
 ## Descriptive text
 
@@ -249,6 +254,8 @@ widget renders against that one window, ignoring the lookbacks in its configurat
   (the device timezone in your settings; UTC when unset), the end exclusive.
 - **Finished periods only.** The dashboard opens on the latest finished period. A switcher above the
   widgets steps back and forth between finished periods; the next button stops at the latest one.
+  A chosen period is kept in the URL as `?period=2026-09`, so it survives a reload and can be linked;
+  the latest period has no parameter.
   Asking for a period that has not ended (or a malformed one) is a 400.
 - **Previous-period deltas.** Figures compare with the previous calendar period of the same kind
   (September for October, the previous ISO week, the previous year) -- not an equal-length rolling
@@ -256,8 +263,15 @@ widget renders against that one window, ignoring the lookbacks in its configurat
   activity summary carries `previous_count`, `previous_total_minutes` and `previous_avg_hours`; an
   activity card carries `previous_count`, `previous_total_minutes`, `previous_distance_km` and
   `previous_sleep_avg_minutes`; a top list carries `previous_total`; a places card carries
-  `previous_nights_away`, `previous_distinct_places` and `previous_visits`; HR zones carry
+  `previous_nights_by_place`, `previous_nights_elsewhere`, `previous_nights_away`,
+  `previous_distinct_places` and `previous_visits`; HR zones carry
   `previous_avg_seconds`.
+- **Loaded once.** A finished period's figures only change when the dashboard's config does (saving
+  it reloads them), so the web app does not refetch a period dashboard when its tab regains focus
+  or the network comes back. The last few answers are kept in the tab's `sessionStorage`, so a tab
+  the browser discarded in the background reopens without waiting for the server — an answer for
+  "the latest period" only on the day it was fetched — and the scroll position per dashboard and
+  period is restored with it. Logging out clears them.
 - **Baselines.** The 7- and 30-day HRV and resting HR baseline cards become the period average of
   `hrv_rmssd` and `resting_heart_rate`.
 - **Widgets that do not apply.** **Last night** and **Goal progress** have no meaning for a past
@@ -288,7 +302,12 @@ Click the pencil icon next to the "Dashboard" title to enter edit mode.
 
 - **Add a widget**: Click the "+ Add Widget" placeholder in any section. A dialog opens showing the widget types compatible with that section. Select a type, configure it (e.g., pick a metric, set a lookback period), and confirm.
 - **Remove a widget**: Click the X button on any widget.
-- **Reorder widgets**: Use the up/down arrows on each widget to move it within its section.
+- **Move widgets**: On a desktop (a mouse or trackpad), grab a widget by its grip handle and drop it
+  where it should go: an accent bar shows whether it lands before or after the card under the pointer
+  (beside it in a multi-column grid, above or below it in a single column), and a dashed outline marks
+  a section it would be added to the end of. Widgets can be dropped into another section, including an
+  empty one, but not into a collapsed one. The up/down arrows on each widget move it one step within
+  its section, and are the way to reorder on touch devices, where the grip is hidden.
 - **Add a section**: Click "Add Section" at the bottom. Give it a title and choose a type (Metrics, Charts, or Links).
 - **Rename a section**: Click the pencil icon next to a section title, edit the title inline, and press Enter (or click away) to save. Press Escape to cancel.
 - **Delete a section**: Click the trash icon next to a section title. Confirms before deleting the section and all its widgets.
@@ -375,8 +394,8 @@ widgets render.
 
 ## Known Limitations
 
-- Widgets cannot be moved between sections -- only reordered within a section.
-- There is no drag-and-drop; reordering uses up/down arrow buttons.
+- On touch devices widgets can only be reordered within a section, with the arrow buttons;
+  moving one to another section needs a mouse or trackpad.
 - The dashboard layout is managed through the web UI only; MCP can read its data
   (`get_dashboard_data`) but not edit the home dashboard.
 - Sparkline cards fetch up to 365 days of time-series data, which may be slow for very high-frequency metrics like heart rate. Use metric cards for those.

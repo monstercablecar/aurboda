@@ -5,6 +5,7 @@ import { brandForRoute } from '../branding'
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
 import {
   DATA_SOURCE_LINKS,
+  HELP_LINK,
   isSharingActive,
   NAV_LINKS_PRIMARY,
   NAV_LINKS_SECONDARY,
@@ -204,6 +205,14 @@ export function Sidebar() {
 
       {isLoggedIn && (
         <div class="sidebar-footer">
+          <a
+            href={HELP_LINK.href}
+            class={`sidebar-link${url === HELP_LINK.href ? ' active' : ''}`}
+            title={collapsed ? HELP_LINK.label : undefined}
+          >
+            <span class="sidebar-icon">{HELP_LINK.icon}</span>
+            <span class="sidebar-label">{HELP_LINK.label}</span>
+          </a>
           <a
             href="/settings"
             class={`sidebar-link${url === '/settings' ? ' active' : ''}`}

@@ -18,8 +18,10 @@ import type {
  * resolving rather than cascading a delete.
  */
 import type { AutoshareCandidate } from './autoshare-rules.ts'
+import type { FeedQuoteAuthorizationRecord } from './feed-quotes.ts'
 import type { Queryable } from './pool.ts'
 
+import { UUID_RE } from '../utils.ts'
 import { query } from './connection.ts'
 
 export interface FeedPostRecord {
@@ -469,6 +471,7 @@ export const countPublicFeedPosts = async (user: string, kind?: FeedPostKind): P
 }
 
 export const getFeedPostById = async (user: string, id: string): Promise<FeedPostRecord | null> => {
+  if (!UUID_RE.test(id)) return null
   const result = await query<FeedPostRow>(user, `SELECT ${FEED_POST_COLUMNS} FROM feed_posts WHERE id = $1`, [
     id,
   ])
@@ -480,6 +483,7 @@ export const updateFeedPost = async (
   id: string,
   patch: FeedPostPatch,
 ): Promise<FeedPostRecord | null> => {
+  if (!UUID_RE.test(id)) return null
   const sets: string[] = []
   const params: unknown[] = []
   let idx = 1
@@ -528,17 +532,35 @@ export const touchFeedPost = async (user: string, id: string): Promise<FeedPostR
  * — their id never resolved publicly, so a 410 would leak that a post existed.
  * Idempotent via `ON CONFLICT` (re-deleting a since-recreated id is a no-op).
  *
- * The post's inbound like/boost records go with it: `feed_post_reaction.post_id`
- * is a soft reference (like `activity_id`), so nothing cascades on its own.
+ * The post's inbound like/boost records and quote approvals go with it:
+ * `feed_post_reaction.post_id` and `feed_quote_authorization.post_id` are soft
+ * references (like `activity_id`), so nothing cascades on its own. The removed
+ * approvals are returned (null when there was no such post), so their stamps'
+ * revocation is sent from exactly the rows this statement dropped.
  */
-export const deleteFeedPost = async (user: string, id: string): Promise<boolean> => {
-  const result = await query<{ id: string }>(
+export const deleteFeedPostWithQuotes = async (
+  user: string,
+  id: string,
+): Promise<FeedQuoteAuthorizationRecord[] | null> => {
+  if (!UUID_RE.test(id)) return null
+  const result = await query<{
+    deleted_post: string
+    id: string | null
+    post_id: string | null
+    quote_uri: string | null
+    actor_uri: string | null
+    request_uri: string | null
+    created_at: Date | null
+  }>(
     user,
     `WITH deleted AS (
        DELETE FROM feed_posts WHERE id = $1
        RETURNING id, visibility, activity_id
      ), reactions AS (
        DELETE FROM feed_post_reaction WHERE post_id IN (SELECT id FROM deleted)
+     ), quotes AS (
+       DELETE FROM feed_quote_authorization WHERE post_id IN (SELECT id FROM deleted)
+       RETURNING id, post_id, quote_uri, actor_uri, request_uri, created_at
      ), tomb AS (
        INSERT INTO feed_tombstone (post_id)
        SELECT id FROM deleted WHERE visibility IN ('public', 'unlisted')
@@ -550,11 +572,33 @@ export const deleteFeedPost = async (user: string, id: string): Promise<boolean>
        SELECT activity_id FROM deleted WHERE activity_id IS NOT NULL
        ON CONFLICT (activity_id) DO NOTHING
      )
-     SELECT id FROM deleted`,
+     SELECT d.id AS deleted_post, q.id, q.post_id, q.quote_uri, q.actor_uri, q.request_uri, q.created_at
+       FROM deleted d LEFT JOIN quotes q ON true`,
     [id],
   )
-  return result.rows.length > 0
+  if (result.rows.length === 0) return null
+  return result.rows.flatMap((row) =>
+    row.id == null ||
+    row.post_id == null ||
+    row.quote_uri == null ||
+    row.actor_uri == null ||
+    row.created_at == null
+      ? []
+      : [
+          {
+            actor_uri: row.actor_uri,
+            created_at: row.created_at,
+            id: row.id,
+            post_id: row.post_id,
+            quote_uri: row.quote_uri,
+            request_uri: row.request_uri,
+          },
+        ],
+  )
 }
+
+export const deleteFeedPost = async (user: string, id: string): Promise<boolean> =>
+  (await deleteFeedPostWithQuotes(user, id)) != null
 
 /**
  * The tombstone for a deleted public/unlisted post, or null if the id was never

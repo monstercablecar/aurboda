@@ -11,7 +11,9 @@ import { migrateSchemaIfNeeded } from '../db/index.ts'
 import { httpError } from '../http-error.ts'
 import { safeRefusal } from '../services/account-gate.ts'
 import { auditError, auditInfo, auditWarn } from '../services/audit-log.ts'
+import { backfillMealFoodItemNames } from '../services/backfill-meal-food-item-names.ts'
 import { backfillScreentimeActivities } from '../services/backfill-screentime-activities.ts'
+import { reconcileExportedSharedFoodItems } from '../services/exported-shared-food.ts'
 import { redactGarminLoginAudit } from '../services/redact-garmin-login-audit.ts'
 import { retypeLegacyScreentime } from '../services/retype-legacy-screentime.ts'
 import { summarizeAuditBody, auditOperation } from './audit-body.ts'
@@ -77,9 +79,9 @@ export const createAuditLogMiddleware =
  * after a deploy the background sweep in `api.ts` has usually done that
  * already. The first request still awaits it, so no request runs against
  * stale schema; subsequent requests wait if it is still in flight. Failures reject
- * waiting requests with 503 and evict the check so a later request can retry. Also kicks
- * off a one-shot background backfill of historical screentime activities,
- * gated via sync_state.
+ * waiting requests with 503 and evict the check so a later request can retry.
+ * Shared food reconciliation runs in the background independently of the schema
+ * fingerprint, followed by food-name upkeep and one-shot backfills gated via sync_state.
  *
  * With an account gate, a write by a read-only account (its plan expired past the
  * grace period) is answered 402 unless `isAllowedWhenReadOnly` lets it through.
@@ -106,6 +108,9 @@ export const createAuthMiddleware = (
             const migrationPromise = migrateSchemaIfNeeded(user)
               .then(() => {
                 void (async () => {
+                  await reconcileExportedSharedFoodItems(user)
+                    .then(() => backfillMealFoodItemNames(user))
+                    .catch((err) => console.error(`⚠️ Food item reference upkeep failed for ${user}:`, err))
                   await backfillScreentimeActivities(user).catch((err) =>
                     console.error(`⚠️ Screentime backfill failed for ${user}:`, err),
                   )
