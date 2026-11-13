@@ -19,6 +19,20 @@ describe('Settings Integration Tests', () => {
     await cleanTestDb()
   })
 
+  test('hidden pages persist without overwriting other settings and can be reset', async () => {
+    const user = getTestUser()
+    await upsertUserSettings(user, { sex: 'male', hidden_pages: ['/cpap', '/future-page'] })
+    await upsertUserSettings(user, { onboarding_progress: { feature_control: 'completed' } })
+    expect(await getUserSettings(user)).toMatchObject({
+      sex: 'male',
+      hidden_pages: ['/cpap', '/future-page'],
+      onboarding_progress: { feature_control: 'completed' },
+    })
+    await upsertUserSettings(user, {}, ['hidden_pages'])
+    expect((await getUserSettings(user))?.hidden_pages).toBeUndefined()
+    expect((await getUserSettings(user))?.sex).toBe('male')
+  })
+
   describe('persistent onboarding progress', () => {
     test('concurrent different-step updates preserve progress and legacy settings', async () => {
       const user = getTestUser()

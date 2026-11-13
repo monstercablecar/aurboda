@@ -15,6 +15,14 @@ export interface OnboardingStep {
 }
 const definitions: Omit<OnboardingStep, 'status'>[] = [
   {
+    id: 'feature_control',
+    chapter: 0,
+    title: 'What would you like to track?',
+    description:
+      'Choose what belongs in your menus. These choices can be changed anytime in Settings → Feature Control.',
+    manualLabel: 'Continue with these pages',
+  },
+  {
     id: 'browser_basics',
     chapter: 0,
     title: 'Make yourself at home',

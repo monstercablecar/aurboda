@@ -190,6 +190,7 @@ const settingsWithDefaultsSchema = userSettingsResponseSchema.pick({
   feed_type_tag: true,
   food_sensitivity_map: true,
   garmin_disabled_data_types: true,
+  hidden_pages: true,
   item_icons: true,
   lastfm_username: true,
   maf_hr: true,

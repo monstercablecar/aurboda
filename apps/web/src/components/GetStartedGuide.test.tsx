@@ -1,3 +1,4 @@
+import { signal } from '@preact/signals'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // @vitest-environment jsdom
 import { render } from 'preact'
@@ -19,6 +20,7 @@ const api = vi.hoisted(() => ({
 }))
 const route = vi.hoisted(() => vi.fn())
 vi.mock('../state/api', () => api)
+vi.mock('../state/auth', () => ({ auth: signal({ token: 'test', user: 'test', is_admin: false }) }))
 vi.mock('preact-iso', () => ({ useLocation: () => ({ url: '/', route }) }))
 vi.mock('./ActivityWatchInstall', () => ({ ActivityWatchInstall: () => <div>Secure installer</div> }))
 let root: HTMLDivElement
@@ -46,7 +48,9 @@ beforeEach(() => {
   document.body.append(root)
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   settings = {
-    onboarding_progress: {},
+    onboarding_progress: { feature_control: 'skipped' },
+    hidden_pages: [],
+    success: true,
     onboarding_manual_done: [],
     onboarding_dismissed_at: null,
     garmin_connected: false,
@@ -124,7 +128,11 @@ it('retries a failed automatic progress save even when the detected data stays t
   expect(root.textContent).toContain('1 complete')
 })
 it('reopens without clearing any progress and does not navigate on failure', async () => {
-  settings.onboarding_progress = { android_app: 'skipped', browser_basics: 'completed' }
+  settings.onboarding_progress = {
+    feature_control: 'skipped',
+    android_app: 'skipped',
+    browser_basics: 'completed',
+  }
   api.updateUserSettings.mockRejectedValueOnce(new Error('offline'))
   await mount(<OnboardingSettings />)
   await click('Open setup guide')
@@ -132,7 +140,11 @@ it('reopens without clearing any progress and does not navigate on failure', asy
   await click('Open setup guide')
   expect(api.updateUserSettings).toHaveBeenLastCalledWith({ onboarding_dismissed_at: null })
   expect(route).toHaveBeenCalledWith('/?onboarding=review')
-  expect(settings.onboarding_progress).toEqual({ android_app: 'skipped', browser_basics: 'completed' })
+  expect(settings.onboarding_progress).toEqual({
+    feature_control: 'skipped',
+    android_app: 'skipped',
+    browser_basics: 'completed',
+  })
 })
 it('ignores an old-account save after session changes', async () => {
   let resolve!: (value: unknown) => void
@@ -152,6 +164,7 @@ it('ignores an old-account save after session changes', async () => {
 })
 it('keeps the completion summary until explicitly closed and supports review without resetting', async () => {
   const ids = [
+    'feature_control',
     'android_app',
     'wearable',
     'computer_time',
@@ -167,17 +180,18 @@ it('keeps the completion summary until explicitly closed and supports review wit
   settings.onboarding_progress = Object.fromEntries(ids.map((id) => [id, 'skipped']))
   await mount()
   await click('Got it')
-  expect(root.textContent).toContain('1 complete · 11 skipped · 0 remaining')
+  expect(root.textContent).toContain('1 complete · 12 skipped · 0 remaining')
   expect(root.querySelector('.celebration-onboarding-finish')).not.toBeNull()
   expect(root.textContent).toContain('Your workspace, your way.')
   act(() => render(null, root))
   await mount(<GetStartedGuide forceReview />)
-  expect(root.textContent).toContain('1 complete · 11 skipped · 0 remaining')
+  expect(root.textContent).toContain('1 complete · 12 skipped · 0 remaining')
   expect(root.querySelector('.celebration-overlay')).toBeNull()
 })
 it('hides an already finished guide by default without fetching setup signals', async () => {
   settings.onboarding_progress = Object.fromEntries(
     [
+      'feature_control',
       'browser_basics',
       'android_app',
       'wearable',
@@ -218,12 +232,13 @@ it('keeps chapter and step selection stable while saving', async () => {
   expect(root.querySelector<HTMLButtonElement>('.onboarding-chapters button')?.disabled).toBe(false)
 })
 it('automatically shows a fresh account the first step without writing settings or celebrating', async () => {
+  settings.onboarding_progress = {}
   await mount()
   expect(root.querySelector('.onboarding-flow')).not.toBeNull()
-  expect(root.textContent).toContain('0 complete · 0 skipped · 12 remaining')
+  expect(root.textContent).toContain('0 complete · 0 skipped · 13 remaining')
   expect(root.querySelector('[aria-current="step"]')?.textContent).toContain('Start here')
   expect(root.querySelector('.onboarding-step-heading[aria-expanded="true"]')?.textContent).toContain(
-    'Make yourself at home',
+    'What would you like to track?',
   )
   expect(api.updateUserSettings).not.toHaveBeenCalled()
   expect(root.querySelector('.celebration-overlay')).toBeNull()
@@ -239,6 +254,7 @@ it('retains halfway progress and resumes at the first unfinished step after a fr
   await click('Explore your workspace')
   await click("I've explored this")
   const stored = {
+    feature_control: 'skipped',
     browser_basics: 'completed',
     android_app: 'skipped',
     wearable: 'skipped',
@@ -246,7 +262,7 @@ it('retains halfway progress and resumes at the first unfinished step after a fr
     treatments: 'completed',
   }
   expect(settings.onboarding_progress).toEqual(stored)
-  expect(root.textContent).toContain('3 complete · 2 skipped · 7 remaining')
+  expect(root.textContent).toContain('3 complete · 3 skipped · 7 remaining')
   expect(root.querySelector('[aria-current="step"]')?.textContent).toContain('Explore your workspace')
   expect(root.querySelector('.onboarding-step-heading[aria-expanded="true"]')?.textContent).toContain(
     'Give CPAP history a home',
@@ -260,7 +276,7 @@ it('retains halfway progress and resumes at the first unfinished step after a fr
   expect(api.fetchUserSettings.mock.calls.length).toBeGreaterThan(reads)
   expect(settings.onboarding_progress).toEqual(stored)
   expect(root.querySelector('.onboarding-flow')).not.toBeNull()
-  expect(root.textContent).toContain('3 complete · 2 skipped · 7 remaining')
+  expect(root.textContent).toContain('3 complete · 3 skipped · 7 remaining')
   expect(root.querySelector('[aria-current="step"]')?.textContent).toContain('Connect your data')
   expect(root.querySelector('.onboarding-step-heading[aria-expanded="true"]')?.textContent).toContain(
     'See where computer time goes',
@@ -277,7 +293,7 @@ it('persists an explicit hide across a fresh client return without changing prog
   await click('Got it')
   await click('Hide guide')
   expect(settings.onboarding_dismissed_at).toEqual(expect.any(String))
-  expect(settings.onboarding_progress).toEqual({ browser_basics: 'completed' })
+  expect(settings.onboarding_progress).toEqual({ feature_control: 'skipped', browser_basics: 'completed' })
   expect(root.querySelector('.onboarding-flow')).toBeNull()
   const writes = api.updateUserSettings.mock.calls.length
   act(() => render(null, root))
@@ -286,7 +302,7 @@ it('persists an explicit hide across a fresh client return without changing prog
   await mount()
   expect(root.querySelector('.onboarding-flow')).toBeNull()
   expect(root.querySelector('.celebration-overlay')).toBeNull()
-  expect(settings.onboarding_progress).toEqual({ browser_basics: 'completed' })
+  expect(settings.onboarding_progress).toEqual({ feature_control: 'skipped', browser_basics: 'completed' })
   expect(api.updateUserSettings).toHaveBeenCalledTimes(writes)
 })
 it('initializes the first unfinished step when settings arrive after the initial render', async () => {
@@ -297,7 +313,12 @@ it('initializes the first unfinished step when settings arrive after the initial
         resolveSettings = resolve
       }),
   )
-  settings.onboarding_progress = { browser_basics: 'completed', android_app: 'skipped', wearable: 'skipped' }
+  settings.onboarding_progress = {
+    feature_control: 'skipped',
+    browser_basics: 'completed',
+    android_app: 'skipped',
+    wearable: 'skipped',
+  }
   settings.onboarding_manual_done = ['computer_time', 'ask_ai']
   await mount()
   expect(root.querySelector('.onboarding-flow')).toBeNull()
@@ -312,7 +333,11 @@ it('initializes the first unfinished step when settings arrive after the initial
   expect(root.querySelector('.celebration-overlay')).toBeNull()
 })
 it('does not reset manual chapter selection when settings are saved or refreshed later', async () => {
-  settings.onboarding_progress = { browser_basics: 'completed', android_app: 'skipped' }
+  settings.onboarding_progress = {
+    feature_control: 'skipped',
+    browser_basics: 'completed',
+    android_app: 'skipped',
+  }
   await mount()
   expect(root.querySelector('[aria-current="step"]')?.textContent).toContain('Connect your data')
   await click('Explore your workspace')
@@ -332,4 +357,31 @@ it('does not reset manual chapter selection when settings are saved or refreshed
   expect(root.querySelector('.onboarding-step-heading[aria-expanded="true"]')?.textContent).toContain(
     'Give CPAP history a home',
   )
+})
+
+it('lets a new user choose pages inline and confirms the step explicitly', async () => {
+  settings.onboarding_progress = {}
+  await mount()
+  const work = root.querySelector<HTMLInputElement>('input[aria-label="Show Work"]')
+  expect(work).not.toBeNull()
+  await act(async () => work?.click())
+  await flush()
+  expect(api.updateUserSettings).toHaveBeenLastCalledWith({ hidden_pages: ['/work'] })
+  expect(settings.onboarding_progress).toEqual({})
+  await click('Continue with these pages')
+  expect(settings.onboarding_progress).toEqual({ feature_control: 'completed' })
+  expect(settings.hidden_pages).toEqual(['/work'])
+  expect(root.querySelector('.onboarding-step-heading[aria-expanded="true"]')?.textContent).toContain(
+    'Make yourself at home',
+  )
+})
+it('skips feature selection without altering menu preferences', async () => {
+  settings.onboarding_progress = {}
+  settings.hidden_pages = ['/cpap']
+  await mount()
+  await click('Skip for now')
+  expect(api.updateUserSettings).toHaveBeenLastCalledWith({
+    onboarding_progress: { feature_control: 'skipped' },
+  })
+  expect(settings.hidden_pages).toEqual(['/cpap'])
 })

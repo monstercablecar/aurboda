@@ -6,6 +6,7 @@ import type { BiologicalSex, HrZoneThresholds, UpdateSettingsInput } from '../..
 import { AvatarSettings } from '../../components/AvatarSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
+import { FeatureControl } from '../../components/FeatureControl'
 import { MealPreferencesSettings } from '../../components/MealPreferencesSettings'
 import { NotificationsSettings } from '../../components/NotificationsSettings'
 import { OnboardingSettings } from '../../components/OnboardingSettings'
@@ -179,6 +180,8 @@ export function Settings() {
   return (
     <div class="settings-page">
       <h1>Settings</h1>
+
+      <FeatureControl />
 
       <OnboardingSettings />
 

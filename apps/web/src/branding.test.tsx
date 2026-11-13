@@ -11,6 +11,7 @@ import { auth } from './state/auth'
 
 let currentUrl = '/people'
 vi.mock('preact-iso', () => ({ useLocation: () => ({ url: currentUrl }) }))
+vi.mock('./components/usePageVisibility', () => ({ usePageVisibility: () => () => true }))
 vi.mock('./state/auth', () => ({
   auth: signal<{ token?: string; user?: string; is_admin?: boolean }>({}),
   ensureStatusLoaded: vi.fn(),
