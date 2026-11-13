@@ -4,6 +4,7 @@ import {
   computeWorkDayTotals,
   createPersonBodySchema,
   peopleEventBodySchema,
+  createJournalEntryBodySchema,
 } from '@aurboda/api-spec'
 import express from 'express'
 import { execFileSync } from 'node:child_process'
@@ -21,6 +22,7 @@ import { createRolePool, type UserDb } from '../db/pool.ts'
 import { createExportRouter } from '../routes/export-router.ts'
 import { createDumpExporter, createDumpLinkIssuer, type PgConnection } from './export-dump.ts'
 import { createExportTokens } from './export-token.ts'
+import * as journal from './journal.ts'
 import * as tasks from './native-tasks.ts'
 import * as people from './people.ts'
 import { saveWorkDay } from './work-day.ts'
@@ -88,6 +90,12 @@ const counts = async (db: UserDb) =>
   )
 
 const savedTables = [
+  'journal_settings',
+  'journal_areas',
+  'journal_entries',
+  'journal_templates',
+  'journal_revisions',
+  'journal_attachments',
   'task_board_settings',
   'task_projects',
   'task_items',
@@ -151,6 +159,26 @@ const insertFixture = async (db: UserDb, table: string, row: Record<string, unkn
 }
 
 const seedSavedFeatures = async (db: UserDb, user: string) => {
+  const areas = await journal.listJournalAreas(user)
+  const reflection = await journal.createJournalEntry(
+    user,
+    createJournalEntryBodySchema.parse({
+      title: 'Synthetic backup reflection',
+      content: 'Original content',
+      occurred_at: '2026-11-13T10:00:00Z',
+      area_id: areas[0].id,
+    }),
+  )
+  await journal.updateJournalEntry(user, reflection.id, {
+    expected_updated_at: reflection.updated_at,
+    content: 'Revised content',
+  })
+  await journal.createJournalTemplate(user, { title: 'Weekly reflection', content: 'What surprised me?' })
+  await journal.addJournalAttachment(user, reflection.id, {
+    filename: 'synthetic-recording.webm',
+    mime_type: 'audio/webm',
+    bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0xff, 0x80]),
+  })
   const initialBoard = await tasks.getTaskBoard(user)
   await tasks.updateTaskBoard(user, {
     expected_updated_at: initialBoard.updated_at,

@@ -1,0 +1,186 @@
+{
+  "content_author": "Aurboda contributors (2026)",
+  "notice": "Content licenses are separate from the repository AGPL software license. Each entry is independently licensed as listed. Source attribution does not imply endorsement. Excluded third-party material is not licensed by this manifest.",
+  "entries": [
+    {
+      "id": "who",
+      "content_license": "CC BY-NC-SA 3.0 IGO",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/igo/",
+      "source_url": "https://www.who.int/publications/i/item/9789240003927"
+    },
+    {
+      "id": "year",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://yearcompass.com/en/"
+    },
+    {
+      "id": "heart",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/the-heart-of-resilience-companion-journal/"
+    },
+    {
+      "id": "family",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/practical-skills-for-a-more-resilient-family/"
+    },
+    {
+      "id": "center",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/practical-centering-skills-for-personal-resilience/"
+    },
+    {
+      "id": "student",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/we-are-resilient-student-workbook/"
+    },
+    {
+      "id": "empathy",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/connecting-skill-family-activity-empathizing/"
+    },
+    {
+      "id": "agreements",
+      "content_license": "CC BY-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source_url": "https://dovetaillearning.org/downloads/collaborating-skill-family-activity-honoring-agreements/"
+    },
+    {
+      "id": "ggsc",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://ggsc.berkeley.edu/who_we_serve/parents_families/parenting_professionals/family_well_being_for_the_greater_good"
+    },
+    {
+      "id": "wellness",
+      "content_license": "CC BY 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source_url": "https://library.samhsa.gov/sites/default/files/sma16-4958.pdf"
+    },
+    {
+      "id": "anger",
+      "content_license": "CC BY 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source_url": "https://www.govinfo.gov/content/pkg/GOVPUB-HE20_400-PURL-gpo129410/pdf/GOVPUB-HE20_400-PURL-gpo129410.pdf"
+    },
+    {
+      "id": "thought",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "progress",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "stress",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "plan",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "balance",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "understanding",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "kit",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "wall",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "goal",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.essentiallifeskills.org/self-help-worksheets.php"
+    },
+    {
+      "id": "character-laboratory",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0"
+    },
+    {
+      "id": "places-with-personality",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0"
+    },
+    {
+      "id": "genre-switch",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/start-writing-fiction/content-section-0"
+    },
+    {
+      "id": "everyday-treasure-hunt",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0"
+    },
+    {
+      "id": "five-senses-explorer",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0"
+    },
+    {
+      "id": "memory-postcards",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/creative-writing/writing-what-you-know/content-section-0"
+    },
+    {
+      "id": "poetry-playground",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/literature/what-poetry/content-section-0"
+    },
+    {
+      "id": "borrow-another-voice",
+      "content_license": "CC BY-NC-SA 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "source_url": "https://www.open.edu/openlearn/history-the-arts/literature/what-poetry/content-section-0"
+    },
+    {
+      "id": "pocket-nature-explorer",
+      "content_license": "CC BY-NC-SA 3.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source_url": "https://oai.serc.carleton.edu/details/files/516925.html"
+    },
+    {
+      "id": "writing-adventure",
+      "content_license": "CC BY-NC 4.0",
+      "content_license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "source_url": "https://charlieforet.com/blog/writing-exercises-workbook"
+    }
+  ]
+}

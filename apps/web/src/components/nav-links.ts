@@ -21,6 +21,7 @@ export const NAV_LINKS_PRIMARY: NavigationLink[] = [
     icon: '📚',
     description: 'Browse shared files, links and learning resources.',
   },
+  { href: '/journal', label: 'Journal', icon: '📖', description: 'Write entries and guided reflections.' },
   {
     href: '/people',
     label: 'PEOPLE',
