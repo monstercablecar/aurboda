@@ -8,6 +8,7 @@ This is Brighton Marcroft's Foghouse fork of Aurboda. Read [fork scope and chang
 - Future contributions use focused branches and draft PRs into `develop`, merge upstream updates without rebasing, and retain the original review/test gates. Do not claim the upstream review automation is installed on this fork.
 - This fork does not distribute an Android APK. Preserve the upstream-only guards on Android and Docker publication workflows until a separate release setup is explicitly requested.
 - Never publish runtime configuration, account data, private dashboard links, database backups, agent state or raw verification logs. Existing local deployment guides contain historical paths and labels; adapt them rather than running them blindly.
+- Use GitHub PRs and passing CI for ongoing Foghouse work, and record the exact deployed commit. Run the secret scan and review personal-data exposure before publishing. Follow [GitHub privacy and release boundaries](docs/github-privacy-and-releases.md); a merged PR is not a deployment.
 
 ## Local checkout: start here
 
