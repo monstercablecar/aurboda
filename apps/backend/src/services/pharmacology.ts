@@ -1,4 +1,5 @@
 import type {
+  AdministrationEvent,
   ConfirmRegimenBody,
   CreateAdministrationBody,
   CreateContextEventBody,
@@ -141,6 +142,18 @@ const dueState = (statuses: string[], dueCount: number, future: boolean): DueSta
   return 'confirmed'
 }
 
+const completionDate = (event: AdministrationEvent, item: Regimen['items'][number], timezone: string): string => {
+  const actual = new Date(event.administered_at)
+  const date = db.localDateForInstant(actual, timezone)
+  const scheduledHour = event.scheduled_at
+    ? timeZoneParts(new Date(event.scheduled_at), timezone).hour
+    : Number(item.scheduled_local_time?.split(':')[0] ?? -1)
+  if (scheduledHour >= 18 && timeZoneParts(actual, timezone).hour < 6) {
+    return new Date(dateNumber(date) - 86_400_000).toISOString().slice(0, 10)
+  }
+  return date
+}
+
 export const getToday = async (user: string, timezone: string, requestedDate?: string): Promise<TodayResponse['data']> => {
   const now = new Date()
   const currentDate = db.localDateForInstant(now, timezone)
@@ -148,8 +161,9 @@ export const getToday = async (user: string, timezone: string, requestedDate?: s
   const start = localDateTimeToInstant(localDate, '00:00:00', timezone)
   const nextDate = new Date(dateNumber(localDate) + 86_400_000).toISOString().slice(0, 10)
   const end = localDateTimeToInstant(nextDate, '00:00:00', timezone)
+  const bedtimeEnd = localDateTimeToInstant(nextDate, '06:00:00', timezone)
   const [regimens, administrations, questionnaires, assessments, treatments] = await Promise.all([
-    db.listRegimens(user, 'active'), db.listAdministrations(user, start.toISOString(), end.toISOString(), 1000),
+    db.listRegimens(user, 'active'), db.listAdministrations(user, start.toISOString(), bedtimeEnd.toISOString(), 1000),
     db.listQuestionnaires(user), db.listAssessments(user, start.toISOString(), end.toISOString(), 1000),
     db.listTreatmentSessions(user, start.toISOString(), new Date(end.getTime() + 7 * 86_400_000).toISOString(), 100),
   ])
@@ -162,9 +176,12 @@ export const getToday = async (user: string, timezone: string, requestedDate?: s
   const due_regimens = regimens.flatMap((regimen) => {
     const items = dueItems(regimen, localDate, timezone)
     if (items.length === 0) return []
-    const itemIds = new Set(items.map((item) => item.id))
-    const itemEvents = dayAdministrations
-      .filter((event) => event.regimen_item_id && itemIds.has(event.regimen_item_id) && event.status !== 'entered_in_error')
+    const itemsById = new Map(items.map((item) => [item.id, item]))
+    const itemEvents = administrations
+      .filter((event) => {
+        const item = event.regimen_item_id ? itemsById.get(event.regimen_item_id) : undefined
+        return item && !event.deleted_at && event.status !== 'entered_in_error' && completionDate(event, item, timezone) === localDate
+      })
       .sort((a, b) => new Date(b.administered_at).getTime() - new Date(a.administered_at).getTime() ||
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     const latestByItem = new Map<string, (typeof itemEvents)[number]>()
