@@ -231,7 +231,15 @@
   max-width: 100%;
 }
 .journal a {
-  color: var(--color-primary);
+  color: var(--color-accent);
+}
+.journal a:hover {
+  color: var(--color-accent-hover);
+}
+.journal input::placeholder,
+.journal textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
 }
 @media (max-width: 760px) {
   .journal {

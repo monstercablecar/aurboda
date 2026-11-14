@@ -45,3 +45,15 @@ Android source adds an embedded Journal menu entry. Existing Android WebView mic
 The page links existing People profiles and saved mental-assessment results into new unsaved reflections. Other event/entry references can be added as metadata in the editor. Links do not copy source notes or grant access to another account's data.
 
 Use synthetic data only for future verification. No live deployment or production-user inspection is part of this implementation.
+
+## Browser compatibility investigation — November 14, 2026
+
+A report described inert prompted-reflection and arcade launch buttons in Safari and Chrome on a Mac, while other computers worked. Browser and OS versions are unknown. The site address was reported as `stats.foghouse.org`; the exact scheme and console error were not captured. No production account or private journal records were inspected.
+
+Both actions called `crypto.randomUUID()` directly. Disabling that method reproduced both failures in tests; the game tabs continued to work. Journal entry/copy IDs and arcade run tokens now use the existing `utils/uuid.ts` helper, which retains secure randomness through `crypto.getRandomValues()` when the convenience method is absent. New journal draft snapshots use JSON cloning, matching the request schema and preserving nested snapshots without requiring `structuredClone`. Session guards and retry IDs are unchanged.
+
+This is a reproduced compatibility defect, not proof of the cause on the affected Mac. `randomUUID` can be unavailable on older browsers or insecure origins ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID)). On the affected device, record the browser/OS versions, exact address, and first console error after clicking. The read-only console expression `typeof crypto.randomUUID` distinguishes this hypothesis: `undefined` exposes this failure path; `function` means further investigation of the actual console/API error is needed. Compare a private window and system light/dark appearance to isolate extension and theme effects.
+
+Local candidate is based on live release `d5a27570`. All 39 focused tests passed. The full web run passed 1,969 tests, with only the DST subprocess test blocked by process permissions; its five-test file passed when rerun with subprocess access. Typecheck and production build passed; lint retained existing warnings, with zero errors. Focused Astra review (configured `gpt-6-astra`, medium; execution metadata unavailable) found no actionable issues.
+
+Isolated Chromium browser checks used synthetic API responses in light and dark mode, both with normal APIs and with `randomUUID`/`structuredClone` disabled. Prompted creation/answer saving, fresh draft saving, memory practice and reaction start passed with no page errors. Journal link contrast measured 5.78:1 in light mode and 8.63:1 in dark mode. Evidence is in the parent workspace's `verification/browser-compatibility-20261114/`. These checks do not establish Safari/macOS compatibility, real-device timing, or live persistence. The candidate has not been deployed.

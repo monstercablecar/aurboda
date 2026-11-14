@@ -7,6 +7,9 @@ links, focus and primary buttons, and orange only for the single main call to ac
 
 They are CSS custom properties on `:root` in `apps/web/src/style.css`, redefined inside its
 `@media (prefers-color-scheme: dark)` block, so a rule that uses a token needs no dark override.
+The root also declares `color-scheme: light dark` so native form controls and scrollbars
+follow the same system preference. Journal links use `--color-accent` rather than the
+filled-button background token, keeping them readable on dark pages.
 
 | token                   | light     | dark      | use                                                                    |
 | ----------------------- | --------- | --------- | ---------------------------------------------------------------------- |

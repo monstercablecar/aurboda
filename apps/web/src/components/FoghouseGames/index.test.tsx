@@ -17,6 +17,7 @@ document.body.append(container)
 afterEach(() => {
   act(() => render(null, container))
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
 })
 const button = (label: string) =>
   [...container.querySelectorAll('button')].find(
@@ -51,6 +52,19 @@ function finish(frame: HTMLIFrameElement) {
     )
   })
 }
+test.each(['memory', 'reaction'])('starts %s when randomUUID is unavailable', (game) => {
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+  act(() => render(<FoghouseGames />, container))
+  if (game === 'reaction') {
+    act(() => container.querySelectorAll<HTMLButtonElement>('.foghouse-game-tabs button')[1].click())
+  }
+  act(() => button('Start test').click())
+  const frame = container.querySelector('iframe')
+  if (!frame) throw new Error('Expected active game frame')
+  const params = new URLSearchParams(new URL(frame.src).hash.slice(1))
+  expect(params.get('game')).toBe(game)
+  expect(params.get('token')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+})
 test('opt-in only, interruption removes isolated frame and cannot save late completion', () => {
   act(() => render(<FoghouseGames />, container))
   expect(container.querySelector('iframe')).toBeNull()
@@ -61,6 +75,18 @@ test('opt-in only, interruption removes isolated frame and cannot save late comp
   finish(frame)
   expect(container.querySelector('iframe')).toBeNull()
   expect(button('Save result')).toBeUndefined()
+  expect(saveGameResult).not.toHaveBeenCalled()
+})
+test('explains a launch failure instead of leaving an unresponsive button', () => {
+  vi.stubGlobal('crypto', {
+    getRandomValues: () => {
+      throw new Error('Unavailable')
+    },
+  })
+  act(() => render(<FoghouseGames />, container))
+  act(() => button('Start test').click())
+  expect(container.querySelector('iframe')).toBeNull()
+  expect(container.querySelector('[role="status"]')?.textContent).toContain('The game could not start')
   expect(saveGameResult).not.toHaveBeenCalled()
 })
 test('visibility interruption and unmount remove frame', () => {

@@ -59,3 +59,7 @@ Implementation commit: `d243ed3`. The 21 files in that commit were copied to the
 ### Successful release
 
 After explicit user approval, the initial build completed its backup and image but refused restart because concurrently authorized Tasks Kanban work changed the source during the build. The subsequent shared release **`foghouse-kanban-20261112-01`** deployed both features successfully on November 12, 2026. Record: `releases/20261112T230347Z.foghouse-kanban-20261112-01.lIKCbN`. Its manifest preserves all reviewed arcade build files, backup/build/health events completed, and its previous-image reference matches the prior running image. Independent public checks confirmed the exact release version, game HTML/JS/CSS availability and401 for anonymous assessment requests. This supersedes the pending-deployment status above. See the [central release log](release-log.md).
+
+### Local browser compatibility follow-up — November 14, 2026
+
+Launch now uses the existing secure UUID compatibility helper and displays a message if startup cannot generate a token. Both game launch tests reproduce the former failure when `crypto.randomUUID` is unavailable and pass with the helper. Run-source/origin/token validation, cancellation and explicit-save behavior are unchanged. See the [Journal investigation](../journal.md#browser-compatibility-investigation--november-14-2026) for shared failure evidence, browser checks and diagnosis limits. This follow-up is local and has not been deployed.

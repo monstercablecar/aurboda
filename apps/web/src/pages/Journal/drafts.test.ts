@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals'
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const session = vi.hoisted(() => ({ generation: 0 }))
 vi.mock('../../state/auth', () => ({ auth: signal({ user: 'alice', token: 'token-a' }) }))
 vi.mock('../../state/sessionBoundary', () => ({ currentSessionGeneration: () => session.generation }))
@@ -17,6 +17,7 @@ const server = () => ({
   updated_at: '2026-01-01T00:00:00Z',
   deleted_at: null,
 })
+afterEach(() => vi.unstubAllGlobals())
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal(
@@ -39,6 +40,37 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
 })
 describe('journal autosave', () => {
+  it('creates an entry and saves a separate copy without randomUUID', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) })
+    const initial = blankEntry()
+    expect(initial.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    vi.mocked(journalApi.create).mockImplementation(async (body) => ({ ...server(), ...body }))
+    const draft = new JournalDraft(initial, vi.fn())
+    try {
+      await draft.saveCopy()
+      expect(journalApi.create).toHaveBeenCalledTimes(1)
+      expect(draft.value.id).not.toBe(initial.id)
+      expect(draft.status).toBe('Saved')
+    } finally {
+      draft.dispose()
+    }
+  })
+  it('saves a fresh JSON journal draft when structuredClone is unavailable', async () => {
+    vi.stubGlobal('structuredClone', undefined)
+    const initial = blankEntry()
+    vi.mocked(journalApi.create).mockImplementation(async (body) => ({ ...server(), ...body }))
+    const draft = new JournalDraft(initial, vi.fn())
+    try {
+      draft.edit({ ...initial, content: 'A new entry', tags: ['reflection'] })
+      await draft.flush()
+      expect(journalApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'A new entry', tags: ['reflection'] }),
+      )
+      expect(draft.status).toBe('Saved')
+    } finally {
+      draft.dispose()
+    }
+  })
   it('serializes saves and keeps text typed during an in-flight request', async () => {
     const initial = server()
     let resolve!: (value: typeof initial) => void
