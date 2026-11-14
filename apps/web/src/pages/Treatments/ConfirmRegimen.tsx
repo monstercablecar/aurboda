@@ -139,6 +139,12 @@ export function ConfirmRegimen({
           ? 'Enter the actual date and time for this historical entry. No time has been filled in for you.'
           : 'Check the actual date and time before saving. For an earlier dose, enter when it happened.'}
       </p>
+      {due.regimen.items.some((item) => Number(item.scheduled_local_time?.slice(0, 2) ?? -1) >= 18) && (
+        <p class="form-hint">
+          Evening doses scheduled for 6 p.m. or later count toward the previous night when taken before
+          6 a.m. Keep the actual date and time taken; tonight’s stack stays unfinished.
+        </p>
+      )}
       <fieldset class="confirm-items">
         <legend>Items to record</legend>
         {items.map((item, index) => {

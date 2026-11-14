@@ -116,3 +116,10 @@ Daily results use an exclusive next-midnight boundary. Confirmation state counts
 Insights retains usable date controls on loading/error, rejects empty/reversed date ranges without issuing a request, and offers retry. Long metric names wrap; units remain visible on mobile. All four tabs fit narrow screens.
 
 Predeployment verification against the deployment source: 1,678 web tests passed, web typecheck passed, and all four views were exercised with isolated sample data at 1440×700 and 390×844. Browser checks covered clipping, page overflow, retained tab height, and date-range recovery. No stored treatment records were modified.
+
+
+### Bedtime stacks after midnight
+
+For items scheduled at 18:00 or later, an actual dose before 06:00 in the selected Treatments timezone completes the previous night's item. Exactly 06:00 belongs to the new day. Morning, daytime, and unscheduled items retain calendar-day completion, including within mixed stacks. The saved scheduled time identifies evening items when available; older entries without it use the item's configured time.
+
+This changes completion display only: actual administration timestamps, journal history, exposure metrics, and exports retain the real time taken. The previous day's plan includes matching doses through the following morning, while the new day's evening stack remains unfinished. Existing records receive the same completion rule without rewriting them. The confirmation form explains the cutoff; no manual timestamp backdating is needed. Stacks need evening item times configured for this rule to apply.

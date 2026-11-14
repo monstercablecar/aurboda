@@ -115,3 +115,21 @@ test('does not copy one item schedule onto a stack with different scheduled time
   expect(confirm).toHaveBeenCalled()
   expect(confirm.mock.calls[0][1]).not.toHaveProperty('scheduled_at')
 })
+
+
+test('explains the bedtime cutoff and submits the actual after-midnight time unchanged', async () => {
+  vi.setSystemTime(new Date('2026-11-13T08:15:00Z'))
+  const entry = due()
+  entry.regimen.items = entry.regimen.items.slice(0, 1).map((item) => ({ ...item, scheduled_local_time: '22:00' }))
+  mount('2026-11-13', entry)
+  expect(container.textContent).toContain('previous night')
+  expect(container.textContent).toContain('6 a.m.')
+  act(() => {
+    time().value = '2026-11-13T01:15'
+    time().dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await submit()
+  expect(confirm).toHaveBeenCalledWith('stack', expect.objectContaining({
+    administered_at: new Date('2026-11-13T01:15').toISOString(),
+  }))
+})
