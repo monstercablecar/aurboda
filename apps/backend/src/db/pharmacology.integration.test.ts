@@ -92,6 +92,36 @@ describe('pharmacology database and service integration', () => {
     expect(await getTreatmentSession(user, saved.id)).toEqual(saved)
   })
 
+  test('completes only the previous bedtime while preserving the actual dose, history, and exposure day', async () => {
+    const user = getTestUser()
+    const alpha = await createSubstance(user, substance('Synthetic bedtime'))
+    const regimen = await createRegimen(user, {
+      name: 'Synthetic bedtime stack', schedule: { type: 'daily' }, status: 'active', sort_order: 0,
+      reminder: { enabled: false, minutes_before: [] },
+      items: [{ substance_id: alpha.id, dose: 10, dose_unit: 'mg', scheduled_local_time: '22:00', sort_order: 0, paused: false }],
+    })
+    const input = {
+      administered_at: '2026-11-13T08:15:00Z', scheduled_at: '2026-11-14T05:00:00Z',
+      timezone: 'America/Denver', idempotency_key: 'synthetic-bedtime',
+      items: [{ item_id: regimen.items[0].id, status: 'taken' as const, side_effects: [] }],
+    }
+    const events = await confirmRegimenItems(user, regimen.id, input)
+    expect(events![0].administered_at).toBe('2026-11-13T08:15:00.000Z')
+    expect(await confirmRegimenItems(user, regimen.id, input)).toEqual(events)
+    const prior = await getToday(user, 'America/Denver', '2026-11-12')
+    const current = await getToday(user, 'America/Denver', '2026-11-13')
+    expect(prior.due_regimens[0].state).toBe('confirmed')
+    expect(current.due_regimens[0].confirmed_item_ids).toEqual([])
+    expect(prior.recent_administrations).toEqual([])
+    expect(current.recent_administrations).toEqual(events)
+    const projections = await query(user, "SELECT time, value FROM time_series WHERE source='pharmacology' AND metric=$1 AND deleted_at IS NULL", [`pharmacology_${alpha.analysis_key}_taken`])
+    expect(projections.rows).toHaveLength(1)
+    expect(projections.rows[0].time.toISOString()).toBe('2026-11-13T07:00:00.000Z')
+    expect((await exportPharmacology(user)).administration_events[0]).toMatchObject({ administered_at: new Date(events![0].administered_at) })
+    await updateAdministration(user, events![0].id, { status: 'entered_in_error', correction_reason: 'Synthetic reversal' })
+    expect((await getToday(user, 'America/Denver', '2026-11-12')).due_regimens[0].confirmed_item_ids).toEqual([])
+  })
+
   test('preserves facts, handles partial/idempotent confirmation, corrections, projections, assessments, timeline, and export', async () => {
     const user = getTestUser()
     const [alpha, beta, gamma, delta] = await Promise.all([

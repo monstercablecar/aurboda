@@ -261,3 +261,67 @@ describe('Today projection integrity', () => {
     expect(today.upcoming_treatments.map((session) => session.id)).toEqual(['selected'])
   })
 })
+
+
+describe('bedtime completion across midnight', () => {
+  test.each([
+    ['2026-11-13T06:59:59Z', '2026-11-12', '2026-11-13'],
+    ['2026-11-13T07:00:00Z', '2026-11-12', '2026-11-13'],
+    ['2026-11-13T08:15:00Z', '2026-11-12', '2026-11-13'],
+    ['2026-11-13T12:59:59Z', '2026-11-12', '2026-11-13'],
+    ['2026-11-13T13:00:00Z', '2026-11-13', '2026-11-12'],
+    ['2026-03-08T09:30:00Z', '2026-03-07', '2026-03-08'],
+    ['2026-11-01T07:30:00Z', '2026-10-31', '2026-11-01'],
+    ['2026-11-01T08:30:00Z', '2026-10-31', '2026-11-01'],
+  ])('assigns %s to night %s only', async (at, night, otherDay) => {
+    setItems('22:00')
+    const event = { regimen_item_id: 'item-0', administered_at: at, created_at: at, status: 'taken' } as AdministrationEvent
+    vi.mocked(db.listAdministrations).mockResolvedValue([event])
+    expect((await getToday('user', 'America/Denver', night)).due_regimens[0].state).toBe('confirmed')
+    expect((await getToday('user', 'America/Denver', otherDay)).due_regimens[0].confirmed_item_ids).toEqual([])
+    expect(event.administered_at).toBe(at)
+  })
+
+  test('fetches through next-day 6 a.m. but keeps recent history on the actual day', async () => {
+    setItems('22:00')
+    const at = '2026-11-13T08:15:00Z'
+    vi.mocked(db.listAdministrations).mockResolvedValue([
+      { regimen_item_id: 'item-0', administered_at: at, created_at: at, status: 'taken' } as AdministrationEvent,
+    ])
+    const prior = await getToday('user', 'America/Denver', '2026-11-12')
+    expect(db.listAdministrations).toHaveBeenCalledWith('user', '2026-11-12T07:00:00.000Z', '2026-11-13T13:00:00.000Z', 1000)
+    expect(prior.due_regimens[0].state).toBe('confirmed')
+    expect(prior.recent_administrations).toEqual([])
+    const current = await getToday('user', 'America/Denver', '2026-11-13')
+    expect(current.recent_administrations[0].administered_at).toBe(at)
+    expect(current.due_regimens[0].confirmed_item_ids).toEqual([])
+  })
+
+  test('applies the cutoff to each item, leaving morning and unscheduled doses on their actual day', async () => {
+    setItems('18:00', '17:59', '05:00', undefined)
+    const at = '2026-11-13T12:00:00Z'
+    vi.mocked(db.listAdministrations).mockResolvedValue([0, 1, 2, 3].map((index) => ({
+      regimen_item_id: `item-${index}`, administered_at: at, created_at: at, status: 'taken',
+    } as AdministrationEvent)))
+    expect((await getToday('user', 'America/Denver', '2026-11-12')).due_regimens[0].confirmed_item_ids).toEqual(['item-0'])
+    expect((await getToday('user', 'America/Denver', '2026-11-13')).due_regimens[0].confirmed_item_ids).toEqual(['item-1', 'item-2', 'item-3'])
+  })
+
+  test.each(['2026-11-13T05:00:00Z', '2026-11-14T05:00:00Z'])('uses the saved evening schedule %s even after the item time changes', async (scheduled_at) => {
+    setItems('08:00')
+    vi.mocked(db.listAdministrations).mockResolvedValue([{
+      regimen_item_id: 'item-0', administered_at: '2026-11-13T08:00:00Z', scheduled_at, status: 'taken',
+    } as AdministrationEvent])
+    expect((await getToday('user', 'America/Denver', '2026-11-12')).due_regimens[0].state).toBe('confirmed')
+    expect((await getToday('user', 'America/Denver', '2026-11-13')).due_regimens[0].confirmed_item_ids).toEqual([])
+  })
+
+  test('uses the selected timezone rather than UTC for both boundaries', async () => {
+    setItems('22:00')
+    vi.mocked(db.listAdministrations).mockResolvedValue([{
+      regimen_item_id: 'item-0', administered_at: '2026-11-12T16:00:00Z', status: 'taken',
+    } as AdministrationEvent])
+    expect((await getToday('user', 'Asia/Tokyo', '2026-11-12')).due_regimens[0].state).toBe('confirmed')
+    expect((await getToday('user', 'Asia/Tokyo', '2026-11-13')).due_regimens[0].confirmed_item_ids).toEqual([])
+  })
+})
