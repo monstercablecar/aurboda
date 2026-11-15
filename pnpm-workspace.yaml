@@ -16,3 +16,18 @@ minimumReleaseAgeExclude:
 # URL tarballs). Direct deps in our own package.json are unaffected. Default is
 # true in pnpm 10.26+; pinned here to make the policy explicit.
 blockExoticSubdeps: true
+
+# SDK 1.32.2 pins AJV 8.17.1; keep its validator and URI parser on patched releases.
+overrides:
+  'ajv@>=8.0.0 <8.18.0': 8.20.0
+  'fast-uri@>=3.0.0 <3.1.9': 3.1.9
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
+  'satori>fflate': 0.7.5
+  # get-uri 8 still requests basic-ftp 5; use the patched compatible Client API.
+  'get-uri>basic-ftp': 6.2.4
+  # The generator's schema parser pins an affected js-yaml patch.
+  'js-yaml@>=4.0.0 <4.3.2': 4.3.2
+  # Keep Dockerode's CommonJS v4 UUID API while removing the affected v10 release.
+  'dockerode>uuid': 11.1.1
+  # archiver-utils uses glob.sync; glob 14 retains it and resolves patched minimatch.
+  'archiver-utils>glob': 14.0.4

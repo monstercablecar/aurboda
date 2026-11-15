@@ -101,8 +101,8 @@ export const fetchStatus = async () => {
       contactReddit.value = contact_reddit || null
       serverBilling.value = { billing_enabled, price_text, trial_days }
       statusFailed.value = false
-    } catch (error) {
-      console.error('Status fetch error:', error)
+    } catch {
+      console.error('Status fetch error')
       signupAllowed.value = false
       statusFailed.value = true
       statusFetchPromise = null
@@ -133,7 +133,7 @@ export const login = async (user: string, pass: string): Promise<{ success: bool
   } catch (error) {
     const axiosError = error as AxiosError<{ error?: string }>
     const message = axiosError.response?.data?.error ?? 'Login failed'
-    console.error('Login error:', error)
+    console.error('Login error')
     return { error: message, success: false }
   }
 }
@@ -164,7 +164,7 @@ export const signup = async (
   } catch (error) {
     const axiosError = error as AxiosError<{ error?: unknown }>
     const message = apiErrorText(axiosError.response?.data?.error, 'Signup failed')
-    console.error('Signup error:', error)
+    console.error('Signup error')
     return { error: message, success: false }
   }
 }
@@ -253,7 +253,7 @@ export const signupWithPasskey = async (
       axiosError.response?.data?.error,
       friendlyWebAuthnError(error, 'Passkey signup failed'),
     )
-    console.error('Passkey signup error:', error)
+    console.error('Passkey signup error')
     return { error: message, success: false }
   }
 }
@@ -300,7 +300,7 @@ export const loginWithPasskey = async (): Promise<{ success: boolean; error?: st
     const axiosError = error as AxiosError<{ error?: string }>
     const apiError = axiosError.response?.data?.error
     const message = apiError ?? friendlyWebAuthnError(error, 'Passkey login failed')
-    console.error('Passkey login error:', error)
+    console.error('Passkey login error')
     return { error: message, success: false }
   }
 }

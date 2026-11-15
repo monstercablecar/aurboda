@@ -780,7 +780,8 @@ describe('Feed federation actor + WebFinger', () => {
     const res = await supertest(buildActorApp([getTestUser()]))
       .get('/users/nosuchuser')
       .set('Accept', 'text/html')
-    expect(res.status).not.toBe(302)
+    expect(res.status).toBe(404)
+    expect(res.headers.location).toBeUndefined()
   })
 
   test('serves a 410 Tombstone after a public post is deleted (Fedify falls through)', async () => {
@@ -901,14 +902,11 @@ describe('Feed federation actor + WebFinger', () => {
       await upsertUserSettings(user, { manually_approve_followers: true })
       const base = inboxContext(fed, ORIGIN, user, aliceServes())
       const identities: unknown[] = []
-      const ctx = new Proxy(base, {
-        get: (target, prop) =>
-          prop === 'getDocumentLoader'
-            ? async (identity: unknown) => {
-                identities.push(identity)
-                return stubDocumentLoader(aliceServes())
-              }
-            : (Reflect.get(target, prop) as unknown),
+      const ctx = Object.assign(base, {
+        getDocumentLoader: async (identity: unknown) => {
+          identities.push(identity)
+          return stubDocumentLoader(aliceServes())
+        },
       })
       await handleInboundFollow(ctx, followUs(user))
 

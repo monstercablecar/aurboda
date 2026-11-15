@@ -278,6 +278,43 @@ describe('MCP Server', () => {
     })
   })
 
+  describe('Request complexity limits', () => {
+    test.each([
+      Array.from({ length: 21 }, (_, id) => ({ id, jsonrpc: '2.0', method: 'ping' })),
+      {
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'add_metrics_bulk', arguments: { data: Array(100_001).fill(0) } },
+      },
+    ])('rejects over-budget requests before dispatch and remains usable', async (body) => {
+      const app = createTestApp()
+      const token = auth.createToken('testuser')
+      const response = await mcpPost(app).set('Authorization', `Bearer ${token}`).send(body)
+      expect(response.status).toBe(413)
+      expect(response.body.error.code).toBe(-32600)
+      expect(db.insertTimeSeries).not.toHaveBeenCalled()
+      const healthy = await mcpPost(app)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ id: 2, jsonrpc: '2.0', method: 'tools/list' })
+      expect(healthy.status).toBe(200)
+    })
+
+    test('rejects deeply nested arguments before trimming', async () => {
+      let value: unknown = 'value'
+      for (let i = 0; i < 70; i++) value = { child: value }
+      const response = await mcpPost(createTestApp())
+        .set('Authorization', `Bearer ${auth.createToken('testuser')}`)
+        .send({
+          id: 1,
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: { name: 'add_metrics_bulk', arguments: value },
+        })
+      expect(response.status).toBe(413)
+    })
+  })
+
   describe('Usage recording - POST /mcp', () => {
     const recorded: UsageRow[] = []
     const recorder = createUsageRecorder({ flush: async (rows) => void recorded.push(...rows) })

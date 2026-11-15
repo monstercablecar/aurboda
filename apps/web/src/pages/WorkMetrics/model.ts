@@ -1,4 +1,3 @@
-import { calculateDerivedTotals } from '@aurboda/api-spec'
 export { calculateDerivedTotals, buildStoredTotals } from '@aurboda/api-spec'
 import type { AddCustomMetricBody, WorkMetricRow, WorkProfile } from '@aurboda/api-spec'
 
@@ -12,7 +11,6 @@ import {
   type DerivedMetricKey,
   type WorkInputKey,
   type WorkPosition,
-  WORK_METRIC_SOURCE,
 } from './settings'
 
 export { dayMarkerMetric, inputGroups, inputMetricNames, positions, WORK_METRIC_SOURCE } from './settings'

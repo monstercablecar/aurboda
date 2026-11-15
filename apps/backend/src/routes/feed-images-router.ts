@@ -38,7 +38,7 @@ const defaultDeps: FeedImagesRouterDeps = {
 }
 
 const imageUpload = multer({
-  limits: { fileSize: MAX_FEED_IMAGE_BYTES },
+  limits: { fileSize: MAX_FEED_IMAGE_BYTES, files: 1, fields: 0, parts: 1 },
   storage: multer.memoryStorage(),
 })
 
@@ -58,6 +58,9 @@ export const createFeedImagesRouter = (
       imageUpload.single('image')(req, res, (error: unknown) => {
         if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
           return res.status(413).json({ error: PICTURE_TOO_LARGE_MESSAGE, success: false })
+        }
+        if (error instanceof multer.MulterError) {
+          return res.status(400).json({ error: 'Upload limit exceeded', success: false })
         }
         next(error)
       }),

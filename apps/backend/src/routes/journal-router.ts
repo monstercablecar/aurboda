@@ -146,7 +146,16 @@ export const createJournalRouter = (auth: AnyMiddleware) => {
   )
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 1, fieldSize: 200 },
+    limits: {
+      fileSize: 20 * 1024 * 1024,
+      files: 1,
+      fields: 1,
+      parts: 2,
+      fieldSize: 200,
+      fieldNameSize: 64,
+      fieldNestingDepth: 0,
+      fieldArrayIndexLimit: 0,
+    },
   }).single('file')
   const receiveUpload: AnyMiddleware = (req, res, next) => {
     upload(req, res, (error) =>

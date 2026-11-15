@@ -137,17 +137,18 @@ describe('GET /users/:username (browser HTML fallback)', () => {
     expect(res.headers.vary).toBe('Accept')
   })
 
-  test('falls through to 404 for an unknown actor whatever the Accept', async () => {
+  test('returns 404 for an unknown actor whatever the Accept', async () => {
     for (const accept of ['image/png', 'text/*']) {
       const res = await supertest(buildApp()).get('/users/nosuchuser').set('Accept', accept)
       expect(res.status).toBe(404)
     }
   })
 
-  test('falls through for an unknown user, so a nonexistent actor never soft-404s as HTML', async () => {
+  test('returns 404 for an unknown user, so a nonexistent actor never soft-404s as HTML', async () => {
     const res = await supertest(buildApp()).get('/users/nosuchuser').set('Accept', 'text/html')
     expect(res.status).toBe(404)
-    expect(res.body).toEqual({ fellThrough: true })
+    expect(res.text).toBe('Not Found')
+    expect(res.headers.location).toBeUndefined()
   })
 
   test('falls through for a malformed username', async () => {
@@ -185,12 +186,13 @@ describe('GET /users/:username/feed/:postId (browser HTML fallback)', () => {
     expect(res.headers.vary).toBe('Accept')
   })
 
-  test('falls through for an unknown user', async () => {
+  test('returns 404 for an unknown user', async () => {
     const res = await supertest(buildApp())
       .get(`/users/nosuchuser/feed/${PUBLIC_POST}`)
       .set('Accept', BROWSER)
     expect(res.status).toBe(404)
-    expect(res.body).toEqual({ fellThrough: true })
+    expect(res.text).toBe('Not Found')
+    expect(res.headers.location).toBeUndefined()
   })
 
   test('falls through for a non-UUID post id or a malformed username', async () => {

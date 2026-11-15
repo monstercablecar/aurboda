@@ -123,7 +123,7 @@ The MCP server is available at `/mcp` and uses the Streamable HTTP transport:
 - `GET /mcp` - SSE stream for server notifications
 - `DELETE /mcp` - End session
 
-Request bodies are limited to 4 MB; a larger body gets HTTP 413 with a JSON-RPC `-32600` error.
+Request bodies are limited to 4 MB; a larger body gets HTTP 413 with a JSON-RPC `-32600` error. After authentication, requests are also limited to 20 messages per batch, 100,000 total JSON elements (including the root), and container nesting below depth 64 (root depth 0). These limits are checked before argument trimming, schema validation, or tool execution; exceeding them also returns HTTP 413 with `-32600`. A normal 10,000-point `add_metrics_bulk` request remains supported. Each request uses its own MCP server and transport, which are closed when handling finishes.
 
 ## Authentication
 

@@ -161,3 +161,17 @@ describe('DELETE /feed/images/:id', () => {
     expect((await supertest(app).delete(`/feed/images/${record.id}`)).status).toBe(401)
   })
 })
+
+test('unexpected multipart fields are rejected without processing and subsequent uploads work', async () => {
+  const { app, deps } = buildApp()
+  const bad = await post(app)
+    .field('metadata[nested][value]', 'synthetic')
+    .attach('image', Buffer.from('png-bytes'), { contentType: 'image/png', filename: 'test.png' })
+  expect(bad.status).toBe(400)
+  expect(deps.addFeedImage).not.toHaveBeenCalled()
+  const good = await post(app).attach('image', Buffer.from('png-bytes'), {
+    contentType: 'image/png',
+    filename: 'test.png',
+  })
+  expect(good.status).toBe(201)
+})

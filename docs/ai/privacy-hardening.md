@@ -37,3 +37,7 @@ The change does not make migrations globally transactional or alter the post-lis
 ## Verification
 
 Focused tests cover deep/cyclic payloads, nested credentials and health data, dynamic malicious keys, large arrays/strings, success/error audit entries, scalar error echoes, rejected concurrent migration checks, later successful retry and success caching. The initial two-file suite passed 25 tests; expanded coverage across four files passed 131 tests; backend typechecking also passed after the separate Work-draft quarantine. See the current source/tests rather than treating this record as a future checkout's verification result. No live user records, historical audits or backups were inspected or modified.
+
+## Browser authentication logging
+
+Browser status, password login/signup, and passkey login/signup failures log only a fixed operation label. Do not pass caught HTTP errors to the console: their request configuration can contain passwords, invitation tokens, authorization headers, or response tokens. Regression tests use synthetic credentials to verify that no error-object contents reach these console calls. Client-facing error handling is unchanged. This does not erase historical console captures or extend the guarantee to unrelated logging.
