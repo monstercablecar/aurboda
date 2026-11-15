@@ -12,7 +12,7 @@
  * Fedify integration, rewrites such a request's `Accept` to the actor type so
  * Fedify answers it. `createActorHtmlRouter`, mounted AFTER it, redirects a
  * request whose best match is HTML and answers `406` when an existing actor has
- * no acceptable representation. An unknown actor falls through to its 404 in
+ * no acceptable representation. An unknown actor receives an explicit 404 in
  * every case. A post id of an existing account redirects a browser whatever
  * the post's visibility or existence — the permalink page says when it isn't
  * public — so the answer leaks nothing; it never answers 406.
@@ -98,7 +98,7 @@ export const createActorHtmlRouter = (deps: ActorHtmlDeps): Router => {
     void deps
       .userExists(username)
       .then((exists) => {
-        if (!exists) return next()
+        if (!exists) return res.sendStatus(404)
         // The answer depends on the Accept header, so a shared cache must not
         // serve it to a client asking for the same URL with another one.
         res.setHeader('Vary', 'Accept')
@@ -115,7 +115,7 @@ export const createActorHtmlRouter = (deps: ActorHtmlDeps): Router => {
     void deps
       .userExists(username)
       .then((exists) => {
-        if (!exists) return next()
+        if (!exists) return res.sendStatus(404)
         res.setHeader('Vary', 'Accept')
         res.redirect(302, buildPostUrl(deps.origin, username, postId))
       })
