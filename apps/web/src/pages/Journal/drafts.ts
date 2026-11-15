@@ -5,6 +5,7 @@ import axios from 'axios'
 import { journalApi } from '../../state/api/journal'
 import { auth } from '../../state/auth'
 import { currentSessionGeneration } from '../../state/sessionBoundary'
+import { newId } from '../../utils/uuid'
 export type SaveStatus = 'Saved' | 'Saving' | 'Offline' | 'Save failed' | 'Conflict' | 'Recovered local draft'
 const failedStatus = (error: unknown): SaveStatus =>
   axios.isAxiosError(error) && error.response?.status === 409
@@ -41,7 +42,7 @@ export const entryFields = (entry: CreateJournalEntryBody): CreateJournalEntryBo
   workbook: entry.workbook,
 })
 export const blankEntry = (area_id: string | null = null): CreateJournalEntryBody => ({
-  id: crypto.randomUUID(),
+  id: newId(),
   title: '',
   content: '',
   occurred_at: new Date().toISOString(),
@@ -171,7 +172,9 @@ export class JournalDraft {
       return undefined
     }
     if (!this.server && !this.creation) {
-      this.creation = { value: structuredClone(this.value), revision: this.revision }
+      // Journal request fields are JSON; this also snapshots drafts on browsers without structuredClone.
+      const value: CreateJournalEntryBody = JSON.parse(JSON.stringify(this.value))
+      this.creation = { value, revision: this.revision }
       this.persist()
     }
     const creation = this.creation
@@ -230,7 +233,7 @@ export class JournalDraft {
     if (!this.active) return
     this.server = undefined
     this.creation = undefined
-    this.value = { ...entryFields(this.value), id: crypto.randomUUID() }
+    this.value = { ...entryFields(this.value), id: newId() }
     this.status = 'Saving'
     this.revision++
     this.persist()

@@ -5,6 +5,7 @@ import type { Game, GameResult, InputMode } from './protocol'
 
 import { pharmacologyErrorMessage } from '../../state/api/pharmacology'
 import { currentSessionGeneration } from '../../state/sessionBoundary'
+import { newId } from '../../utils/uuid'
 import { memoryInstrument, reactionInstrument } from './instruments'
 import { saveGameResult } from './save'
 import './style.css'
@@ -94,9 +95,14 @@ export function FoghouseGames() {
     setConditions('')
   }
   const start = () => {
-    reset()
-    generation.current = currentSessionGeneration()
-    setRun(crypto.randomUUID())
+    try {
+      const token = newId()
+      reset()
+      generation.current = currentSessionGeneration()
+      setRun(token)
+    } catch {
+      setMessage('The game could not start in this browser. Please update your browser and try again.')
+    }
   }
   const save = async () => {
     if (!result || lock.current || saved) return
