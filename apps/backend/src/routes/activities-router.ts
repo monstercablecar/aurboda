@@ -72,6 +72,7 @@ import {
 } from '../services/queries/index.ts'
 import { serializeActivityTrack } from '../services/tracks.ts'
 import { type AnyMiddleware, type TypedRouter, typedRouter } from '../typed-router.ts'
+import { receiveUpload } from '../upload.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
 type ActivityRow = Awaited<ReturnType<typeof getActivityById>> & {}
@@ -289,14 +290,14 @@ export const createActivitiesRouter = (
   )
 
   const upload = multer({
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
     storage: multer.memoryStorage(),
   })
 
   router.post<
     Record<string, never>,
     { success: boolean; data?: AddActivityResponse['data'] | AddActivityResponse['data'][]; error?: string }
-  >('/activities/upload-fit', authMiddleware, upload.single('fit_file'), async (req, res) => {
+  >('/activities/upload-fit', authMiddleware, receiveUpload(upload.single('fit_file')), async (req, res) => {
     const user = req.user!
     const file = req.file
 

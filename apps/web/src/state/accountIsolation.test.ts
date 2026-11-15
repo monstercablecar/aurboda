@@ -279,3 +279,27 @@ test('a passkey prompt completing after account switch cannot start verification
   expect(post).toHaveBeenCalledTimes(1)
   expect(auth.value.user).toBe('bob')
 })
+
+test.each(['login', 'signup', 'signupWithPasskey', 'loginWithPasskey'] as const)(
+  '%s never logs credential-bearing request errors',
+  async (operation) => {
+    const api = await setup()
+    const secret = 'synthetic-private-request-value'
+    const error = new api.axios.AxiosError(secret, secret, {
+      headers: { Authorization: secret },
+      data: JSON.stringify({ password: secret, invitation: secret, response_json: secret }),
+    } as InternalAxiosRequestConfig)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(api.axios, 'post').mockRejectedValue(error)
+    const result =
+      operation === 'loginWithPasskey'
+        ? await api.loginWithPasskey()
+        : operation === 'signupWithPasskey'
+          ? await api.signupWithPasskey('test-user', secret)
+          : await api[operation]('test-user', secret)
+    expect(result.success).toBe(false)
+    expect(logged).toHaveBeenCalled()
+    expect(logged.mock.calls.every((args) => args.length === 1 && typeof args[0] === 'string')).toBe(true)
+    expect(JSON.stringify(logged.mock.calls)).not.toContain(secret)
+  },
+)

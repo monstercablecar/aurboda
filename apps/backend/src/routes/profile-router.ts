@@ -7,9 +7,10 @@ import { deleteProfileAvatar, upsertProfileAvatar } from '../db/index.ts'
 import { isAllowedImageType, processAvatar } from '../services/avatar.ts'
 import { buildProfileUrl } from '../services/share-urls.ts'
 import { type TypedRouter, typedRouter } from '../typed-router.ts'
+import { receiveUpload } from '../upload.ts'
 
 const upload = multer({
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
   storage: multer.memoryStorage(),
 })
 
@@ -28,7 +29,7 @@ export const createProfileRouter = (
   router.post<Record<string, never>, { success: boolean; url?: string; error?: string }>(
     '/avatar',
     authMiddleware,
-    upload.single('avatar'),
+    receiveUpload(upload.single('avatar')),
     async (req, res) => {
       const user = req.user!
       const file = req.file

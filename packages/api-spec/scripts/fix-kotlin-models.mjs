@@ -23,14 +23,14 @@ export const fixKotlinModel = (source) => {
   const packageName = source.match(/^package ([\w.]+)$/m)?.[1] ?? 'generated'
   const modelName = source.match(/^data class (\w+)/m)?.[1]
   const enums = new Map()
-  let fixed = source.replace(primitiveEnums, (_match, indent, name, kind, body) => {
+  let fixed = source.replaceAll(primitiveEnums, (_match, indent, name, kind, body) => {
     const entries = [...body.matchAll(enumEntries)].map((entry) => ({
       name: entry[2],
       wire: primitiveValue(entry[1], kind),
     }))
     if (entries.length === 0 || !modelName) throw new Error(`Unrecognized primitive enum: ${name}`)
     enums.set(`${modelName}.${name}`, { entries, kind, name })
-    const correctedBody = body.replace(enumEntries, (entry, wire, entryName, value) =>
+    const correctedBody = body.replaceAll(enumEntries, (entry, wire, entryName, value) =>
       entry.replace(`${entryName}(${value})`, `${entryName}(${primitiveValue(wire, kind)})`),
     )
     const inner = `${indent}    `

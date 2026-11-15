@@ -164,3 +164,16 @@ test('journal mutation names and routes respect existing read-only gates', () =>
   expect(isAllowedWhenReadOnly('DELETE', `/journal/attachments/${id}`)).toBe(false)
   expect(isAllowedWhenReadOnly('GET', `/journal/attachments/${id}`)).toBe(true)
 })
+
+test.each(['prompt_id[nested]', 'prompt_id[999999999]'])(
+  'rejects structured upload field %s before storage',
+  async (field) => {
+    const response = await supertest(app)
+      .post(`/journal/entries/${id}/attachments`)
+      .set('Authorization', 'Bearer accepted')
+      .field(field, 'synthetic')
+      .attach('file', Buffer.from('audio'), { contentType: 'audio/webm', filename: 'clip.webm' })
+    expect(response.status).toBe(400)
+    expect(service.addJournalAttachment).not.toHaveBeenCalled()
+  },
+)

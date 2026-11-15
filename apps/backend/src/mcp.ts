@@ -68,6 +68,7 @@ import { registerPharmacologyTools } from './mcp/pharmacology-tools.ts'
 import { registerQueryTools } from './mcp/query-tools.ts'
 import { refuseMutatingTools } from './mcp/read-only-gate.ts'
 import { registerReportTools } from './mcp/report-tools.ts'
+import { MAX_MCP_INPUT_ELEMENTS, mcpRequestLimitError } from './mcp/request-limits.ts'
 import { registerResourcesTools } from './mcp/resources-tools.ts'
 import { registerRouteTools } from './mcp/route-tools.ts'
 import { registerScreentimeCategoryTools } from './mcp/screentime-category-tools.ts'
@@ -171,7 +172,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
       name: 'aurboda',
       version: '1.0.0',
     },
-    { instructions: SERVER_INSTRUCTIONS },
+    { instructions: SERVER_INSTRUCTIONS, maxToolInputElements: MAX_MCP_INPUT_ELEMENTS },
   )
 
   const engineDeps = deps.engineDeps ?? createDefaultEngineDeps()
@@ -283,6 +284,11 @@ export function createMcpRouter(auth: Auth, deps: McpDeps = {}): Router {
       return
     }
 
+    const limitError = mcpRequestLimitError(req.body)
+    if (limitError) {
+      res.status(413).json({ error: { code: -32600, message: limitError }, id: null, jsonrpc: '2.0' })
+      return
+    }
     const tools = mcpToolCallNames(req.body)
     for (const tool of tools) {
       recordUsage(user, isMutatingMcpTool(tool) ? 'write' : 'read', 'mcp')
@@ -296,13 +302,16 @@ export function createMcpRouter(auth: Auth, deps: McpDeps = {}): Router {
       sessionIdGenerator: undefined,
     })
 
-    await server.connect(transport)
-    await transport.handleRequest(
-      req,
-      res,
-      req.body === undefined ? undefined : trimToolCallArguments(req.body),
-    )
-    await server.close()
+    try {
+      await server.connect(transport)
+      await transport.handleRequest(
+        req,
+        res,
+        req.body === undefined ? undefined : trimToolCallArguments(req.body),
+      )
+    } finally {
+      await server.close()
+    }
   })
 
   router.use(jsonRpcBodyError)

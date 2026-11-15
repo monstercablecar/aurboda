@@ -57,10 +57,11 @@ import { SPEC_LOCKED_MESSAGE, updateHostedChallenge } from '../services/challeng
 import { buildProfileUrl, buildShareUrl } from '../services/share-urls.ts'
 import { isPublicToVisibility, visibilityToIsPublic } from '../services/visibility.ts'
 import { type TypedRouter, typedRouter } from '../typed-router.ts'
+import { receiveUpload } from '../upload.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
 const bannerUpload = multer({
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
   storage: multer.memoryStorage(),
 })
 
@@ -208,7 +209,7 @@ export const createChallengesRouter = (
   router.post<{ id: string }, ChallengeResponse>(
     '/:id/banner',
     authMiddleware,
-    bannerUpload.single('banner'),
+    receiveUpload(bannerUpload.single('banner')),
     async (req, res) => {
       const user = req.user!
       const file = req.file

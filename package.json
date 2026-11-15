@@ -17,10 +17,10 @@
     "fix": "oxfmt . && oxlint --fix"
   },
   "devDependencies": {
-    "@tsconfig/node26": "^26.0.1",
-    "@typescript/native-preview": "^7.0.0-0",
-    "oxfmt": "^0",
-    "oxlint": "^1",
+    "@tsconfig/node26": "^26.0.2",
+    "@typescript/native-preview": "7.0.0-dev.20260317.1",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
     "typescript": "^6.0.3"
   },
   "engines": {

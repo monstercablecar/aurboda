@@ -143,7 +143,16 @@ export const createResourcesRouter = (
         }
       },
     }),
-    limits: { fileSize: storage.resourcesMaxUploadBytes(), files: 1, fields: 3, parts: 5, fieldSize: 12000 },
+    limits: {
+      fileSize: storage.resourcesMaxUploadBytes(),
+      files: 1,
+      fields: 3,
+      parts: 4,
+      fieldSize: 12000,
+      fieldNameSize: 64,
+      fieldNestingDepth: 0,
+      fieldArrayIndexLimit: 0,
+    },
   }).single('file')
   const receive: AnyMiddleware = (req, res, next) => {
     const deadline = setTimeout(() => req.destroy(), 60 * 60 * 1000)
