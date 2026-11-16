@@ -13,6 +13,7 @@ export interface NavigationLink {
 export const NAV_LINKS_PRIMARY: NavigationLink[] = [
   { href: '/', label: 'Home', icon: '🏠', description: 'Your overview, dashboards and setup guide.' },
   { href: '/goals', label: 'Tasks', icon: '🎯', description: 'Organize tasks, goals and Kanban boards.' },
+  { href: '/sleep', label: 'Sleep', icon: '🌙', description: 'Review sleep, track naps and add a check-in.' },
   { href: '/cpap', label: 'CPAP', icon: '😴', description: 'Import and review CPAP therapy history.' },
   { href: '/work', label: 'Work', icon: '💼', description: 'Track workdays, activity and performance.' },
   {

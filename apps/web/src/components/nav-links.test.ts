@@ -45,7 +45,7 @@ describe('pageTitleForPath', () => {
   })
 
   test('falls back to Aurboda for unknown routes', () => {
-    expect(pageTitleForPath('/sleep')).toBe('Aurboda')
+    expect(pageTitleForPath('/sleep')).toBe('Sleep')
     expect(pageTitleForPath('/mealsandmore')).toBe('Aurboda')
   })
 })

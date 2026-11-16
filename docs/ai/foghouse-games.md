@@ -1,3 +1,11 @@
+## Automatic result saving — November 16, 2026
+
+Completed memory and reaction runs save automatically, including zero-span memory runs and reaction runs without valid responses. The play window has no × discard button. Switching games and playing again are disabled until saving succeeds; failed saves retain the result and expose Retry save. Optional conditions are entered before starting. Incomplete interrupted runs remain canceled rather than recorded as completed tests.
+
+After saving, **View or delete result in Mental Assessments** leads to the existing per-test **Saved history → Delete result** action, with confirmation and error feedback. Deletion removes the result from active history through the existing assessment API. No scoring protocol or storage schema changes.
+
+The historical explicit-save behavior and verification below describe the original release.
+
 # Foghouse Home games
 
 Implemented in the authenticated Home `Dashboard`, separate from its configurable/shared widget data. Explicit The accessible **Tap to play** surface mounts a local iframe; nothing runs automatically and nothing saves automatically. **Save result** records a completed run in Mental Assessments. There is no backend/schema/API change. Android's embedded web Home receives the same UI.

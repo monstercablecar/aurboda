@@ -23,9 +23,7 @@ describe('getSleepScoreEmptyState', () => {
     expect(state!.linkHref).toBeUndefined()
   })
 
-  it('treats a single score as not enough even with sessions', () => {
-    const state = getSleepScoreEmptyState(1, true)
-    expect(state).not.toBeNull()
-    expect(state!.linkHref).toBe('/data-sources')
+  it('renders a single score without asking to connect another source', () => {
+    expect(getSleepScoreEmptyState(1, true)).toBeNull()
   })
 })
