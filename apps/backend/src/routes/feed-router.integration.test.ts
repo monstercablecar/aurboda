@@ -953,14 +953,17 @@ describe('Feed post reactions (integration)', () => {
 
     const res = await app.request.get(`/feed/${created.id}/reactions`)
     expect(res.status).toBe(200)
-    expect(res.body.reactions[0]).toMatchObject({
+    expect(res.body.reactions).toHaveLength(2)
+    const quote = res.body.reactions.find((reaction: { kind: string }) => reaction.kind === 'quote')
+    const like = res.body.reactions.find((reaction: { kind: string }) => reaction.kind === 'like')
+    expect(quote).toMatchObject({
       actor_uri: 'https://mastodon.example/users/alice',
       handle: '@alice@mastodon.example',
       kind: 'quote',
       url: 'https://mastodon.example/users/alice/statuses/7',
     })
-    expect(res.body.reactions[1]).toMatchObject({ kind: 'like' })
-    expect(res.body.reactions[1]).not.toHaveProperty('url')
+    expect(like).toMatchObject({ kind: 'like' })
+    expect(like).not.toHaveProperty('url')
   })
 
   test('GET /feed/:postId/reactions 404s an unknown or non-UUID post id', async () => {

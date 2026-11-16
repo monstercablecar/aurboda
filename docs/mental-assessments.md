@@ -45,3 +45,7 @@ Scoring audit sources: Big Five https://bigfive-test.com/about and https://bigfi
 Benchmark pages checked: https://humanbenchmark.com/tests/reactiontime , https://humanbenchmark.com/tests/memory , https://humanbenchmark.com/tests/number-memory , https://humanbenchmark.com/tests/sequence , and https://humanbenchmark.com/tests/verbal-memory . TestMyBrain at https://www.testmybrain.org/ has rotating studies, so the journal requires the exact study/protocol and report instead of combining their scores into one numeric series.
 
 Choose the Big Five scoring format inside its card, above the latest result and “Record result” form, to switch between the saved results and entry fields for each format. “Out of 120” and “Out of 300” update the displayed limits without closing the form. Switching formats clears unsaved answers and messages; values are never converted. The Mensa result-format choice is likewise above its saved results and entry form.
+
+### Home game results
+
+Completed memory and reaction runs save automatically, including low scores and runs with no valid reaction responses. To remove a result, find its test here, expand **Saved history**, select **Delete result**, and confirm. A failed deletion keeps the result available for retry.

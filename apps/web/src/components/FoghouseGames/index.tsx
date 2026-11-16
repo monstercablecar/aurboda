@@ -57,7 +57,7 @@ export function FoghouseGames() {
         settled = true
         setResult(event.data.result)
         setRun(null)
-        setMessage('Complete. Review your result, then choose Save result.')
+        void save(event.data.result)
       } else if (event.data.type === 'error') {
         settled = true
         setRun(null)
@@ -92,7 +92,6 @@ export function FoghouseGames() {
     setResult(null)
     setSaved(false)
     setMessage('')
-    setConditions('')
   }
   const start = () => {
     try {
@@ -104,13 +103,13 @@ export function FoghouseGames() {
       setMessage('The game could not start in this browser. Please update your browser and try again.')
     }
   }
-  const save = async () => {
-    if (!result || lock.current || saved) return
+  const save = async (completed = result) => {
+    if (!completed || lock.current || saved) return
     lock.current = true
     setBusy(true)
     setMessage('Saving…')
     try {
-      await saveGameResult(result, conditions, generation.current, () => active.current)
+      await saveGameResult(completed, conditions, generation.current, () => active.current)
       if (!active.current) return
       setSaved(true)
       setMessage('Result saved. View it in Mental Assessments.')
@@ -137,17 +136,6 @@ export function FoghouseGames() {
       </header>
       {run ? (
         <div class="foghouse-play-window">
-          <button
-            class="foghouse-exit"
-            aria-label="Cancel run"
-            title="Exit game (Escape)"
-            onClick={() => {
-              setRun(null)
-              setMessage('Run canceled. No result saved.')
-            }}
-          >
-            ×
-          </button>
           <iframe
             ref={frame}
             class="foghouse-game-frame"
@@ -159,7 +147,7 @@ export function FoghouseGames() {
         <>
           <div class="foghouse-game-tabs" aria-label="Choose a game">
             <button
-              disabled={busy}
+              disabled={busy || (!!result && !saved)}
               aria-pressed={game === 'memory'}
               onClick={() => {
                 reset()
@@ -169,7 +157,7 @@ export function FoghouseGames() {
               <span aria-hidden="true">▦</span> Memory
             </button>
             <button
-              disabled={busy}
+              disabled={busy || (!!result && !saved)}
               aria-pressed={game === 'reaction'}
               onClick={() => {
                 reset()
@@ -209,6 +197,15 @@ export function FoghouseGames() {
                       : 'Tap the ring · 3 min'}
                 </span>
               </button>
+              <label>
+                Conditions note (optional)
+                <textarea
+                  maxLength={2000}
+                  value={conditions}
+                  onInput={(event) => setConditions(event.currentTarget.value)}
+                />
+              </label>
+              <p>Results save automatically. Delete any unwanted result in Mental Assessments.</p>
               <details class="foghouse-instructions">
                 <summary>How to play</summary>
                 <p>
@@ -239,8 +236,8 @@ export function FoghouseGames() {
                 </p>
                 <p>{instrument.description}</p>
                 <p>
-                  Escape or × exits. Leaving the game or switching windows cancels the whole run. Nothing
-                  saves automatically.
+                  Completed runs save automatically, including low scores and missed responses. You can delete
+                  saved results in Mental Assessments. Leaving before completion cancels the unfinished run.
                 </p>
               </details>
             </>
@@ -277,28 +274,19 @@ export function FoghouseGames() {
           )}
           <div class="foghouse-result-actions">
             <button class="foghouse-save" disabled={busy || saved} onClick={() => void save()}>
-              {saved ? 'Saved ✓' : busy ? 'Saving…' : 'Save result'}
+              {saved ? 'Saved ✓' : busy ? 'Saving…' : 'Retry save'}
             </button>
-            <button disabled={busy} onClick={start}>
+            <button disabled={!saved || busy} onClick={start}>
               Play again ↗
             </button>
           </div>
+          {saved && <a href="/assessments">View or delete result in Mental Assessments ↗</a>}
           <details class="foghouse-result-details">
-            <summary>Details & conditions</summary>
+            <summary>Result details</summary>
             <p>
               {instrument.title} · {new Date(result.completed_at).toLocaleString()} · {result.input_mode}
             </p>
-            <label>
-              Conditions note (optional)
-              <textarea
-                maxLength={2000}
-                disabled={busy || saved}
-                value={conditions}
-                onInput={(event) => setConditions(event.currentTarget.value)}
-              />
-            </label>
             <pre>{JSON.stringify(result, null, 2)}</pre>
-            <a href="/assessments">View history ↗</a>
           </details>
         </div>
       )}

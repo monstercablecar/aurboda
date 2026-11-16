@@ -2,11 +2,21 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
 const messages = vi.fn()
-async function launch(embedded = true) {
+async function launch(embedded = true, game = 'reaction') {
   vi.resetModules()
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] })
+  vi.useFakeTimers({
+    toFake: [
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'performance',
+      'requestAnimationFrame',
+      'cancelAnimationFrame',
+    ],
+  })
   document.body.innerHTML = '<div id="clock"></div><main id="experiment"></main>'
-  window.history.replaceState({}, '', '#game=reaction&mode=keyboard&token=test-run')
+  window.history.replaceState({}, '', `#game=${game}&mode=keyboard&token=test-run`)
   vi.spyOn(window, 'focus').mockImplementation(() => {})
   if (embedded) vi.stubGlobal('parent', { postMessage: messages })
   await import('./frame')
@@ -53,4 +63,38 @@ test('actual timeline interruption discards the entire run', async () => {
   window.dispatchEvent(new Event('blur'))
   await vi.advanceTimersByTimeAsync(180_000)
   expect(messages.mock.calls.map(([message]) => message.type)).toEqual(['canceled'])
+})
+
+test('actual memory timeline completes after two failed scored rounds with zero span', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  // jsdom has no Web Animations implementation.
+  const animate = vi.fn(() => ({ finished: Promise.resolve() }))
+  Object.defineProperty(Element.prototype, 'animate', { configurable: true, value: animate })
+  try {
+    await launch(true, 'memory')
+    for (let round = 0; round < 3; round++) {
+      await vi.advanceTimersByTimeAsync(4000)
+      const blocks = [...document.querySelectorAll<HTMLElement>('.jspsych-corsi-block')]
+      expect(blocks.length).toBe(9)
+      expect(document.body.textContent).toContain('YOUR TURN')
+      // The fixed sequence starts with block zero; block one fails immediately.
+      blocks.find((block) => block.dataset.id === '1')!.click()
+      await vi.advanceTimersByTimeAsync(1300)
+    }
+    const completion = messages.mock.calls.find(([message]) => message.type === 'complete')?.[0]
+    expect(completion).toBeDefined()
+    expect(completion.result.metrics).toEqual({ span: 0, correct: 0, total: 2 })
+    expect(
+      completion.result.trials.map((trial: { practice: boolean; correct: boolean }) => [
+        trial.practice,
+        trial.correct,
+      ]),
+    ).toEqual([
+      [true, false],
+      [false, false],
+      [false, false],
+    ])
+  } finally {
+    Reflect.deleteProperty(Element.prototype, 'animate')
+  }
 })

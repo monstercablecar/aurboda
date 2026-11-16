@@ -30,7 +30,7 @@ function start() {
   if (!frame) throw new Error('Expected active game frame')
   return frame
 }
-function finish(frame: HTMLIFrameElement) {
+function finish(frame: HTMLIFrameElement, game = 'memory') {
   const token = new URLSearchParams(new URL(frame.src).hash.slice(1)).get('token')
   act(() => {
     window.dispatchEvent(
@@ -41,10 +41,11 @@ function finish(frame: HTMLIFrameElement) {
           type: 'complete',
           token,
           result: {
-            game: 'memory',
+            game,
             completed_at: '2026-11-12T10:00:00Z',
             input_mode: 'pointer',
-            metrics: { span: 2, correct: 1, total: 4 },
+            metrics:
+              game === 'memory' ? { span: 0, correct: 0, total: 2 } : { valid: 0, omissions: 30, total: 30 },
             trials: [],
           },
         },
@@ -71,10 +72,13 @@ test('opt-in only, interruption removes isolated frame and cannot save late comp
   act(() => button('Start test').click())
   const frame = container.querySelector('iframe')
   if (!frame) throw new Error('Expected active game frame')
-  act(() => button('Cancel run').click())
+  expect(button('Cancel run')).toBeUndefined()
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+  })
   finish(frame)
   expect(container.querySelector('iframe')).toBeNull()
-  expect(button('Save result')).toBeUndefined()
+  expect(button('Retry save')).toBeUndefined()
   expect(saveGameResult).not.toHaveBeenCalled()
 })
 test('explains a launch failure instead of leaving an unresponsive button', () => {
@@ -101,10 +105,8 @@ test('visibility interruption and unmount remove frame', () => {
   act(() => render(null, container))
   expect(container.querySelector('iframe')).toBeNull()
 })
-test('only explicit save writes, duplicate clicks lock, retry retains result and success disables save', async () => {
+test('failed memory result automatically saves, locks other runs and retains retry on failure', async () => {
   const frame = start()
-  finish(frame)
-  expect(saveGameResult).not.toHaveBeenCalled()
   let reject!: (reason: Error) => void
   vi.mocked(saveGameResult).mockImplementationOnce(
     () =>
@@ -112,20 +114,24 @@ test('only explicit save writes, duplicate clicks lock, retry retains result and
         reject = fail
       }),
   )
-  act(() => {
-    button('Save result').click()
-    button('Save result')?.click()
-  })
+  finish(frame)
+  finish(frame)
+  expect(button('Play again ↗').disabled).toBe(true)
+  expect(container.querySelector('a[href="/assessments"]')).toBeNull()
+  expect(container.querySelector<HTMLButtonElement>('[aria-pressed=false]')!.disabled).toBe(true)
   expect(saveGameResult).toHaveBeenCalledTimes(1)
   await act(async () => {
     reject(new Error('offline'))
     await Promise.resolve()
   })
-  expect(button('Save result')).toBeDefined()
+  expect(button('Retry save')).toBeDefined()
+  expect(container.querySelector('a[href="/assessments"]')).toBeNull()
   vi.mocked(saveGameResult).mockResolvedValueOnce({} as Awaited<ReturnType<typeof saveGameResult>>)
-  await act(async () => button('Save result').click())
+  await act(async () => button('Retry save').click())
   expect(saveGameResult).toHaveBeenCalledTimes(2)
   expect(button('Saved ✓').disabled).toBe(true)
+  expect(button('Play again ↗').disabled).toBe(false)
+  expect(container.querySelector('a[href="/assessments"]')).not.toBeNull()
 })
 
 vi.mock('../../state/api/pharmacology', () => ({
@@ -135,12 +141,24 @@ vi.mock('../../state/api/pharmacology', () => ({
   pharmacologyErrorMessage: (error: Error) => error.message,
 }))
 
-test('completion wins over focus changes while the iframe is being removed', () => {
+test('completion wins over focus changes while the iframe is being removed', async () => {
   const frame = start()
   act(() => {
     finish(frame)
     window.dispatchEvent(new Event('blur'))
   })
-  expect(button('Save result')).toBeDefined()
+  expect(saveGameResult).toHaveBeenCalledTimes(1)
+  await act(async () => Promise.resolve())
   expect(container.textContent).not.toContain('Run canceled')
+})
+
+test('reaction with no valid responses saves automatically and cannot be discarded', async () => {
+  act(() => render(<FoghouseGames />, container))
+  act(() => container.querySelector<HTMLButtonElement>('[aria-pressed=false]')!.click())
+  act(() => button('Start test').click())
+  const frame = container.querySelector('iframe')!
+  await act(async () => finish(frame, 'reaction'))
+  expect(saveGameResult).toHaveBeenCalledTimes(1)
+  expect(vi.mocked(saveGameResult).mock.calls[0][0].metrics.valid).toBe(0)
+  expect(button('Saved ✓')).toBeDefined()
 })
