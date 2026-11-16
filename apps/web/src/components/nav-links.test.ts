@@ -10,7 +10,7 @@ describe('pageTitleForPath', () => {
     expect(pageTitleForPath('/simple-food')).toBe('Simple food')
     expect(pageTitleForPath('/assessments?embed=1')).toBe('Mental assessments')
     expect(pageTitleForPath('/work')).toBe('Work')
-    expect(pageTitleForPath('/people?person=123&embed=1')).toBe('PEOPLE')
+    expect(pageTitleForPath('/people?person=123&embed=1')).toBe('Family')
     expect(pageTitleForPath('/treatments')).toBe('Treatments')
     expect(pageTitleForPath('/resources?embed=1')).toBe('Resources')
     expect(pageTitleForPath('/correlations')).toBe('Analyze')

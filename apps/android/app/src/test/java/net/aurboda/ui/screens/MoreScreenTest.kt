@@ -42,8 +42,8 @@ class MoreScreenTest {
     }
 
     @Test
-    fun `PEOPLE opens the embedded web route`() {
-        assertEquals(MoreDestination.Web("/people"), allItems.single { it.label == "PEOPLE" }.destination)
+    fun `Family opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/people"), allItems.single { it.label == "Family" }.destination)
         assertEquals("https://example.com/people?embed=1", embeddedPageUrl("https://example.com", "/people"))
     }
 
