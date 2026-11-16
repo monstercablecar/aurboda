@@ -244,3 +244,119 @@
     font-size: 1.5rem;
   }
 }
+
+.sleep-page {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.sleep-page .sleep-header {
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #172554, #312e81);
+  color: #e0e7ff;
+}
+.sleep-page .sleep-header h1 {
+  color: #fff;
+  font-size: 2.5rem;
+}
+.sleep-page .sleep-header p {
+  margin: 0.5rem 0 0;
+}
+.sleep-page .sleep-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+}
+.sleep-page .sleep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+.sleep-page .sleep-actions a {
+  margin-right: 1rem;
+}
+.sleep-page .sleep-tracking {
+  margin: 1.5rem 0;
+}
+.sleep-page summary {
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.sleep-page fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.sleep-page .sleep-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.sleep-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.8rem 0;
+}
+.sleep-page input,
+.sleep-page textarea,
+.sleep-page select {
+  padding: 0.65rem;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  font: inherit;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.sleep-page button {
+  padding: 0.65rem 1rem;
+  border: 1px solid #6366f1;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.sleep-page button[type='submit'] {
+  background: #4338ca;
+  color: white;
+}
+.sleep-page button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.sleep-page :focus-visible {
+  outline: 3px solid #818cf8;
+  outline-offset: 3px;
+}
+.sleep-page .sleep-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.sleep-page .sleep-history {
+  overflow-x: auto;
+}
+.sleep-page table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.sleep-page th,
+.sleep-page td {
+  padding: 0.85rem 0.5rem;
+  border-bottom: 1px solid #94a3b840;
+}
+.sleep-page [role='alert'] {
+  border-left: 3px solid #ef4444;
+  padding: 1rem;
+}
+.sleep-page [role='status'] {
+  padding: 1rem;
+}
+@media (max-width: 800px) {
+  .sleep-page .sleep-chart-grid,
+  .sleep-page .sleep-fields {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,8 +1,7 @@
-import { signal } from '@preact/signals'
 import { useQuery } from '@tanstack/react-query'
 import * as d3 from 'd3'
 import { endOfDay, formatISO, startOfDay, subDays } from 'date-fns'
-import { useEffect, useRef } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 
 import {
   fetchActivities,
@@ -13,8 +12,8 @@ import {
 } from '../../state/api'
 import { getSleepScoreEmptyState } from './emptyState'
 import './style.css'
-
-const daysBack = signal(30)
+import { isSleepSession, sleepDay, sleepMinutes } from './model'
+import { SleepHistory, SleepTracking } from './Tracking'
 
 function SleepScoreChart({
   data,
@@ -29,14 +28,14 @@ function SleepScoreChart({
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || data.length < 2) return
+    if (!svgRef.current || !containerRef.current || data.length < 1) return
 
     const containerWidth = containerRef.current.clientWidth
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
     const margin = { bottom: 40, left: 45, right: 20, top: 20 }
-    const width = containerWidth
+    const width = Math.max(320, containerWidth)
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
@@ -50,8 +49,10 @@ function SleepScoreChart({
     const y = d3.scaleLinear().domain([yMin, yMax]).range([innerHeight, 0])
 
     const g = svg
-      .attr('width', width)
-      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('width', '100%')
+      .attr('role', 'img')
+      .attr('aria-label', 'Sleep trend chart')
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -100,6 +101,8 @@ function SleepScoreChart({
       .attr('fill', '#3b82f6')
       .attr('stroke', 'white')
       .attr('stroke-width', 1)
+      .append('title')
+      .text((d) => `${d[0].toLocaleDateString()}: ${d[1]}`)
 
     const avgScore = d3.mean(data, (d) => d[1]) ?? 0
     g.append('line')
@@ -169,13 +172,13 @@ function SleepDurationChart({ sleepSessions, height = 180 }: { sleepSessions: Ac
   const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || sleepSessions.length < 2) return
+    if (!svgRef.current || !containerRef.current || sleepSessions.length < 1) return
 
     const durationData = sleepSessions
-      .filter((s) => s.end_time)
+      .filter((s) => sleepMinutes(s) !== null)
       .map((s) => ({
-        date: s.start_time,
-        hours: (s.duration ?? (s.end_time!.getTime() - s.start_time.getTime()) / 60000) / 60,
+        date: sleepDay(s),
+        hours: (sleepMinutes(s) ?? 0) / 60,
       }))
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
@@ -184,7 +187,7 @@ function SleepDurationChart({ sleepSessions, height = 180 }: { sleepSessions: Ac
     svg.selectAll('*').remove()
 
     const margin = { bottom: 40, left: 45, right: 20, top: 20 }
-    const width = containerWidth
+    const width = Math.max(320, containerWidth)
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
@@ -198,8 +201,10 @@ function SleepDurationChart({ sleepSessions, height = 180 }: { sleepSessions: Ac
     const y = d3.scaleLinear().domain([0, yMax]).range([innerHeight, 0])
 
     const g = svg
-      .attr('width', width)
-      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .attr('width', '100%')
+      .attr('role', 'img')
+      .attr('aria-label', 'Sleep trend chart')
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -222,7 +227,9 @@ function SleepDurationChart({ sleepSessions, height = 180 }: { sleepSessions: Ac
       .attr('width', x.bandwidth())
       .attr('height', (d) => innerHeight - y(d.hours))
       .attr('fill', (d) => (d.hours >= 7 && d.hours <= 9 ? '#22c55e' : d.hours < 6 ? '#ef4444' : '#f59e0b'))
-      .attr('rx', 2)
+      .attr('rx', 3)
+      .append('title')
+      .text((d) => `${d.date.toLocaleDateString()}: ${d.hours.toFixed(1)} hours`)
 
     const avgDuration = d3.mean(durationData, (d) => d.hours) ?? 0
     g.append('line')
@@ -269,7 +276,7 @@ function SleepDurationChart({ sleepSessions, height = 180 }: { sleepSessions: Ac
       .text('Hours')
   }, [sleepSessions, height])
 
-  if (sleepSessions.length < 2) {
+  if (sleepSessions.length < 1) {
     return <div class="chart-placeholder">Not enough sleep data to display chart</div>
   }
 
@@ -327,12 +334,13 @@ function StatCard({
 
 // eslint-disable-next-line complexity -- TODO: refactor
 export function Sleep() {
+  const [daysBack, setDaysBack] = useState(30)
   const end = endOfDay(new Date())
-  const start = startOfDay(subDays(new Date(), daysBack.value))
+  const start = startOfDay(subDays(new Date(), daysBack - 1))
 
   const sleepScoresQuery = useQuery({
     queryFn: () => fetchSleepScores(start, end),
-    queryKey: ['sleepScores', formatISO(start, { representation: 'date' }), daysBack.value],
+    queryKey: ['sleepScores', formatISO(start, { representation: 'date' }), daysBack],
     staleTime: 5 * 60 * 1000,
   })
 
@@ -348,18 +356,23 @@ export function Sleep() {
         'sleep_rem_score',
         'sleep_total_score',
       ]),
-    queryKey: ['sleepPeriodSummary', formatISO(start, { representation: 'date' }), daysBack.value],
+    queryKey: ['sleepPeriodSummary', formatISO(start, { representation: 'date' }), daysBack],
     staleTime: 5 * 60 * 1000,
   })
 
   const activitiesQuery = useQuery({
-    queryFn: () => fetchActivities(start, end, ['sleep']),
-    queryKey: ['sleepActivities', formatISO(start, { representation: 'date' }), daysBack.value],
+    queryFn: () => fetchActivities(subDays(start, 1), end, ['sleep', 'nap']),
+    queryKey: ['sleepActivities', formatISO(start, { representation: 'date' }), daysBack],
     staleTime: 5 * 60 * 1000,
   })
 
   const sleepScores = sleepScoresQuery.data ?? []
-  const sleepSessions = activitiesQuery.data ?? []
+  const sessions = (activitiesQuery.data ?? [])
+    .filter(isSleepSession)
+    .filter((s) => sleepDay(s) >= start && sleepDay(s) <= end)
+    .sort((a, b) => sleepDay(b).getTime() - sleepDay(a).getTime())
+  const sleepSessions = sessions.filter((s) => s.activity_type === 'sleep')
+  const naps = sessions.filter((s) => s.activity_type === 'nap')
   const metricsArray = periodSummaryQuery.data?.metrics ?? []
   const metrics: Record<string, { avg: number | null; change_from_previous_period_percent: number | null }> =
     {}
@@ -373,25 +386,27 @@ export function Sleep() {
   const isLoading = sleepScoresQuery.isLoading || periodSummaryQuery.isLoading || activitiesQuery.isLoading
 
   // Calculate average sleep duration (using total_sleep from API when available)
-  const sessionsWithDuration = sleepSessions.filter((s) => s.end_time)
+  const sessionsWithDuration = sleepSessions.filter((s) => sleepMinutes(s) !== null)
   const avgSleepDuration =
     sessionsWithDuration.length > 0
-      ? sessionsWithDuration.reduce(
-          (sum, s) => sum + (s.duration ?? (s.end_time!.getTime() - s.start_time.getTime()) / 60000) / 60,
-          0,
-        ) / sessionsWithDuration.length
+      ? sessionsWithDuration.reduce((sum, s) => sum + (sleepMinutes(s) ?? 0) / 60, 0) /
+        sessionsWithDuration.length
       : null
 
   const handleDaysChange = (e: Event) => {
     const value = parseInt((e.target as HTMLSelectElement).value, 10)
-    daysBack.value = value
+    setDaysBack(value)
   }
 
   return (
     <div class="sleep-page">
       <div class="sleep-header">
-        <h1>Sleep Quality</h1>
-        <select value={daysBack.value} onChange={handleDaysChange} class="days-select">
+        <div>
+          <p class="sleep-eyebrow">REST & RECOVERY</p>
+          <h1>Sleep</h1>
+          <p>Your nights, daytime naps and how you feel.</p>
+        </div>
+        <select value={daysBack} onChange={handleDaysChange} class="days-select" aria-label="Sleep period">
           <option value={7}>Last 7 days</option>
           <option value={14}>Last 14 days</option>
           <option value={30}>Last 30 days</option>
@@ -400,7 +415,36 @@ export function Sleep() {
         </select>
       </div>
 
-      {isLoading && <div class="loading">Loading sleep data...</div>}
+      <nav class="sleep-actions" aria-label="Related sleep tools">
+        <a href="/cpap">CPAP therapy →</a>
+        <a href="/timeline">Timeline →</a>
+        <a href="/data-sources">Sleep sources →</a>
+      </nav>
+      {isLoading && (
+        <div class="loading" role="status">
+          Loading sleep data...
+        </div>
+      )}
+      {(activitiesQuery.isError || sleepScoresQuery.isError || periodSummaryQuery.isError) && (
+        <p role="alert">
+          Some sleep data could not be loaded.{' '}
+          <button
+            onClick={() => {
+              void activitiesQuery.refetch()
+              void sleepScoresQuery.refetch()
+              void periodSummaryQuery.refetch()
+            }}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      <SleepTracking
+        sessions={sessions}
+        onSaved={() => {
+          void activitiesQuery.refetch()
+        }}
+      />
 
       <section class="stats-section">
         <h2>Overview</h2>
@@ -411,7 +455,12 @@ export function Sleep() {
             trend={metrics.sleep_score?.change_from_previous_period_percent}
             description="Overall sleep quality"
           />
-          <StatCard label="Duration" value={avgSleepDuration} unit="h" description="Average per night" />
+          <StatCard
+            label="Duration"
+            value={avgSleepDuration}
+            unit="h"
+            description="Average per sleep session"
+          />
           <StatCard
             label="Efficiency"
             value={metrics.sleep_efficiency?.avg ?? null}
@@ -429,26 +478,40 @@ export function Sleep() {
         </div>
       </section>
 
-      <section class="chart-section">
-        <h2>Sleep Score Trend</h2>
-        <SleepScoreChart data={sleepScores} hasSleepSessions={sleepSessions.length > 0} />
-      </section>
+      <div class="sleep-chart-grid">
+        <section class="chart-section">
+          <h2>Sleep Score Trend</h2>
+          <SleepScoreChart data={sleepScores} hasSleepSessions={sleepSessions.length > 0} />
+        </section>
 
+        <section class="chart-section">
+          <h2>Sleep Duration</h2>
+          <p>
+            Shown on wake-up day. Uses time asleep when available; otherwise session length. Naps are
+            separate.
+          </p>
+          <div class="duration-legend">
+            <span class="legend-item">
+              <span class="legend-color green" /> 7–9 hours
+            </span>
+            <span class="legend-item">
+              <span class="legend-color yellow" /> 6-7 or 9+ hours
+            </span>
+            <span class="legend-item">
+              <span class="legend-color red" /> &lt;6 hours
+            </span>
+          </div>
+          <SleepDurationChart sleepSessions={sleepSessions} />
+        </section>
+      </div>
       <section class="chart-section">
-        <h2>Sleep Duration</h2>
-        <div class="duration-legend">
-          <span class="legend-item">
-            <span class="legend-color green" /> 7-9 hours (optimal)
-          </span>
-          <span class="legend-item">
-            <span class="legend-color yellow" /> 6-7 or 9+ hours
-          </span>
-          <span class="legend-item">
-            <span class="legend-color red" /> &lt;6 hours
-          </span>
-        </div>
-        <SleepDurationChart sleepSessions={sleepSessions} />
+        <h2>Daytime naps</h2>
+        <p>
+          {naps.length} naps · {Math.round(naps.reduce((sum, s) => sum + (sleepMinutes(s) ?? 0), 0))} minutes
+          in this period
+        </p>
       </section>
+      <SleepHistory sessions={sessions} />
 
       <section class="stats-section">
         <h2>Sleep Components</h2>
@@ -488,7 +551,8 @@ export function Sleep() {
 
       <section class="info-section">
         <p>
-          Based on <strong>{sleepSessions.length}</strong> nights of tracked sleep data.
+          Based on <strong>{sleepSessions.length}</strong> sleep sessions and <strong>{naps.length}</strong>{' '}
+          naps. Missing data is not counted as zero sleep.
         </p>
       </section>
     </div>

@@ -11,7 +11,7 @@ The page at `/sleep` shows your sleep quality over a selectable period (7, 14, 3
 Four cards at the top show key metrics with trend arrows comparing to the previous period:
 
 - **Sleep Score** -- Overall quality (from Oura), averaged over the period.
-- **Duration** -- Average hours of actual sleep per night (excluding awake time).
+- **Duration** -- Average hours of actual sleep per completed sleep session (excluding awake time).
 - **Efficiency** -- Time asleep vs. time in bed (percentage).
 - **Latency** -- Time to fall asleep.
 
@@ -23,7 +23,7 @@ A line chart showing your nightly sleep score over time with a dashed average li
 
 A bar chart showing hours of sleep per night, color-coded:
 
-- **Green** (7-9 hours) -- optimal range, highlighted as a target zone band.
+- **Green** (7-9 hours) -- reference range, highlighted as a target zone band.
 - **Yellow** (6-7 or 9+ hours) -- caution range.
 - **Red** (under 6 hours) -- insufficient sleep.
 
@@ -88,3 +88,15 @@ The Sleep page works with any sleep source, but Oura provides the richest data (
 - The Sleep page does not track **sleep debt** or **sleep need** -- it shows quality metrics but not how much sleep you need vs. how much you're getting. (See issue #302 for planned sleep debt tracking.)
 - Sleep duration uses the calculated "asleep" time when available (excluding awake periods). When stage data is missing, it falls back to total time in bed.
 - There is no sleep **timing consistency** analysis (e.g., tracking bedtime regularity over time), though the Oura "Timing" sub-score partially covers this.
+
+## Sleep workspace and naps
+
+Sleep is available in the main web navigation and Android More menu (embedded `/sleep`). It reuses the existing activity, metric and note APIs; no new storage or migrations are required. Local/public server updates serve the same web page. Android menu changes require an updated Android app.
+
+The workspace includes responsive score/duration charts, links to CPAP, Timeline and data sources, and a session history with links to stages, source records, notes and corrections. A single score/session can be charted. Periods include today and the preceding N−1 local calendar days; sleep sessions are assigned to their wake-up day. Incomplete sessions have no calculated duration. Actual asleep time takes precedence over session length when supplied by the API. Duration averages are per completed sleep session, not a count of nights or a sleep-debt estimate. Missing days are not zero sleep.
+
+Imported and manually recorded `nap` activities appear separately from overnight sleep. Short sessions are not automatically reclassified as naps. **Log a nap** accepts local start/end times; 10/20/30/60-minute shortcuts fill a nap ending now. The form rejects invalid, reversed, future or over-24-hour intervals and checks existing sleep/nap records for overlap before saving. This client check helps avoid duplicates but cannot prevent a concurrent import or another client writing the same period. A successful manual entry is a normal nap activity and remains editable in its detail page.
+
+**Optional sleep check-in** lets you select a session, describe how rested you feel, record awakenings, and add optional context. At least one answer or note is needed to save. Answers are stored as an ordinary comment on that session, viewable/editable in its notes; they do not modify imported device scores or act as a clinical questionnaire. These comments follow existing activity-note access and export rules. No separate questionnaire database or local persistent draft is created.
+
+A failed save preserves the form and displays an error. Session changes discard the page state using the existing session boundary; awaited save continuations are fenced against account changes. Period fetch failures have an explicit retry control.

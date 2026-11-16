@@ -17,7 +17,7 @@ export const getSleepScoreEmptyState = (
   scoreCount: number,
   hasSleepSessions: boolean,
 ): SleepScoreEmptyState | null => {
-  if (scoreCount >= 2) return null
+  if (scoreCount >= 1) return null
   if (hasSleepSessions) {
     return {
       linkHref: '/data-sources',
