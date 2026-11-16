@@ -1,3 +1,5 @@
+For the consolidated reasons, deployment status, and remaining work, read [the fork change inventory](fork-change-inventory.md).
+
 For this fork, start with [what changed](foghouse-fork.md), the [file inventory](fork-file-inventory.md), and [publication checks](fork-validation.md).
 
 # Documentation directory

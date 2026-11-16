@@ -53,6 +53,11 @@ class MoreScreenTest {
     }
 
     @Test
+    fun `Sleep opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/sleep"), allItems.single { it.label == "Sleep" }.destination)
+    }
+
+    @Test
     fun `CPAP opens the embedded web route`() {
         assertEquals(MoreDestination.Web("/cpap"), allItems.single { it.label == "CPAP" }.destination)
     }
