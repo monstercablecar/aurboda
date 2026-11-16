@@ -24,7 +24,7 @@ export const NAV_LINKS_PRIMARY: NavigationLink[] = [
   { href: '/journal', label: 'Journal', icon: '📖', description: 'Write entries and guided reflections.' },
   {
     href: '/people',
-    label: 'PEOPLE',
+    label: 'Family',
     icon: '👥',
     description: 'Track relationships, important dates and care reminders.',
   },
