@@ -225,11 +225,11 @@ here in full because a cloud session has no `~/.claude` to find it in: this file
 the whole rulebook wherever the session runs.
 
 1. Sync: `git checkout develop && git fetch origin develop && git reset --hard
-origin/develop`. Reset rather than pull, so local `develop` is exactly
+   origin/develop`. Reset rather than pull, so local `develop` is exactly
    `origin/develop` whatever was left on it. Where `develop` cannot be checked out
    (another worktree holds it) or
    is not there at all (a fresh cloud clone), skip the local branch: `git fetch
-origin develop` and branch from `origin/develop`.
+   origin develop` and branch from `origin/develop`.
 2. Branch off `develop`.
 3. Plan, then implement, tests first where reasonable — see
    [Plan first, then an Opus implementer](#plan-first-then-an-opus-implementer).
@@ -283,9 +283,9 @@ origin develop` and branch from `origin/develop`.
       `merge_method: merge` and the head sha as `expectedHeadSha`. Never `--admin`.
       Avoid `--auto` — a push clears it and the PR sits `BLOCKED`.
 11. If `BEHIND`: `git fetch origin develop && git merge origin/develop
---no-edit`, re-run `pnpm check`, push, and re-confirm the gate from step 7.
+    --no-edit`, re-run `pnpm check`, push, and re-confirm the gate from step 7.
 12. After merge: `git checkout develop && git fetch origin develop && git reset
---hard origin/develop`, delete the merged branch, and pick up the next
+    --hard origin/develop`, delete the merged branch, and pick up the next
     assigned issue.
 
 The gate is not optional. "Merge on approval" removes the human confirmation
@@ -333,7 +333,7 @@ tweak — skip the round trip.
    prompt: read the plan in full first; follow its decisions and, where it is silent,
    this file; stay inside its scope; where the plan is wrong, do what is unaffected
    and say exactly what blocked the rest rather than redesigning it; run `pnpm fix &&
-pnpm check` and the affected package's tests; do not stage, commit, push or open a
+   pnpm check` and the affected package's tests; do not stage, commit, push or open a
    PR; report the steps done and not done, every file changed, the exact commands run
    with failing output verbatim, and anything decided that the plan did not specify.
    Never a fork: it inherits the session model, which defeats the point. Beyond those
@@ -373,9 +373,9 @@ this section is the difference.
   Fredrik's machine as well. When a command still prompts, add its `Bash(<cmd>:*)` rule
   there in the next PR rather than answering the prompt by hand each time.
 - **Commits are authored as `Fredrik Liljegren <fredrik@liljegren.org>`.** The clone has no
-  git identity, so set it once per session (`git config user.name "Fredrik Liljegren" && git
-  config user.email fredrik@liljegren.org`) before the first commit; never the account's
-  gmail address.
+  git identity, so set it once per session before the first commit, never to the account's
+  gmail address:
+  `git config user.name "Fredrik Liljegren" && git config user.email fredrik@liljegren.org`.
 - **The hook is checked in, so there is nothing to paste** into the environment's
   settings, whose setup script stays empty. It reads the major from `.nvmrc` and the
   pnpm version from `packageManager`, so moving either moves the hook with it. It runs
@@ -482,8 +482,8 @@ this section is the difference.
 
 For typescript:
 
-- `pnpm fix` to make code prettier and handle linting rules
-- `pnpm check` to check typescript etc
+- `pnpm fix` to apply lint fixes (`oxlint --fix`) and then format (`oxfmt`); on a clean tree it changes nothing
+- `pnpm check` to check formatting (`oxfmt --check`, also its own always-run CI job), typescript and lint
 - Nothing is merged to `develop` without passing CI checks. If you see errors after merging from `origin/develop`, dependencies need to be reinstalled and packages rebuilt — do NOT assume they are pre-existing.
 
 ## Documentation

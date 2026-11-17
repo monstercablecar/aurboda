@@ -18,7 +18,11 @@ export function AssessmentCard({
         <h3>{template.display_name}</h3>
         {template.description && <p>{template.description}</p>}
       </div>
-      <button class={completed ? 'btn-secondary compact-button' : 'btn-primary compact-button'} type="button" onClick={onOpen}>
+      <button
+        class={completed ? 'btn-secondary compact-button' : 'btn-primary compact-button'}
+        type="button"
+        onClick={onOpen}
+      >
         {completed ? 'Add another' : 'Check in'}
       </button>
     </article>

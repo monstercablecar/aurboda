@@ -1,11 +1,13 @@
 import { z } from 'zod'
 
 import { defaultFeedTags, maxPostTags } from '../hashtags.ts'
-import { baseResponseSchema, hrZoneSourceSchema, iso8601DateTimeSchema } from './common.ts'
+import { baseResponseSchema, dateOnlySchema, hrZoneSourceSchema, iso8601DateTimeSchema } from './common.ts'
 import { dashboardConfigSchema } from './dashboard.ts'
 import { hashtagInputSchema } from './feed.ts'
 import { goalsSchema } from './goals.ts'
 import { displayNameInputSchema } from './profile.ts'
+import { reportImportMappingSchema } from './reports.ts'
+import { defaultSleepNeedMinutes, sleepNeedMinutesSchema } from './sleep.ts'
 import { garminDataTypeSchema } from './sync.ts'
 import { trainingLoadSettingsSchema } from './training-load.ts'
 import { workSettingsSchema } from './work.ts'
@@ -48,10 +50,48 @@ export const gravlApiTokenSchema = z.string().min(1, 'Gravl API token cannot be 
   description: 'Gravl personal access token (gat_…), used when no OAuth grant exists',
 })
 
+export const homeAssistantUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      try {
+        const url = new URL(value)
+        return (
+          (url.protocol === 'http:' || url.protocol === 'https:') &&
+          url.username === '' &&
+          url.password === '' &&
+          url.search === '' &&
+          url.hash === ''
+        )
+      } catch {
+        return false
+      }
+    },
+    { message: 'Home Assistant URL must be an http(s) URL without credentials, query or fragment' },
+  )
+  .meta({
+    description: 'Base URL of the Home Assistant server, as reachable from the Aurboda server',
+    example: 'https://ha.example.org',
+  })
+
+export const homeAssistantTokenSchema = z.string().min(1, 'Home Assistant token cannot be empty').meta({
+  description: 'Home Assistant long-lived access token',
+})
+
+export const homeAssistantEntityIdSchema = z
+  .string()
+  .regex(/^(device_tracker|person)\.[a-z0-9_]+$/, 'Must be a device_tracker.* or person.* entity id')
+  .meta({
+    description: 'Home Assistant entity that carries the phone position (device_tracker.* or person.*)',
+    example: 'device_tracker.pixel_8',
+  })
+
 export const syncIntervalsSchema = z
   .record(
     z.string().meta({
-      description: 'Provider name (gravl, garmin, oura, rescuetime, lastfm, calendar) or "default"',
+      description:
+        'Provider name (gravl, garmin, oura, rescuetime, lastfm, calendar, home_assistant) or "default"',
     }),
     z.number().int().min(5).max(1440).meta({ description: 'Poll interval in minutes (5–1440)' }),
   )
@@ -193,6 +233,31 @@ export const hiddenPagesSchema = z
       'Menu page paths hidden by this user. Unknown paths are retained for future pages; this does not restrict access or stop tracking.',
   })
 
+export const timelineDailyMetrics = [
+  'resting_heart_rate',
+  'sleep_duration',
+  'hrv_rmssd',
+  'steps',
+  'weight',
+] as const
+
+export const timelineDailyMetricSchema = z.enum(timelineDailyMetrics).meta({
+  description:
+    'A daily metric the Timeline can draw as its own track at week and month spans; sleep_duration is the sleep that ends on each day, the rest are metric names',
+  id: 'TimelineDailyMetric',
+})
+
+export type TimelineDailyMetric = z.infer<typeof timelineDailyMetricSchema>
+
+export const defaultTimelineDailyMetrics: TimelineDailyMetric[] = ['resting_heart_rate']
+
+const timelineDailyMetricsSchema = z
+  .array(timelineDailyMetricSchema)
+  .max(timelineDailyMetrics.length)
+  .refine((names) => new Set(names).size === names.length, {
+    message: 'Timeline daily metrics must not repeat',
+  })
+
 export const updateSettingsInputSchema = z
   .object({
     birth_date: birthDateSchema.nullable().optional().meta({
@@ -266,6 +331,10 @@ export const updateSettingsInputSchema = z
     sex: biologicalSexSchema.nullable().optional().meta({
       description: 'Biological sex for calorie calculation (set to null to clear)',
     }),
+    sleep_need_minutes: sleepNeedMinutesSchema.nullable().optional().meta({
+      description:
+        'How much sleep you need per night, in minutes (180–720); sleep debt is judged against it (set to null to reset to the default, 480)',
+    }),
     tag_icons: tagIconsSchema.nullable().optional().meta({
       description: 'Tag icon mappings (deprecated, use item_icons instead; set to null to clear all)',
     }),
@@ -275,6 +344,10 @@ export const updateSettingsInputSchema = z
     timeline_show_replies: z.boolean().nullable().optional().meta({
       description:
         "When true, followed actors' replies show as their own home-timeline cards whatever they answer; when false (default), replies to posts that aren't in your timeline are hidden — replies to your own posts, posts mentioning you, and replies within a thread you already see always appear (set to null to reset to the default).",
+    }),
+    timeline_daily_metrics: timelineDailyMetricsSchema.nullable().optional().meta({
+      description:
+        'Daily metrics the Timeline draws as tracks under its Metrics lane when it shows more than three days (set to null to reset to the default, resting_heart_rate)',
     }),
     training_load: trainingLoadSettingsSchema.nullable().optional().meta({
       description: 'Training load (Banister model) parameters (set to null to reset to defaults)',
@@ -293,10 +366,59 @@ export const updateSettingsInputSchema = z
     work: workSettingsSchema.nullable().optional().meta({
       description: 'Optional Work tracker overrides (set to null to clear)',
     }),
+
+    home_assistant_url: homeAssistantUrlSchema.nullable().optional().meta({
+      description: 'Home Assistant base URL, as reachable from the Aurboda server (set to null to clear)',
+    }),
+    home_assistant_token: homeAssistantTokenSchema.nullable().optional().meta({
+      description:
+        'Home Assistant long-lived access token (set to null to clear). Write-only: never returned by the settings API. Cleared when home_assistant_url moves to another origin without a new token in the same update.',
+    }),
+    home_assistant_entity_id: homeAssistantEntityIdSchema.nullable().optional().meta({
+      description:
+        'Home Assistant device_tracker.* or person.* entity to pull locations from (set to null to clear)',
+    }),
   })
   .meta({ id: 'UpdateSettingsInput' })
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInputSchema>
+
+export const garminPersonalKeyStatusSchema = z
+  .object({
+    available: z.boolean().meta({
+      description: 'Whether this server lets users connect a Garmin Personal API key (admin setting)',
+    }),
+    connected: z.boolean().meta({ description: 'Whether a Garmin Personal API key is stored' }),
+    expires_at: dateOnlySchema.nullable().meta({
+      description: 'The expiry date entered with the key, or null when no key is stored',
+    }),
+    refused: z.boolean().meta({ description: 'Whether Garmin refused the stored key (it needs replacing)' }),
+  })
+  .meta({ description: 'Status of the Garmin Personal API key connection', id: 'GarminPersonalKeyStatus' })
+
+export type GarminPersonalKeyStatus = z.infer<typeof garminPersonalKeyStatusSchema>
+
+export const garminOAuthStatusSchema = z
+  .object({
+    available: z.boolean().meta({
+      description:
+        'Whether this server has Garmin Connect Developer Program credentials (Connect with Garmin)',
+    }),
+    connected: z.boolean().meta({ description: 'Whether Garmin is connected through Connect with Garmin' }),
+    last_received_at: iso8601DateTimeSchema.nullable().meta({
+      description: 'When Garmin last pushed data for this user, or null when nothing has arrived yet',
+    }),
+    needs_reconnect: z.boolean().meta({
+      description: 'Whether Garmin refused to renew the connection, so the user has to connect again',
+    }),
+    permissions: z.array(z.string()).meta({
+      description:
+        'What the user shares with Aurboda, as Garmin reports it (HEALTH_EXPORT, ACTIVITY_EXPORT, ...)',
+    }),
+  })
+  .meta({ description: 'Status of the Connect with Garmin (OAuth) connection', id: 'GarminOAuthStatus' })
+
+export type GarminOAuthStatus = z.infer<typeof garminOAuthStatusSchema>
 
 export const userSettingsResponseSchema = baseResponseSchema
   .extend({
@@ -321,10 +443,26 @@ export const userSettingsResponseSchema = baseResponseSchema
     food_sensitivity_map: foodSensitivityMapSchema
       .default({})
       .meta({ description: 'Food-to-sensitivity mapping' }),
-    garmin_connected: z
+    garmin_connected: z.boolean().default(false).meta({
+      description: 'Whether Garmin is connected, by login session, Personal API key or Connect with Garmin',
+    }),
+    garmin_session_connected: z
       .boolean()
       .default(false)
-      .meta({ description: 'Whether Garmin Connect is connected via stored session' }),
+      .meta({ description: 'Whether Garmin is connected by a Garmin Connect login session' }),
+    garmin_personal_key: garminPersonalKeyStatusSchema.default({
+      available: true,
+      connected: false,
+      expires_at: null,
+      refused: false,
+    }),
+    garmin_oauth: garminOAuthStatusSchema.default({
+      available: false,
+      connected: false,
+      last_received_at: null,
+      needs_reconnect: false,
+      permissions: [],
+    }),
     garmin_disabled_data_types: z
       .array(garminDataTypeSchema)
       .default([])
@@ -373,6 +511,20 @@ export const userSettingsResponseSchema = baseResponseSchema
     gravl_connection: z.enum(['oauth', 'token']).nullable().default(null).meta({
       description: 'How Gravl is connected: an OAuth grant, a personal token, or null when not connected',
     }),
+    home_assistant_url: z.string().nullable().default(null).meta({ description: 'Home Assistant base URL' }),
+    home_assistant_entity_id: z
+      .string()
+      .nullable()
+      .default(null)
+      .meta({ description: 'Home Assistant entity locations are pulled from' }),
+    home_assistant_token_set: z.boolean().default(false).meta({
+      description:
+        'Whether a Home Assistant access token is stored (the settings API never returns the token itself)',
+    }),
+    report_import_mapping: reportImportMappingSchema.nullable().default(null).meta({
+      description:
+        'The column mapping of the last spreadsheet import of lab reports, to start the next one from (null before the first)',
+    }),
     rescue_time_key: z.string().nullable().default(null).meta({ description: 'RescueTime API key' }),
     strava_connected: z
       .boolean()
@@ -395,6 +547,9 @@ export const userSettingsResponseSchema = baseResponseSchema
       .nullable()
       .default(null)
       .meta({ description: 'Biological sex for calorie calculation' }),
+    sleep_need_minutes: sleepNeedMinutesSchema.default(defaultSleepNeedMinutes).meta({
+      description: 'How much sleep you need per night, in minutes; sleep debt is judged against it',
+    }),
     tag_icons: tagIconsSchema.default({}).meta({
       description: 'Tag icon mappings (deprecated, use item_icons)',
     }),
@@ -404,6 +559,9 @@ export const userSettingsResponseSchema = baseResponseSchema
     timeline_show_replies: z.boolean().default(false).meta({
       description:
         "Whether followed actors' replies to posts that aren't in your timeline show as their own home-timeline cards (replies to you, mentions of you, and replies within a thread you already see always show)",
+    }),
+    timeline_daily_metrics: timelineDailyMetricsSchema.default([...defaultTimelineDailyMetrics]).meta({
+      description: 'Daily metrics the Timeline draws as tracks when it shows more than three days',
     }),
     training_load: trainingLoadSettingsSchema
       .nullable()

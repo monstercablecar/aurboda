@@ -5,22 +5,27 @@
  *
  * Tool registrations are split into focused modules under mcp/.
  */
+import type { HomeAssistantSyncResult } from '@aurboda/api-spec'
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { type ErrorRequestHandler, json, type Request, type Response, Router } from 'express'
 
 import type { Auth } from './auth.ts'
-import type { GarminClient } from './integrations/garmin/client.ts'
+import type { GarminClient } from './integrations/garmin/source.ts'
 import type { DetailSyncedCallback, TrackWrittenCallback } from './integrations/garmin/sync.ts'
 import type { GravlClient } from './integrations/gravl/client.ts'
+import type { HomeAssistantClient } from './integrations/home-assistant/client.ts'
 import type { ouraClient } from './integrations/oura/client.ts'
 import type { AutosharePreviewDeps } from './mcp/autoshare-rule-tools.ts'
 import type { FeedDeliver } from './routes/feed-router.ts'
 import type { AccountDeleter } from './services/account-deletion.ts'
+import type { AccountEmailDeps } from './services/account-email.ts'
 import type { AccountPlans } from './services/account-plan.ts'
 import type { PostUpdateResender } from './services/activitypub/post-update-resend.ts'
 import type { AdminUsers } from './services/admin-users.ts'
 import type { ArticlePreviewer } from './services/article-preview.ts'
+import type { SkipAutoshare } from './services/autoshare-skip.ts'
 import type { CentralDb } from './services/central-db.ts'
 import type { DiscoverChallenges } from './services/challenge-discovery.ts'
 import type { DeductionEngineDeps } from './services/deduction-engine.ts'
@@ -30,6 +35,9 @@ import type { ReactionActions } from './services/feed-reactions.ts'
 import type { FollowerActions } from './services/followers.ts'
 import type { FollowActions } from './services/following.ts'
 import type { NamedLocationsChanged } from './services/locations.ts'
+import type { RunNotificationAction } from './services/notification-actions.ts'
+import type { OidcProviderAdmin } from './services/oidc-providers.ts'
+import type { PublicTagModeration } from './services/public-tag-moderation.ts'
 import type { PublicTagActions } from './services/public-tags.ts'
 import type { SyncProvider } from './services/queries/index.ts'
 import type { RelayActions } from './services/relays.ts'
@@ -42,7 +50,12 @@ import { registerAccountEmailTools } from './mcp/account-email-tools.ts'
 import { registerAccountPlanTools } from './mcp/account-plan-tools.ts'
 import { registerActivityTools } from './mcp/activity-tools.ts'
 import { registerActivityTypeTools } from './mcp/activity-type-tools.ts'
-import { registerAdminFederationTools } from './mcp/admin-federation-tools.ts'
+import {
+  registerAdminFederationTools,
+  registerFederationDeliveryTools,
+} from './mcp/admin-federation-tools.ts'
+import { registerAdminOidcTools } from './mcp/admin-oidc-tools.ts'
+import { registerAdminPublicTagTools } from './mcp/admin-public-tag-tools.ts'
 import { registerAdminRelayTools } from './mcp/admin-relay-tools.ts'
 import { registerAdminUserTools } from './mcp/admin-user-tools.ts'
 import { registerAutoshareRuleTools } from './mcp/autoshare-rule-tools.ts'
@@ -51,6 +64,7 @@ import { registerChartTools } from './mcp/chart-tools.ts'
 import { registerCorrelationTools } from './mcp/correlation-tools.ts'
 import { registerDebugTools } from './mcp/debug-tools.ts'
 import { registerDeductionRuleTools } from './mcp/deduction-rule-tools.ts'
+import { registerExerciseCatalogTools } from './mcp/exercise-catalog-tools.ts'
 import { registerExportTools } from './mcp/export-tools.ts'
 import { registerFeedImageTools } from './mcp/feed-image-tools.ts'
 import { registerFeedTools } from './mcp/feed-tools.ts'
@@ -62,6 +76,7 @@ import { registerMealTools } from './mcp/meal-tools.ts'
 import { registerMetricTools } from './mcp/metric-tools.ts'
 import { registerNativeTasksTools } from './mcp/native-tasks-tools.ts'
 import { registerNoteTools } from './mcp/note-tools.ts'
+import { registerNotificationTools } from './mcp/notification-tools.ts'
 import { registerNutrientRecommendationTools } from './mcp/nutrient-recommendation-tools.ts'
 import { registerPeopleTools } from './mcp/people-tools.ts'
 import { registerPharmacologyTools } from './mcp/pharmacology-tools.ts'
@@ -72,6 +87,7 @@ import { MAX_MCP_INPUT_ELEMENTS, mcpRequestLimitError } from './mcp/request-limi
 import { registerResourcesTools } from './mcp/resources-tools.ts'
 import { registerRouteTools } from './mcp/route-tools.ts'
 import { registerScreentimeCategoryTools } from './mcp/screentime-category-tools.ts'
+import { registerSegmentTools } from './mcp/segment-tools.ts'
 import { registerSensitivityTools } from './mcp/sensitivity-tools.ts'
 import { registerSettingsTools } from './mcp/settings-tools.ts'
 import { registerSharedDashboardTools } from './mcp/shared-dashboard-tools.ts'
@@ -84,6 +100,7 @@ import { registerWorkTools } from './mcp/work-tools.ts'
 import { type AccountGate, safeRefusal } from './services/account-gate.ts'
 import { createDefaultEngineDeps } from './services/deduction-deps.ts'
 import { isOAuthAccessToken, validateAccessToken } from './services/oauth.ts'
+import { accountUploadLimiter } from './services/rate-limit.ts'
 import { isMutatingMcpTool, mcpToolCallNames } from './services/usage-channel.ts'
 import { recordUsage } from './services/usage-recorder.ts'
 import { trimStrings } from './trim-input.ts'
@@ -122,6 +139,8 @@ const SERVER_INSTRUCTIONS =
   'The tool list is abbreviated: each tool shows its first sentence and its top-level parameters only. Call describe_tools with one or more tool names for the full description and complete parameter schema (nested objects, enums, examples) before using a tool whose parameters are objects or arrays.'
 
 interface McpDeps {
+  /** The account email and its verification (`get_my_email`, `set_my_email`, `send_email_verification`). */
+  accountEmail?: AccountEmailDeps
   /** Account deletion (`delete_my_account`, `delete_user`). */
   accountDeleter?: AccountDeleter
   /** Refuses mutating tools for a read-only account (plan expired past the grace period). */
@@ -131,6 +150,10 @@ interface McpDeps {
   adminUsers?: AdminUsers
   apiBaseUrl?: string
   autosharePreviewDeps?: AutosharePreviewDeps
+  /** `skip_autoshare`, and the handler behind the pending-share notification's action. */
+  skipAutoshare?: SkipAutoshare
+  /** `run_notification_action`. */
+  runNotificationAction?: RunNotificationAction
   centralDb?: CentralDb
   deductionQueue?: DeductionQueue
   /** Open challenges from followed peers (`discover_challenges`). */
@@ -141,6 +164,8 @@ interface McpDeps {
   followerActions?: FollowerActions
   garmin?: GarminClient
   gravl?: GravlClient
+  /** Home Assistant client behind `list_home_assistant_entities`. */
+  homeAssistant?: HomeAssistantClient
   /** Deleted accounts, whose stateless tokens still decode. */
   isDeletedUser?: (user: string) => boolean
   onActivityMutated?: ActivityNotifier
@@ -155,15 +180,34 @@ interface McpDeps {
   /** The article preview (`preview_article`), shared with the REST route. */
   previewArticle?: ArticlePreviewer
   reactionActions?: ReactionActions
+  /** The tag actor host (`tag_actor_host` server setting); its accounts' boosts are hashtag feeds, not people. */
+  tagActorHost?: () => Promise<string>
   relayActions?: RelayActions
+  /** The admin's single sign-on providers (`list_oidc_providers` and the rest). */
+  oidcProviders?: OidcProviderAdmin
   publicTagActions?: PublicTagActions
+  publicTagModeration?: PublicTagModeration
   /** Admin re-send of every public post's Update (`resend_post_updates`). */
   postUpdateResender?: PostUpdateResender
   retroEnrichTimeline?: RetroEnrichTrigger
   requestDumpLink?: DumpLinkIssuer
   stravaQueue?: StravaQueue
   sync?: SyncProvider
+  /** The Home Assistant location pull, bound to its deps (`sync_home_assistant`). */
+  syncHomeAssistant?: (
+    user: string,
+    options?: { fullResync?: boolean; startDate?: Date },
+  ) => Promise<HomeAssistantSyncResult>
   webHost?: string
+}
+
+/** The admin tools whose service this server was given. */
+const registerOptionalAdminTools = (server: McpServer, user: string, centralDb: CentralDb, deps: McpDeps) => {
+  if (deps.adminUsers) registerAdminUserTools(server, user, centralDb, deps.adminUsers)
+  if (deps.relayActions) registerAdminRelayTools(server, user, centralDb, deps.relayActions)
+  if (deps.oidcProviders) registerAdminOidcTools(server, user, centralDb, deps.oidcProviders)
+  if (deps.publicTagModeration) registerAdminPublicTagTools(server, user, centralDb, deps.publicTagModeration)
+  if (deps.postUpdateResender) registerAdminFederationTools(server, user, centralDb, deps.postUpdateResender)
 }
 
 const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
@@ -182,7 +226,9 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerActivityTools(server, user, deps.onActivityMutated)
   registerActivityTypeTools(server, user)
   registerDeductionRuleTools(server, user, engineDeps, deps.deductionQueue)
-  if (deps.autosharePreviewDeps) registerAutoshareRuleTools(server, user, deps.autosharePreviewDeps)
+  if (deps.autosharePreviewDeps) {
+    registerAutoshareRuleTools(server, user, deps.autosharePreviewDeps, deps.skipAutoshare)
+  }
   registerSyncTools(
     server,
     user,
@@ -193,6 +239,8 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
     deps.gravl,
     deps.onActivityDetailSynced,
     deps.onTrackWritten,
+    deps.syncHomeAssistant,
+    deps.homeAssistant,
   )
   registerSettingsTools(server, user, deps.onHrSettingsChanged, deps.onProfileChanged)
   registerLocationTools(server, user, deps.onNamedLocationsChanged)
@@ -206,26 +254,31 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerNativeTasksTools(server, user)
   registerResourcesTools(server, user, deps.centralDb)
   registerNoteTools(server, user)
+  registerNotificationTools(
+    server,
+    user,
+    deps.centralDb?.isAdmin ?? (async () => false),
+    deps.runNotificationAction,
+  )
   registerMealTools(server, user)
   registerNutrientRecommendationTools(server, user)
   if (deps.centralDb) {
     registerFoodItemTools(server, user, deps.centralDb)
     registerSensitivityTools(server, user, deps.centralDb)
     registerImportTools(server, user, deps.centralDb)
-    if (deps.adminUsers) registerAdminUserTools(server, user, deps.centralDb, deps.adminUsers)
-    if (deps.relayActions) registerAdminRelayTools(server, user, deps.centralDb, deps.relayActions)
-    if (deps.postUpdateResender) {
-      registerAdminFederationTools(server, user, deps.centralDb, deps.postUpdateResender)
-    }
+    registerOptionalAdminTools(server, user, deps.centralDb, deps)
+    registerFederationDeliveryTools(server, user, deps.centralDb)
     if (deps.accountDeleter) registerAccountDeletionTools(server, user, deps.centralDb, deps.accountDeleter)
     if (deps.accountPlans) registerAccountPlanTools(server, user, deps.centralDb, deps.accountPlans)
-    registerAccountEmailTools(server, user, deps.centralDb)
+    if (deps.accountEmail) registerAccountEmailTools(server, user, deps.accountEmail)
   }
   registerReportTools(server, user)
   registerPharmacologyTools(server, user)
   registerRouteTools(server, user)
+  registerSegmentTools(server, user)
   registerSharedDashboardTools(server, user)
   registerSharedExerciseTools(server, user, deps.webHost)
+  registerExerciseCatalogTools(server)
   registerFeedTools(server, user, {
     apiBaseUrl: deps.apiBaseUrl,
     deliver: deps.feedDeliver,
@@ -235,9 +288,10 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
     publicTagActions: deps.publicTagActions,
     reactionActions: deps.reactionActions,
     retroEnrichTimeline: deps.retroEnrichTimeline,
+    tagActorHost: deps.tagActorHost,
     webHost: deps.webHost,
   })
-  registerFeedImageTools(server, user, { apiBaseUrl: deps.apiBaseUrl })
+  registerFeedImageTools(server, user, { apiBaseUrl: deps.apiBaseUrl, uploadLimiter: accountUploadLimiter })
   registerChallengeTools(server, user, {
     apiBaseUrl: deps.apiBaseUrl,
     discoverChallenges: deps.discoverChallenges,

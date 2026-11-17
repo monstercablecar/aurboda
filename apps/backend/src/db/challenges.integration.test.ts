@@ -16,7 +16,6 @@ import {
   getParticipationById,
   getParticipationByToken,
   getParticipationByUrl,
-  hasRemoteChallengeMember,
   listChallengeMembers,
   listChallengeParticipations,
   listChallenges,
@@ -27,6 +26,7 @@ import {
   removeChallengeMember,
   updateChallenge,
   updateChallengeMemberCache,
+  updateChallengeParticipationSnapshot,
   upsertChallengeMember,
 } from './challenges.ts'
 import { query } from './connection.ts'
@@ -256,17 +256,18 @@ describe('Challenges integration', () => {
     expect(await getChallengeMemberByIdentity(user, c.id, 'https://other/u/x')).toBeNull()
   })
 
-  test('reports whether an active remote member has joined', async () => {
+  test('a guarded update only writes while no active remote member has joined', async () => {
     const user = getTestUser()
     const c = await createChallenge(user, sampleInput('remote'))
     const other = await createChallenge(user, sampleInput('other'))
+    const guarded = { unlessRemoteMember: true }
     await upsertChallengeMember(user, c.id, {
       display_name: 'host',
       identity_base_url: 'https://aurboda.net/u/host',
       kind: 'local',
       local_user: 'host',
     })
-    expect(await hasRemoteChallengeMember(user, c.id)).toBe(false)
+    expect((await updateChallenge(user, c.id, { timezone: 'UTC' }, guarded))?.timezone).toBe('UTC')
 
     const remote = await upsertChallengeMember(user, c.id, {
       data_endpoint_url: 'https://foo.bar/challenge-data/tok',
@@ -274,11 +275,14 @@ describe('Challenges integration', () => {
       identity_base_url: 'https://foo.bar/u/bob',
       kind: 'remote',
     })
-    expect(await hasRemoteChallengeMember(user, c.id)).toBe(true)
-    expect(await hasRemoteChallengeMember(user, other.id)).toBe(false)
+    const moved = new Date('2026-06-02T00:00:00Z')
+    expect(await updateChallenge(user, c.id, { start_ts: moved }, guarded)).toBeNull()
+    expect((await getChallengeById(user, c.id))?.start_ts).toEqual(c.start_ts)
+    expect((await updateChallenge(user, c.id, { name: 'Renamed' }))?.name).toBe('Renamed')
+    expect((await updateChallenge(user, other.id, { start_ts: moved }, guarded))?.start_ts).toEqual(moved)
 
     await query(user, `UPDATE challenge_members SET status = 'withdrawn' WHERE id = $1`, [remote.id])
-    expect(await hasRemoteChallengeMember(user, c.id)).toBe(false)
+    expect((await updateChallenge(user, c.id, { start_ts: moved }, guarded))?.start_ts).toEqual(moved)
   })
 
   test('looks up + deletes a participation by url (join idempotency support)', async () => {
@@ -299,6 +303,21 @@ describe('Challenges integration', () => {
     expect(await deleteChallengeParticipation(user, p.id)).toBe(true)
     expect(await getParticipationByUrl(user, url)).toBeNull()
     expect(await deleteChallengeParticipation(user, p.id)).toBe(false)
+  })
+
+  test('stores a participation under its canonical challenge url', async () => {
+    const user = getTestUser()
+    const p = await createChallengeParticipation(user, {
+      challenge_url: 'https://Aurboda.NET/u/alice/canon/?embed=1#top',
+      end_ts: new Date('2026-06-08T00:00:00Z'),
+      host_identity: 'https://aurboda.net/u/alice',
+      name: 'C',
+      spec,
+      start_ts: new Date('2026-06-01T00:00:00Z'),
+      timezone: 'UTC',
+    })
+    expect(p.challenge_url).toBe('https://aurboda.net/u/alice/canon')
+    expect((await getParticipationByUrl(user, 'https://aurboda.net/u/alice/canon'))?.id).toBe(p.id)
   })
 
   test('leaving tombstones the challenge url; rejoining clears it, leaving again re-records it', async () => {
@@ -382,6 +401,60 @@ describe('Challenges integration', () => {
     expect((await getParticipationById(user, quant.id))?.protocol).toBe('quantpub')
     expect((await getParticipationById(user, legacy.id))?.protocol).toBe('aurboda')
     expect((await getParticipationById(user, old.id))?.protocol).toBeNull()
+  })
+
+  test('updateChallengeParticipationSnapshot patches only the given fields', async () => {
+    const user = getTestUser()
+    const p = await createChallengeParticipation(user, {
+      challenge_url: 'https://peer.example/u/alice/snapshot',
+      end_ts: new Date('2026-06-08T00:00:00Z'),
+      host_identity: 'https://peer.example/u/alice',
+      name: 'Old name',
+      protocol: 'aurboda',
+      spec,
+      start_ts: new Date('2026-06-01T00:00:00Z'),
+      timezone: 'UTC',
+    })
+    expect(p.host_checked_at).toBeNull()
+
+    const nextSpec: ChallengeSpecFields = {
+      ...spec,
+      aggregation: 'max',
+      filter_field: 'sets.exercise',
+      filter_value: 'Push-ups',
+      measure: 'max_reps',
+      pattern: 'Strength',
+      source_type: 'activity_type',
+      unit: 'reps',
+    }
+    const updated = await updateChallengeParticipationSnapshot(user, p.id, {
+      end_ts: new Date('2026-06-15T00:00:00Z'),
+      name: 'New name',
+      spec: nextSpec,
+      start_ts: new Date('2026-06-02T00:00:00Z'),
+      timezone: 'Europe/Stockholm',
+    })
+    expect(updated).toMatchObject({
+      data_token: p.data_token,
+      end_ts: new Date('2026-06-15T00:00:00Z'),
+      host_checked_at: null,
+      name: 'New name',
+      protocol: 'aurboda',
+      spec: nextSpec,
+      start_ts: new Date('2026-06-02T00:00:00Z'),
+      timezone: 'Europe/Stockholm',
+    })
+
+    const checkedAt = new Date('2026-06-03T12:00:00Z')
+    const checked = await updateChallengeParticipationSnapshot(user, p.id, { host_checked_at: checkedAt })
+    expect(checked?.host_checked_at).toEqual(checkedAt)
+    expect(checked?.name).toBe('New name')
+    expect(await getParticipationById(user, p.id)).toEqual(checked)
+
+    expect(await updateChallengeParticipationSnapshot(user, p.id, {})).toEqual(checked)
+    expect(
+      await updateChallengeParticipationSnapshot(user, '00000000-0000-0000-0000-000000000000', { name: 'x' }),
+    ).toBeNull()
   })
 
   test('a rolled-back join (tombstone: false) leaves the challenge discoverable', async () => {

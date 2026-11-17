@@ -52,8 +52,11 @@ import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.launch
+import net.aurboda.ActivityDataInput
 import net.aurboda.ActivityTypeDefinition
 import net.aurboda.AddActivityBody
+import net.aurboda.CatalogActivityType
+import net.aurboda.CatalogMetric
 import net.aurboda.CustomMetricDefinition
 import net.aurboda.DataFieldDefinition
 import net.aurboda.DataResult
@@ -64,18 +67,32 @@ import net.aurboda.PendingPayload
 import net.aurboda.addPendingEntry
 import net.aurboda.api.models.AddMetricBody
 import net.aurboda.appJson
+import net.aurboda.buildActivityData
+import net.aurboda.cacheActivityTypeCatalog
 import net.aurboda.cacheActivityTypes
 import net.aurboda.cacheCustomMetrics
+import net.aurboda.cacheMetricCatalog
+import net.aurboda.catalogMetricsToOffer
+import net.aurboda.catalogTypesToOffer
+import net.aurboda.defaultMetricUnit
+import net.aurboda.fetchActivityTypeCatalog
 import net.aurboda.fetchActivityTypes
 import net.aurboda.fetchCustomMetrics
+import net.aurboda.fetchMetricCatalog
+import net.aurboda.getCachedActivityTypeCatalog
 import net.aurboda.getCachedActivityTypes
 import net.aurboda.getCachedCustomMetrics
+import net.aurboda.getCachedMetricCatalog
 import net.aurboda.getPendingEntries
 import net.aurboda.markPendingEntryFailed
+import net.aurboda.metricUnitOptions
+import net.aurboda.metricUnitToSend
 import net.aurboda.pendingEntryCount
 import net.aurboda.postActivity
 import net.aurboda.postMetric
 import net.aurboda.removePendingEntry
+import net.aurboda.resolveActivityType
+import net.aurboda.toAddActivityBody
 import net.aurboda.updatePendingEntry
 import java.time.Instant
 import java.time.LocalDate
@@ -116,6 +133,7 @@ fun AddDataScreen(
     apiUrl: String,
     authToken: String,
     modifier: Modifier = Modifier,
+    onOpenWebPage: (String) -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Activity", "Metric")
@@ -132,7 +150,7 @@ fun AddDataScreen(
         }
 
         when (selectedTab) {
-            0 -> AddActivityTab(apiUrl = apiUrl, authToken = authToken)
+            0 -> AddActivityTab(apiUrl = apiUrl, authToken = authToken, onOpenWebPage = onOpenWebPage)
             1 -> AddMetricTab(apiUrl = apiUrl, authToken = authToken)
         }
     }
@@ -235,6 +253,7 @@ private fun nowEpochMillis(): Long = System.currentTimeMillis()
 @Composable
 private fun ActivityTypePicker(
     activityTypes: List<ActivityTypeDefinition>,
+    catalog: List<CatalogActivityType>,
     selectedType: String,
     onTypeSelected: (String) -> Unit,
 ) {
@@ -245,13 +264,22 @@ private fun ActivityTypePicker(
     val displayValue = if (isEditing) {
         query
     } else {
-        activityTypes.find { it.name == selectedType }?.displayName ?: selectedType
+        activityTypes.find { it.name == selectedType }?.displayName
+            ?: catalog.find { it.name == selectedType }?.displayName
+            ?: selectedType
     }
 
     val match = matchActivityTypes(activityTypes, query, { it.name }, { it.displayName })
     val filtered = match.filtered
+    val catalogFiltered = matchCatalogTypes(
+        catalogTypesToOffer(activityTypes, catalog),
+        query,
+        { it.name },
+        { it.displayName },
+        { it.aliases },
+    )
     val snakeInput = match.snakeInput
-    val isNewType = match.isNewType
+    val isNewType = offersNewType(match, catalog.map { it.name })
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -272,7 +300,7 @@ private fun ActivityTypePicker(
             singleLine = true,
         )
         ExposedDropdownMenu(
-            expanded = expanded && (filtered.isNotEmpty() || isNewType),
+            expanded = expanded && (filtered.isNotEmpty() || catalogFiltered.isNotEmpty() || isNewType),
             onDismissRequest = {
                 expanded = false
                 isEditing = false
@@ -306,8 +334,35 @@ private fun ActivityTypePicker(
                     },
                 )
             }
-            if (isNewType) {
+            if (catalogFiltered.isNotEmpty()) {
                 if (filtered.isNotEmpty()) {
+                    HorizontalDivider()
+                }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Built-in",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    },
+                    onClick = {},
+                    enabled = false,
+                )
+                catalogFiltered.forEach { entry ->
+                    DropdownMenuItem(
+                        text = { Text("${entry.icon ?: ""} ${entry.displayName}".trim()) },
+                        onClick = {
+                            onTypeSelected(entry.name)
+                            query = ""
+                            isEditing = false
+                            expanded = false
+                        },
+                    )
+                }
+            }
+            if (isNewType) {
+                if (filtered.isNotEmpty() || catalogFiltered.isNotEmpty()) {
                     HorizontalDivider()
                 }
                 DropdownMenuItem(
@@ -337,12 +392,16 @@ private data class MetricEntry(
     val value: String,
     val label: String,
     val group: String,
+    val keywords: List<String> = emptyList(),
 )
+
+private const val METRIC_CATALOGUE_GROUP = "More built-in metrics"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MetricPicker(
     customMetrics: List<CustomMetricDefinition>,
+    metricCatalog: List<CatalogMetric>,
     selectedMetric: String,
     onMetricSelected: (String) -> Unit,
 ) {
@@ -350,14 +409,19 @@ private fun MetricPicker(
     var expanded by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
 
-    val allEntries = remember(customMetrics) {
+    val allEntries = remember(customMetrics, metricCatalog) {
         val builtin = builtinMetrics.map { (value, label) ->
             MetricEntry(value, label, "Built-in")
         }
         val custom = customMetrics.map {
             MetricEntry(it.name, it.description ?: it.name, "Custom")
         }
-        builtin + custom
+        val catalogue = catalogMetricsToOffer(
+            metricCatalog,
+            builtinMetrics.map { it.first }.toSet(),
+            customMetrics.map { it.name }.toSet(),
+        ).map { MetricEntry(it.name, it.displayName, METRIC_CATALOGUE_GROUP, it.aliases) }
+        builtin + custom + catalogue
     }
 
     val displayValue = if (isEditing) {
@@ -370,11 +434,16 @@ private fun MetricPicker(
         allEntries
     } else {
         val q = query.trim().lowercase()
-        allEntries.filter { it.label.lowercase().contains(q) || it.value.contains(q) }
+        allEntries.filter { entry ->
+            entry.label.lowercase().contains(q) ||
+                entry.value.contains(q) ||
+                entry.keywords.any { it.lowercase().contains(q) }
+        }
     }
 
     val builtinFiltered = filtered.filter { it.group == "Built-in" }
     val customFiltered = filtered.filter { it.group == "Custom" }
+    val catalogueFiltered = filtered.filter { it.group == METRIC_CATALOGUE_GROUP }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -452,6 +521,80 @@ private fun MetricPicker(
                     )
                 }
             }
+            if (catalogueFiltered.isNotEmpty()) {
+                if (builtinFiltered.isNotEmpty() || customFiltered.isNotEmpty()) {
+                    HorizontalDivider()
+                }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            METRIC_CATALOGUE_GROUP,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    },
+                    onClick = {},
+                    enabled = false,
+                )
+                catalogueFiltered.forEach { entry ->
+                    DropdownMenuItem(
+                        text = { Text(entry.label) },
+                        onClick = {
+                            onMetricSelected(entry.value)
+                            query = ""
+                            isEditing = false
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MetricUnitField(
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val choosable = options.size > 1
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = choosable && it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Unit") },
+            trailingIcon = if (choosable) {
+                { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+            } else {
+                null
+            },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            singleLine = true,
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }
@@ -461,6 +604,7 @@ private fun MetricPicker(
 private fun SchemaDataFields(
     fields: List<DataFieldDefinition>,
     data: Map<String, String>,
+    errors: Map<String, String>,
     onDataChange: (Map<String, String>) -> Unit,
 ) {
     fields.forEach { field ->
@@ -520,11 +664,18 @@ private fun SchemaDataFields(
             }
 
             field.type == "number" -> {
+                val error = errors[field.name]
                 OutlinedTextField(
                     value = data[field.name] ?: "",
                     onValueChange = { onDataChange(data + (field.name to it)) },
                     label = { Text("$fieldLabel$unitSuffix") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = error != null,
+                    supportingText = if (error != null) {
+                        { Text(error) }
+                    } else {
+                        null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
@@ -576,7 +727,8 @@ private fun PendingEntriesSection(
     entries.forEach { entry ->
         val description = when (val data = entry.data) {
             is PendingPayload.Activity -> "Activity: ${data.payload.activity_type}"
-            is PendingPayload.Metric -> "Metric: ${data.payload.metric} = ${data.payload.value}"
+            is PendingPayload.Metric ->
+                "Metric: ${data.payload.metric} = ${data.payload.value} ${data.payload.unit ?: ""}".trimEnd()
         }
         val timeStr = when (val data = entry.data) {
             is PendingPayload.Activity -> data.payload.start_time
@@ -619,14 +771,7 @@ private fun PendingEntriesSection(
                     scope.launch {
                         val result = when (val data = entry.data) {
                             is PendingPayload.Activity -> {
-                                val body = AddActivityBody(
-                                    activityType = data.payload.activity_type,
-                                    startTime = data.payload.start_time,
-                                    endTime = data.payload.end_time,
-                                    title = data.payload.title,
-                                    notes = data.payload.notes,
-                                    data = data.payload.data,
-                                )
+                                val body = data.payload.toAddActivityBody(getCachedActivityTypes(context))
                                 postActivity(httpClient, apiUrl, authToken, body)
                             }
                             is PendingPayload.Metric -> {
@@ -634,6 +779,7 @@ private fun PendingEntriesSection(
                                     metric = data.payload.metric,
                                     value = data.payload.value,
                                     time = data.payload.time,
+                                    unit = data.payload.unit,
                                 )
                                 postMetric(httpClient, apiUrl, authToken, body)
                             }
@@ -710,12 +856,14 @@ private fun PendingEntriesSection(
 private fun AddActivityTab(
     apiUrl: String,
     authToken: String,
+    onOpenWebPage: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
     var activityTypes by remember { mutableStateOf(getCachedActivityTypes(context)) }
+    var activityTypeCatalog by remember { mutableStateOf(getCachedActivityTypeCatalog(context)) }
     var selectedType by remember { mutableStateOf("") }
     var title by remember { mutableStateOf("") }
     var startTimeMillis by remember { mutableLongStateOf(nowEpochMillis()) }
@@ -734,7 +882,7 @@ private fun AddActivityTab(
         }
     }
 
-    LaunchedEffect(Unit) {
+    val loadActivityTypes: suspend () -> Unit = {
         when (val result = fetchActivityTypes(httpClient, apiUrl, authToken)) {
             is DataResult.Success -> {
                 activityTypes = result.data
@@ -742,12 +890,22 @@ private fun AddActivityTab(
             }
             is DataResult.Error -> { /* use cached/defaults */ }
         }
+        when (val result = fetchActivityTypeCatalog(httpClient, apiUrl, authToken)) {
+            is DataResult.Success -> {
+                activityTypeCatalog = result.data
+                cacheActivityTypeCatalog(context, result.data)
+            }
+            is DataResult.Error -> { /* use cached */ }
+        }
     }
 
-    val selectedTypeDef = activityTypes.find { it.name == selectedType }
-    // A list field (a strength session's sets) has no native row editor yet (#1316); the web
-    // pages edit it, and a text box here would send a string the backend rejects.
+    LaunchedEffect(Unit) { loadActivityTypes() }
+
+    val selectedTypeDef = resolveActivityType(selectedType, activityTypes, activityTypeCatalog)
+    // A list field (a strength session's sets) has no native row editor: sets are logged on the
+    // strength session web page, and a text box here would send a string the backend rejects.
     val dataFields = selectedTypeDef?.dataSchema?.fields?.filter { it.type != "list" } ?: emptyList()
+    val dataInput = buildActivityData(dataFields, structuredData)
 
     Column(
         modifier = Modifier
@@ -757,6 +915,10 @@ private fun AddActivityTab(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Add Activity", style = MaterialTheme.typography.titleLarge)
+
+        TextButton(onClick = { onOpenWebPage("/strength") }) {
+            Text("Log a strength session")
+        }
 
         if (message.isNotEmpty()) {
             Text(
@@ -768,6 +930,7 @@ private fun AddActivityTab(
 
         ActivityTypePicker(
             activityTypes = activityTypes,
+            catalog = activityTypeCatalog,
             selectedType = selectedType,
             onTypeSelected = { newType ->
                 selectedType = newType
@@ -779,6 +942,7 @@ private fun AddActivityTab(
             SchemaDataFields(
                 fields = dataFields,
                 data = structuredData,
+                errors = (dataInput as? ActivityDataInput.Invalid)?.fieldErrors ?: emptyMap(),
                 onDataChange = { structuredData = it },
             )
         }
@@ -847,15 +1011,19 @@ private fun AddActivityTab(
                     isError = true
                     return@Button
                 }
+                val activityData = when (dataInput) {
+                    is ActivityDataInput.Valid -> dataInput.data
+                    is ActivityDataInput.Invalid -> {
+                        message = "Please fix the highlighted fields"
+                        isError = true
+                        return@Button
+                    }
+                }
                 submitting = true
                 message = ""
 
                 val startIso = epochMillisToIso(startTimeMillis)
                 val endIso = if (hasEndTime) epochMillisToIso(endTimeMillis) else null
-                val dataMap = structuredData
-                    .mapValues { it.value.trim() }
-                    .filterValues { it.isNotEmpty() }
-                    .ifEmpty { null }
 
                 val body = AddActivityBody(
                     activityType = selectedType,
@@ -863,7 +1031,7 @@ private fun AddActivityTab(
                     endTime = endIso,
                     title = title.trim().ifBlank { null },
                     notes = notes.trim().ifBlank { null },
-                    data = dataMap,
+                    data = activityData,
                 )
 
                 val pendingEntry = PendingEntry(
@@ -880,6 +1048,8 @@ private fun AddActivityTab(
                     created_at = epochMillisToIso(nowEpochMillis()),
                 )
                 addPendingEntry(context, pendingEntry)
+                val adoptsCatalogType = activityTypes.none { it.name == selectedType } &&
+                    activityTypeCatalog.any { it.name == selectedType }
 
                 scope.launch {
                     val result = postActivity(httpClient, apiUrl, authToken, body)
@@ -887,6 +1057,7 @@ private fun AddActivityTab(
                     when (result) {
                         is DataResult.Success -> {
                             removePendingEntry(context, pendingEntry.id)
+                            if (adoptsCatalogType) loadActivityTypes()
                             message = "Activity added!"
                             isError = false
                             selectedType = ""
@@ -925,7 +1096,9 @@ private fun AddMetricTab(
     val scrollState = rememberScrollState()
 
     var customMetrics by remember { mutableStateOf(getCachedCustomMetrics(context)) }
+    var metricCatalog by remember { mutableStateOf(getCachedMetricCatalog(context)) }
     var selectedMetric by remember { mutableStateOf("") }
+    var chosenUnit by remember { mutableStateOf<String?>(null) }
     var value by remember { mutableStateOf("") }
     var timeMillis by remember { mutableLongStateOf(nowEpochMillis()) }
 
@@ -939,7 +1112,7 @@ private fun AddMetricTab(
         }
     }
 
-    LaunchedEffect(Unit) {
+    val loadMetrics: suspend () -> Unit = {
         when (val result = fetchCustomMetrics(httpClient, apiUrl, authToken)) {
             is DataResult.Success -> {
                 customMetrics = result.data
@@ -947,7 +1120,20 @@ private fun AddMetricTab(
             }
             is DataResult.Error -> { /* use cached */ }
         }
+        when (val result = fetchMetricCatalog(httpClient, apiUrl, authToken)) {
+            is DataResult.Success -> {
+                metricCatalog = result.data
+                cacheMetricCatalog(context, result.data)
+            }
+            is DataResult.Error -> { /* use cached */ }
+        }
     }
+
+    LaunchedEffect(Unit) { loadMetrics() }
+
+    val catalogEntry = metricCatalog.find { it.name == selectedMetric }
+    val unitOptions = catalogEntry?.let { metricUnitOptions(it) } ?: emptyList()
+    val selectedUnit = chosenUnit ?: catalogEntry?.let { defaultMetricUnit(it) }
 
     Column(
         modifier = Modifier
@@ -968,8 +1154,12 @@ private fun AddMetricTab(
 
         MetricPicker(
             customMetrics = customMetrics,
+            metricCatalog = metricCatalog,
             selectedMetric = selectedMetric,
-            onMetricSelected = { selectedMetric = it },
+            onMetricSelected = {
+                selectedMetric = it
+                chosenUnit = null
+            },
         )
 
         Row(
@@ -985,11 +1175,28 @@ private fun AddMetricTab(
                 modifier = Modifier.weight(1f),
                 singleLine = true,
             )
+            if (unitOptions.isNotEmpty() && selectedUnit != null) {
+                MetricUnitField(
+                    options = unitOptions,
+                    selected = selectedUnit,
+                    onSelected = { chosenUnit = it },
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                DateTimePickerField(
+                    label = "Time",
+                    epochMillis = timeMillis,
+                    onChanged = { timeMillis = it },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        if (unitOptions.isNotEmpty() && selectedUnit != null) {
             DateTimePickerField(
                 label = "Time",
                 epochMillis = timeMillis,
                 onChanged = { timeMillis = it },
-                modifier = Modifier.weight(1f),
             )
         }
 
@@ -1024,6 +1231,7 @@ private fun AddMetricTab(
                     metric = selectedMetric,
                     value = parsedValue,
                     time = timeIso,
+                    unit = metricUnitToSend(catalogEntry, selectedUnit),
                 )
 
                 val pendingEntry = PendingEntry(
@@ -1032,11 +1240,13 @@ private fun AddMetricTab(
                             metric = body.metric,
                             value = body.value,
                             time = timeIso,
+                            unit = body.unit,
                         )
                     ),
                     created_at = epochMillisToIso(nowEpochMillis()),
                 )
                 addPendingEntry(context, pendingEntry)
+                val adoptsCatalogMetric = catalogEntry?.inUse == false
 
                 scope.launch {
                     val result = postMetric(httpClient, apiUrl, authToken, body)
@@ -1044,6 +1254,7 @@ private fun AddMetricTab(
                     when (result) {
                         is DataResult.Success -> {
                             removePendingEntry(context, pendingEntry.id)
+                            if (adoptsCatalogMetric) loadMetrics()
                             message = "Metric recorded!"
                             isError = false
                             value = ""

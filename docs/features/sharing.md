@@ -74,7 +74,8 @@ render — never the owner's broader data API. This is enforced server-side:
    widget displays (aggregated buckets, averages, trend points). Raw rows with
    notes, titles, or locations are never included.
 4. Quick-link widgets are neutralized (their hrefs point into the owner's private
-   app and are stripped), and unknown widgets resolve to no data.
+   app and are stripped), [day overview](./dashboard.md#day-overview) widgets are left
+   out of the served config with no data resolved, and unknown widgets resolve to no data.
 
 So even a crafted request with extra query parameters cannot widen the exposed data
 beyond the saved widgets.
@@ -342,7 +343,7 @@ OG cards, and as the ActivityPub actor `icon` (so Mastodon and friends show it).
 ## oEmbed & sharability
 
 - **oEmbed**: public share pages advertise a `<link rel="alternate"
-type="application/json+oembed">` pointing at `GET /oembed?url=<share url>`, which
+  type="application/json+oembed">` pointing at `GET /oembed?url=<share url>`, which
   returns a `type: "link"` document (title, author, provider, OG-image thumbnail).
   Only public resources resolve — unlisted/unknown/private URLs 404, so nothing
   private is exposed. Primarily benefits Mastodon and other oEmbed-aware consumers.

@@ -198,12 +198,13 @@ test('all metadata mutation endpoints reject readers and anonymous uploads', asy
     ['post', '/links', { title: 'No', external_url: 'https://example.com' }],
     ['patch', `/items/${link.id}`, { title: 'No' }],
     ['delete', `/items/${link.id}`, {}],
-  ] as const)
-    {await supertest(app)
+  ] as const) {
+    await supertest(app)
       [method]('/api/resources' + path)
       .set('Authorization', 'Bearer reader')
       .send(body)
-      .expect(403)}
+      .expect(403)
+  }
   await supertest(app)
     .post('/api/resources/upload')
     .attach('file', Buffer.from('%PDF-1.7'), 'test.pdf')

@@ -1,4 +1,11 @@
-import type { ActivityComputedMetrics, DataSource, EntityType } from '@aurboda/api-spec'
+import type {
+  ActivityComputedMetrics,
+  DataSource,
+  EntityType,
+  FlaggedExclusion,
+  PlaceSource,
+  SleepDebtDay,
+} from '@aurboda/api-spec'
 
 import type { MetricType } from '../../schema.ts'
 import type { HrZoneSecs } from '../settings.ts'
@@ -74,6 +81,7 @@ export interface SyncProvider {
   syncCalendarsIfNeeded: (user: string) => Promise<void>
   syncLastFmIfNeeded: (user: string) => Promise<void>
   syncGravlIfNeeded: (user: string) => Promise<void>
+  syncHomeAssistantIfNeeded: (user: string) => Promise<void>
 }
 
 export interface MetricDataPoint {
@@ -115,6 +123,7 @@ export interface QueryMetricsBucketedResult {
   end: string
   bucket: BucketSize
   buckets: MetricBucket[]
+  flagged_exclusion?: FlaggedExclusion
 }
 
 export interface HeartRateStats {
@@ -153,7 +162,7 @@ export interface ActivitySummary {
 
 export interface SleepLocation {
   name: string
-  source: 'named' | 'detected' | 'owntracks' | 'unknown'
+  source: PlaceSource
   lat?: number
   lon?: number
 }
@@ -191,7 +200,7 @@ export interface PlaceSummary {
   start_time: string
   end_time: string
   duration: number // minutes
-  source: 'named' | 'detected' | 'owntracks' | 'unknown'
+  source: PlaceSource
   lat?: number
   lon?: number
   address?: string
@@ -278,6 +287,7 @@ export interface DailySummaryResult {
   metrics_latest: Record<string, DailySummaryMetricLatest>
   notes: NoteSummary[]
   steps: { total: number }
+  sleep_debt: SleepDebtDay | null
   sleep_sessions: SleepSessionSummary[]
   productivity: ProductivitySummary | null
   places: PlaceSummary[]

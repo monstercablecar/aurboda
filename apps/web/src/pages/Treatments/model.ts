@@ -71,10 +71,7 @@ export const localDateKey = (date = new Date()): string =>
 
 export const nowLocalDateTime = (): string => isoToLocalDateTime(new Date().toISOString())
 
-export const actualVsScheduledLabel = (
-  administeredAt: string,
-  scheduledAt?: string | null,
-): string => {
+export const actualVsScheduledLabel = (administeredAt: string, scheduledAt?: string | null): string => {
   const actual = new Date(administeredAt)
   const actualLabel = actual.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
   if (!scheduledAt) return `Administered ${actualLabel}`
@@ -93,7 +90,9 @@ export const treatmentUrl = (
       : typeof currentSearch === 'string'
         ? new URLSearchParams(currentSearch.replace(/^\?/, ''))
         : new URLSearchParams(
-            Object.entries(currentSearch).filter((entry): entry is [string, string] => entry[1] !== undefined),
+            Object.entries(currentSearch).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
           )
   for (const [key, value] of Object.entries(changes)) {
     if (value === undefined) params.delete(key)
@@ -175,8 +174,6 @@ export const groupTimelineByDay = (
 }
 
 export const treatmentStageLabel = (stage: string): string =>
-  stage
-    .replaceAll('_', ' ')
-    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase())
+  stage.replaceAll('_', ' ').replaceAll(/\b\w/g, (letter) => letter.toUpperCase())
 
 export const stableActionKey = (prefix: string, createId: () => string): string => `${prefix}:${createId()}`

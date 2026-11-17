@@ -6,6 +6,7 @@ import { createActivityTypesRouter } from './activity-types-router.ts'
 
 vi.mock('../services/activity-type-definitions.ts', () => ({
   addActivityTypeDefinition: vi.fn(),
+  addCatalogFieldsToActivityType: vi.fn(),
   deleteActivityTypeDefinition: vi.fn(),
   listActivityTypeDefinitions: vi.fn(),
   mergeActivityType: vi.fn(),
@@ -19,6 +20,8 @@ vi.mock('../services/queries/index.ts', async () => {
     getActivityTypeSummary: vi.fn(),
     queryActivityFieldValues: vi.fn(),
     queryActivitySessions: vi.fn(),
+    queryMuscleGroupHistory: vi.fn(),
+    queryMuscleGroupOverview: vi.fn(),
     sessionsOptionsFromQuery,
   }
 })
@@ -29,6 +32,13 @@ vi.mock('../services/item-value-aliases.ts', () => ({
   mergeItemValues: vi.fn(),
 }))
 
+vi.mock('../services/item-value-identities.ts', () => ({
+  clearItemValueIdentity: vi.fn(),
+  getItemValueIdentity: vi.fn(),
+  listUnmappedItemValues: vi.fn(),
+  setItemValueIdentity: vi.fn(),
+}))
+
 vi.mock('../services/activity-records.ts', () => ({ getActivityRecords: vi.fn() }))
 
 vi.mock('../db/index.ts', () => ({}))
@@ -37,6 +47,7 @@ const queries = await import('../services/queries/index.ts')
 const service = await import('../services/activity-type-definitions.ts')
 const aliases = await import('../services/item-value-aliases.ts')
 const records = await import('../services/activity-records.ts')
+const identities = await import('../services/item-value-identities.ts')
 
 const buildApp = () => {
   const app = express()
@@ -193,6 +204,117 @@ describe('GET /activity-types/:name/field-values', () => {
   })
 })
 
+describe('GET /activity-types/:name/muscle-groups', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  test('returns every group with when it was last trained', async () => {
+    const data = {
+      field: 'sets.exercise',
+      groups: [{ last_trained: '2026-10-01T07:00:00.000Z', muscle_group: 'chest' as const, name: 'Chest' }],
+    }
+    vi.mocked(queries.queryMuscleGroupOverview).mockResolvedValue({ data, success: true })
+
+    const res = await supertest(buildApp()).get(
+      '/activity-types/strength_training/muscle-groups?field=sets.exercise',
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ data, success: true })
+    expect(queries.queryMuscleGroupOverview).toHaveBeenCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+    )
+  })
+
+  test('400s on a field that is not catalogue-backed, 404s on an unknown type', async () => {
+    const app = buildApp()
+    vi.mocked(queries.queryMuscleGroupOverview).mockResolvedValueOnce({
+      error: '"sets.note" is not a catalogue-backed item field of "strength_training"',
+      success: false,
+    })
+    expect(
+      (await supertest(app).get('/activity-types/strength_training/muscle-groups?field=sets.note')).status,
+    ).toBe(400)
+    vi.mocked(queries.queryMuscleGroupOverview).mockResolvedValueOnce({
+      error: 'Activity type "nope" not found',
+      success: false,
+    })
+    expect((await supertest(app).get('/activity-types/nope/muscle-groups?field=sets.exercise')).status).toBe(
+      404,
+    )
+  })
+})
+
+describe('GET /activity-types/:name/muscle-groups/:group', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const data = {
+    end: '2026-04-01T00:00:00.000Z',
+    exercises: [],
+    field: 'sets.exercise',
+    last_trained: null,
+    muscle_group: 'chest' as const,
+    name: 'Chest',
+    sessions: [],
+    start: '2026-03-01T00:00:00.000Z',
+    totals: {},
+  }
+
+  test('returns the group’s history over the period', async () => {
+    vi.mocked(queries.queryMuscleGroupHistory).mockResolvedValue({ data, success: true })
+
+    const res = await supertest(buildApp()).get(
+      '/activity-types/strength_training/muscle-groups/chest?field=sets.exercise&start=2026-03-01T00:00:00Z&end=2026-04-01T00:00:00Z',
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ data, success: true })
+    expect(queries.queryMuscleGroupHistory).toHaveBeenCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+      'chest',
+      { end: new Date('2026-04-01T00:00:00Z'), start: new Date('2026-03-01T00:00:00Z') },
+    )
+  })
+
+  test('400s on an unknown muscle group or start not before end without querying', async () => {
+    const app = buildApp()
+    expect(
+      (await supertest(app).get('/activity-types/strength_training/muscle-groups/wings?field=sets.exercise'))
+        .status,
+    ).toBe(400)
+    expect(
+      (
+        await supertest(app).get(
+          '/activity-types/strength_training/muscle-groups/chest?field=sets.exercise&start=2026-04-01T00:00:00Z&end=2026-03-01T00:00:00Z',
+        )
+      ).status,
+    ).toBe(400)
+    expect(queries.queryMuscleGroupHistory).not.toHaveBeenCalled()
+  })
+
+  test('400s on a field that is not catalogue-backed, 404s on an unknown type', async () => {
+    const app = buildApp()
+    vi.mocked(queries.queryMuscleGroupHistory).mockResolvedValueOnce({
+      error: '"sets.note" is not a catalogue-backed item field of "strength_training"',
+      success: false,
+    })
+    expect(
+      (await supertest(app).get('/activity-types/strength_training/muscle-groups/chest?field=sets.note'))
+        .status,
+    ).toBe(400)
+    vi.mocked(queries.queryMuscleGroupHistory).mockResolvedValueOnce({
+      error: 'Activity type "nope" not found',
+      success: false,
+    })
+    expect(
+      (await supertest(app).get('/activity-types/nope/muscle-groups/chest?field=sets.exercise')).status,
+    ).toBe(404)
+  })
+})
+
 describe('POST /activity-types', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -226,8 +348,8 @@ describe('POST /activity-types', () => {
       data: {
         aliases: [input.name],
         color: '#6b7280',
-        display_category: input.display_category,
-        display_name: input.display_name,
+        display_category: input.display_category ?? 'other',
+        display_name: input.display_name ?? input.name,
         is_builtin: false,
         name: input.name,
         parent_type: input.parent_type,
@@ -248,6 +370,146 @@ describe('POST /activity-types', () => {
     expect(res.status).toBe(201)
     expect(service.addActivityTypeDefinition).toHaveBeenCalledWith('tester', body)
     expect(res.body.data).toMatchObject({ parent_type: 'yoga', show_on_timeline: false })
+  })
+
+  test('accepts a catalogue name alone (#1700)', async () => {
+    vi.mocked(service.addActivityTypeDefinition).mockResolvedValue({
+      data: {
+        aliases: ['sauna'],
+        color: '#f97316',
+        display_category: 'wellness',
+        display_name: 'Sauna',
+        icon: '🧖',
+        is_builtin: false,
+        name: 'sauna',
+        show_on_timeline: true,
+      },
+      success: true,
+    })
+
+    const res = await supertest(buildApp()).post('/activity-types').send({ name: 'sauna' })
+
+    expect(res.status).toBe(201)
+    expect(service.addActivityTypeDefinition).toHaveBeenCalledWith('tester', { name: 'sauna' })
+    expect(res.body.data).toMatchObject({ display_category: 'wellness', display_name: 'Sauna' })
+  })
+
+  test('answers 400 for a name alone outside the catalogue (#1700)', async () => {
+    const error =
+      'display_name and display_category are required for a type that is not in the built-in catalogue'
+    vi.mocked(service.addActivityTypeDefinition).mockResolvedValue({ error, success: false })
+
+    const res = await supertest(buildApp()).post('/activity-types').send({ name: 'driving' })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error, success: false })
+  })
+
+  test('passes separate_type on to the service', async () => {
+    vi.mocked(service.addActivityTypeDefinition).mockResolvedValue({ error: 'x', success: false })
+    const body = { display_category: 'other', display_name: 'Beer', name: 'beer', separate_type: true }
+
+    await supertest(buildApp()).post('/activity-types').send(body)
+
+    expect(service.addActivityTypeDefinition).toHaveBeenCalledWith('tester', body)
+  })
+})
+
+describe('POST /activity-types/merge', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  test('passes set_data on and answers with activities_data_set', async () => {
+    vi.mocked(service.mergeActivityType).mockResolvedValue({
+      activities_data_set: 3,
+      activities_reassigned: 4,
+      deduction_rules_updated: 0,
+      success: true,
+    })
+
+    const res = await supertest(buildApp())
+      .post('/activity-types/merge')
+      .send({ set_data: { kind: 'beer' }, source: 'beer', target: 'alcohol' })
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ activities_data_set: 3, activities_reassigned: 4, success: true })
+    expect(service.mergeActivityType).toHaveBeenCalledWith('tester', 'beer', 'alcohol', { kind: 'beer' })
+  })
+
+  test('passes no set_data when none is given', async () => {
+    vi.mocked(service.mergeActivityType).mockResolvedValue({ activities_reassigned: 1, success: true })
+
+    await supertest(buildApp()).post('/activity-types/merge').send({ source: 'beer', target: 'alcohol' })
+
+    expect(service.mergeActivityType).toHaveBeenCalledWith('tester', 'beer', 'alcohol', undefined)
+  })
+
+  test('answers 400 for set_data the target does not allow', async () => {
+    const error = 'set_data is not valid for "alcohol": Field "colour" is not a field of this type'
+    vi.mocked(service.mergeActivityType).mockResolvedValue({ error, success: false })
+
+    const res = await supertest(buildApp())
+      .post('/activity-types/merge')
+      .send({ set_data: { colour: 'red' }, source: 'beer', target: 'alcohol' })
+
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error, success: false })
+  })
+
+  test('answers 404 for an unknown type', async () => {
+    vi.mocked(service.mergeActivityType).mockResolvedValue({
+      error: 'Activity type "beer" or "alcohol" not found.',
+      success: false,
+    })
+
+    const res = await supertest(buildApp())
+      .post('/activity-types/merge')
+      .send({ source: 'beer', target: 'alcohol' })
+
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('POST /activity-types/:name/catalog-fields', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  test('answers with the updated definition', async () => {
+    const data = {
+      color: '#f97316',
+      data_schema: { fields: [{ name: 'temperature', type: 'number' as const }] },
+      display_category: 'wellness' as const,
+      display_name: 'Sauna',
+      is_builtin: false,
+      name: 'sauna',
+      show_on_timeline: true,
+    }
+    vi.mocked(service.addCatalogFieldsToActivityType).mockResolvedValue({ data, success: true })
+
+    const res = await supertest(buildApp()).post('/activity-types/sauna/catalog-fields')
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ data, success: true })
+    expect(service.addCatalogFieldsToActivityType).toHaveBeenCalledWith('tester', 'sauna')
+  })
+
+  test('answers 404 for a type the user does not have', async () => {
+    vi.mocked(service.addCatalogFieldsToActivityType).mockResolvedValue({
+      error: 'Activity type "sauna" not found',
+      success: false,
+    })
+
+    const res = await supertest(buildApp()).post('/activity-types/sauna/catalog-fields')
+
+    expect(res.status).toBe(404)
+  })
+
+  test('answers 400 for a type that is not a catalogue type', async () => {
+    const error = '"driving" is not a built-in catalogue type'
+    vi.mocked(service.addCatalogFieldsToActivityType).mockResolvedValue({ error, success: false })
+
+    const res = await supertest(buildApp()).post('/activity-types/driving/catalog-fields')
+
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error, success: false })
   })
 })
 
@@ -353,5 +615,141 @@ describe('DELETE /activity-types/:name/item-values/aliases/:id', () => {
       `/activity-types/strength_training/item-values/aliases/${id}`,
     )
     expect(res.status).toBe(404)
+  })
+})
+
+describe('item value identity routes', () => {
+  const identity = {
+    catalog: 'exercises' as const,
+    catalog_key: 'lat_pulldown',
+    catalog_version: '2026.11.0',
+    field: 'sets.exercise',
+    other_values: [],
+    state: 'user' as const,
+    value: 'Pulldown',
+  }
+  const url = '/activity-types/strength_training/item-values'
+
+  beforeEach(() => vi.clearAllMocks())
+
+  test('GET identity resolves the value', async () => {
+    vi.mocked(identities.getItemValueIdentity).mockResolvedValue({ data: identity, success: true })
+    const res = await supertest(buildApp())
+      .get(`${url}/identity`)
+      .query({ field: 'sets.exercise', value: 'Pulldown' })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ data: identity, success: true })
+    expect(identities.getItemValueIdentity).toHaveBeenCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+      'Pulldown',
+    )
+  })
+
+  test('GET identity 400s for a field without a catalogue and on a missing value', async () => {
+    const app = buildApp()
+    vi.mocked(identities.getItemValueIdentity).mockResolvedValueOnce({
+      error: '"sets.side" is not a catalogue-backed item field of "strength_training"',
+      success: false,
+    })
+    expect(
+      (await supertest(app).get(`${url}/identity`).query({ field: 'sets.side', value: 'L' })).status,
+    ).toBe(400)
+    expect((await supertest(app).get(`${url}/identity`).query({ field: 'sets.exercise' })).status).toBe(400)
+    expect(identities.getItemValueIdentity).toHaveBeenCalledTimes(1)
+  })
+
+  test('PUT identity maps or dismisses, 400 on an unknown key', async () => {
+    const app = buildApp()
+    vi.mocked(identities.setItemValueIdentity).mockResolvedValueOnce({ data: identity, success: true })
+    const body = { field: 'sets.exercise', key: 'lat_pulldown', value: 'Pulldown' }
+    const res = await supertest(app).put(`${url}/identity`).send(body)
+    expect(res.status).toBe(200)
+    expect(identities.setItemValueIdentity).toHaveBeenCalledWith('tester', 'strength_training', body)
+
+    vi.mocked(identities.setItemValueIdentity).mockResolvedValueOnce({
+      error: 'Unknown exercise catalogue key "nope"',
+      success: false,
+    })
+    expect(
+      (
+        await supertest(app)
+          .put(`${url}/identity`)
+          .send({ ...body, key: 'nope' })
+      ).status,
+    ).toBe(400)
+
+    vi.mocked(identities.setItemValueIdentity).mockResolvedValueOnce({
+      data: { ...identity, catalog_key: null, state: 'dismissed' },
+      success: true,
+    })
+    expect(
+      (
+        await supertest(app)
+          .put(`${url}/identity`)
+          .send({ ...body, key: null })
+      ).status,
+    ).toBe(200)
+  })
+
+  test('DELETE identity clears, 404 when none is stored', async () => {
+    const app = buildApp()
+    vi.mocked(identities.clearItemValueIdentity).mockResolvedValueOnce({ success: true })
+    const query = { field: 'sets.exercise', value: 'Pulldown' }
+    expect((await supertest(app).delete(`${url}/identity`).query(query)).body).toEqual({ success: true })
+    expect(identities.clearItemValueIdentity).toHaveBeenCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+      'Pulldown',
+    )
+
+    vi.mocked(identities.clearItemValueIdentity).mockResolvedValueOnce({
+      error: 'Identity for "Pulldown" not found',
+      success: false,
+    })
+    expect((await supertest(app).delete(`${url}/identity`).query(query)).status).toBe(404)
+  })
+
+  test('GET unmapped lists the unmapped values', async () => {
+    const data = {
+      catalog: 'exercises' as const,
+      catalog_version: '2026.11.0',
+      field: 'sets.exercise',
+      total: 0,
+      values: [],
+    }
+    vi.mocked(identities.listUnmappedItemValues).mockResolvedValue({ data, success: true })
+    const res = await supertest(buildApp()).get(`${url}/unmapped`).query({ field: 'sets.exercise' })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ data, success: true })
+    expect(identities.listUnmappedItemValues).toHaveBeenCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+      { limit: 50, offset: 0 },
+    )
+  })
+
+  test('GET unmapped takes a page, at most 200 names', async () => {
+    vi.mocked(identities.listUnmappedItemValues).mockResolvedValue({
+      data: { catalog: 'exercises', catalog_version: 'v', field: 'sets.exercise', total: 0, values: [] },
+      success: true,
+    })
+    const page = await supertest(buildApp())
+      .get(`${url}/unmapped`)
+      .query({ field: 'sets.exercise', limit: '20', offset: '40' })
+    expect(page.status).toBe(200)
+    expect(identities.listUnmappedItemValues).toHaveBeenLastCalledWith(
+      'tester',
+      'strength_training',
+      'sets.exercise',
+      { limit: 20, offset: 40 },
+    )
+    const tooMany = await supertest(buildApp())
+      .get(`${url}/unmapped`)
+      .query({ field: 'sets.exercise', limit: 201 })
+    expect(tooMany.status).toBe(400)
   })
 })

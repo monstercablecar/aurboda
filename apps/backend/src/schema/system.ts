@@ -79,6 +79,11 @@ export const systemTables: Record<string, string> = {
     )
   `,
 
+  // The first refusal of the stored credential; updated_at moves with each daily retry.
+  oauth_tokens_refused_at: `
+    ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS refused_at TIMESTAMPTZ
+  `,
+
   // Outbound sync queue - tracks changes to push to Health Connect
   outbound_sync_queue: `
     CREATE TABLE IF NOT EXISTS outbound_sync_queue (

@@ -4,6 +4,9 @@ import {
   type AddReportBody,
   addReportBodySchema,
   type DeleteReportResponse,
+  type ImportReportsBody,
+  importReportsBodySchema,
+  type ImportReportsResponse,
   type ReportResponse,
   type ReportsQuery,
   reportsQuerySchema,
@@ -13,7 +16,15 @@ import {
   type UpdateReportResponse,
 } from '@aurboda/api-spec'
 
-import { addReport, deleteReportById, getReport, queryReports, updateReport } from '../services/reports.ts'
+import { importReports } from '../services/report-import.ts'
+import {
+  addReport,
+  deleteReportById,
+  getReport,
+  queryReports,
+  REPORT_NOT_FOUND,
+  updateReport,
+} from '../services/reports.ts'
 import { type TypedRouter, typedRouter } from '../typed-router.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
@@ -29,6 +40,17 @@ export const createReportsRouter = (authMiddleware: RequestHandler): TypedRouter
       const user = req.user!
 
       const result = await queryReports(user, { end, report_type, start })
+      res.json({ data: result.data, success: true })
+    },
+  )
+
+  router.post<Record<string, never>, ImportReportsResponse, ImportReportsBody>(
+    '/import',
+    authMiddleware,
+    validateBody(importReportsBodySchema),
+    async (req, res) => {
+      const result = await importReports(req.user!, req.body)
+      if ('error' in result) return res.status(400).json({ error: result.error, success: false })
       res.json({ data: result.data, success: true })
     },
   )
@@ -86,7 +108,9 @@ export const createReportsRouter = (authMiddleware: RequestHandler): TypedRouter
       })
 
       if (!result.success) {
-        return res.status(404).json({ error: result.error, success: false })
+        return res
+          .status(result.error === REPORT_NOT_FOUND ? 404 : 400)
+          .json({ error: result.error, success: false })
       }
 
       res.json({ data: result.data, success: true })

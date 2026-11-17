@@ -11,6 +11,7 @@ import { useState } from 'preact/hooks'
 
 import { HrAxisLabel, HrBoxPlot } from '../../components/sessions/HrBoxPlot'
 import { HrZoneStrip } from '../../components/sessions/HrZoneStrip'
+import { SessionGroupPicker } from '../../components/sessions/SessionGroupPicker'
 import { SessionsTable } from '../../components/sessions/SessionsTable'
 import {
   fieldLabel,
@@ -19,9 +20,11 @@ import {
   groupHardMinutes,
   type GroupSortKey,
   hrDomain,
+  sessionGroupings,
   sortGroups,
 } from '../../components/sessions/sessionView'
 import { fetchActivitySessions } from '../../state/api'
+import { sessionScatterHref } from '../../utils/chart-url'
 
 const LOOKBACK_OPTIONS = [
   { label: '90 days', value: 90 },
@@ -196,27 +199,20 @@ const SessionsControls = ({
   onView,
   lookback,
   onLookback,
+  scatterHref,
 }: {
   fields: DataFieldDefinition[]
   view: string
   onView: (view: string) => void
   lookback: number
   onLookback: (days: number) => void
+  scatterHref: string
 }) => (
   <div class="sessions-controls">
-    {fields.length > 0 && (
-      <label class="sessions-control">
-        View
-        <select value={view} onChange={(e) => onView((e.target as HTMLSelectElement).value)}>
-          {fields.map((f) => (
-            <option key={f.name} value={f.name}>
-              By {fieldLabel(f).toLowerCase()}
-            </option>
-          ))}
-          <option value={LIST_VIEW}>All sessions</option>
-        </select>
-      </label>
-    )}
+    <label class="sessions-control">
+      View
+      <SessionGroupPicker fields={fields} value={view} onChange={onView} noneLabel="All sessions" />
+    </label>
     <select
       aria-label="Period"
       value={lookback}
@@ -228,18 +224,22 @@ const SessionsControls = ({
         </option>
       ))}
     </select>
+    <a class="sessions-scatter-link" href={scatterHref}>
+      Plot sessions
+    </a>
   </div>
 )
 
 /**
  * The type's sessions with their length and heart rate: grouped by a categorical data field (a
- * catalog to pick the next session from), or as one list.
+ * catalog to pick the next session from) or by place, or as one list.
  */
 export function SessionsSection({ name, fields }: { name: string; fields: DataFieldDefinition[] }) {
   const [view, setView] = useState<string | undefined>(undefined)
   const [lookback, setLookback] = useState(90)
   const groupByName = view ?? fields[0]?.name ?? LIST_VIEW
-  const groupField = fields.find((f) => f.name === groupByName)
+  const groupings = sessionGroupings(fields)
+  const groupField = groupings.find((f) => f.name === groupByName)
 
   const query = useQuery({
     queryFn: () =>
@@ -256,11 +256,12 @@ export function SessionsSection({ name, fields }: { name: string; fields: DataFi
       <div class="activity-type-meta-section-header sessions-header">
         <h2>Sessions</h2>
         <SessionsControls
-          fields={fields}
+          fields={groupings}
           view={groupByName}
           onView={setView}
           lookback={lookback}
           onLookback={setLookback}
+          scatterHref={sessionScatterHref(name, groupField?.name, lookback)}
         />
       </div>
 
@@ -270,7 +271,7 @@ export function SessionsSection({ name, fields }: { name: string; fields: DataFi
       {fields.length === 0 && (
         <p class="sessions-hint">
           Mark a data field as categorical in the data schema below (e.g. a session name or a run kind) to
-          group sessions by it.
+          group sessions by it, or view them by place.
         </p>
       )}
     </section>

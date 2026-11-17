@@ -69,7 +69,6 @@ The food-library panel tracks the exact ID returned by its own start request and
 
 All edits were made in the current `source` checkout, preserving its existing People relationship-history and other pending work. Cached Node 26.13.0 and pnpm 10.33.4 were used with no dependency installation. Scoped `oxfmt`, web typecheck, focused component/regression tests, and production build were run. The focused tests cover existing families and copy rotation, daily creation/edit/repeat/failure, assessment draft/completion/failure, Work new/edit/failure/current-date behavior, People completion/failure/already-completed correction, FIT navigation/session remount/full/partial/empty/failure, library job matching/dedup/partial/failure, actual session-boundary cleanup, and the Android viewport-unit guard. Web typecheck passed; all 11 focused/regression files passed (83 tests); production build passed in 4.02 seconds with the existing large-chunk advisory. Logs: `/tmp/celebrations-expansion-tests.log` and `/tmp/celebrations-expansion-build.log`. This document does not claim deployment. The parent review handles the full web suite and authorized release.
 
-
 ### Expansion deployed — November 12, 2026
 
 Release `foghouse-celebrations-20261112-02` deployed after user authorization. Full web suite: 175 files / 1,660 tests passed. Browser preview verified all five new families, including mobile layout at 360px. The reviewed manifest changes were the 15 implementation/test source files above plus regenerated local build output; no backend/schema change was introduced.

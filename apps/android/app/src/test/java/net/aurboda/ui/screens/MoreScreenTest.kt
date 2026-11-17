@@ -78,4 +78,9 @@ class MoreScreenTest {
             embeddedPageUrl("https://example.com", (treatments.destination as MoreDestination.Web).path),
         )
     }
+
+    @Test
+    fun `notifications open first`() {
+        assertEquals("/notifications", (moreGroups.first().items.first().destination as MoreDestination.Web).path)
+    }
 }

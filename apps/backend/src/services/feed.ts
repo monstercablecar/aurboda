@@ -17,7 +17,7 @@
  * post) means a later edit to the underlying activities stays reflected, per the
  * repo's "reference by id, resolve at query time" principle.
  */
-import type { FeedPost } from '@aurboda/api-spec'
+import { activityHeadline, type FeedPost } from '@aurboda/api-spec'
 
 import type {
   Activity,
@@ -32,13 +32,14 @@ import {
   countFeedPostReactions,
   countTimelineRepliesTo,
   getActivityById,
+  getFeedPostById,
   listFeedPosts,
 } from '../db/index.ts'
 import { renderDashboardShareHtml } from './activitypub/dashboard-object.ts'
 import { renderExerciseShareHtml } from './activitypub/exercise-object.ts'
 import { resolveActivityScalars } from './activitypub/feed-activity.ts'
 import { type HashtagLinks, hashtagLinks, linkifyHashtags } from './activitypub/hashtag-html.ts'
-import { activityHeadline, feedPostContent, formatActivityWindow } from './activitypub/object.ts'
+import { feedPostContent, formatActivityWindow } from './activitypub/object.ts'
 import {
   formatExerciseLine,
   resolvePostExercises,
@@ -56,6 +57,7 @@ import { decodeKeysetCursor, encodeKeysetCursor } from './keyset-cursor.ts'
 import { activityKindTag, autoPostTags, computePostTags } from './post-tags.ts'
 import { resolveActivityWindow } from './queries/index.ts'
 import { getSettings, getUserTimezone } from './settings.ts'
+import { DEFAULT_TAG_ACTOR_HOST } from './tag-actor-host.ts'
 import { withReplyCounts } from './timeline-replies.ts'
 
 export interface SerializeFeedPostOpts {
@@ -361,7 +363,11 @@ export type FeedPostsFetcher = (
 ) => Promise<FeedPostPageRow[]>
 
 /** Batched like/boost tallies for a page of posts — the second DB dependency of `getFeedPage`. */
-export type FeedReactionCountsFetcher = (user: string, postIds: string[]) => Promise<FeedPostReactionCount[]>
+export type FeedReactionCountsFetcher = (
+  user: string,
+  postIds: string[],
+  hideBoostsFromHost: string,
+) => Promise<FeedPostReactionCount[]>
 
 /** Batched reply tallies for a page of posts, keyed by each post's object URI. */
 export type FeedReplyCountsFetcher = (user: string, objectUris: string[]) => Promise<TimelineReplyCount[]>
@@ -372,6 +378,8 @@ export interface FeedPageOpts extends SerializeFeedPostOpts {
    * URI (one grouped query per page); absent, the page carries no reply counts.
    */
   origin?: string
+  /** Boosts by accounts on this host are left out of `boost_count`; absent, the default tag actor host. */
+  tagActorHost?: string
 }
 
 /**
@@ -383,11 +391,13 @@ const withReactionCounts = async (
   user: string,
   posts: FeedPost[],
   fetchCounts: FeedReactionCountsFetcher,
+  tagActorHost: string,
 ): Promise<FeedPost[]> => {
   if (posts.length === 0) return posts
   const rows = await fetchCounts(
     user,
     posts.map((post) => post.id),
+    tagActorHost,
   ).catch(() => [])
   const tally = new Map<string, number>()
   for (const row of rows) tally.set(`${row.kind}:${row.post_id}`, row.count)
@@ -422,15 +432,46 @@ export const getFeedPage = async (
   const hasMore = rows.length > limit
   const page = hasMore ? rows.slice(0, limit) : rows
   const last = page[page.length - 1]
-  const posts = await Promise.all(
-    page.map((record) => serializeFeedPost(user, record, { ...opts, webHost: opts.webHost ?? opts.origin })),
-  )
-  const counted = await withReactionCounts(user, posts, fetchReactionCounts)
   return {
     next_cursor: hasMore && last ? encodeKeysetCursor(last.cursor_ts, last.id) : null,
-    posts:
-      opts.origin == null ? counted : await withReplyCounts(user, opts.origin, counted, fetchReplyCounts),
+    posts: await serializeCountedFeedPosts(user, page, opts, fetchReactionCounts, fetchReplyCounts),
   }
+}
+
+const serializeCountedFeedPosts = async (
+  user: string,
+  records: FeedPostRecord[],
+  opts: FeedPageOpts,
+  fetchReactionCounts: FeedReactionCountsFetcher,
+  fetchReplyCounts: FeedReplyCountsFetcher,
+): Promise<FeedPost[]> => {
+  const posts = await Promise.all(
+    records.map((record) =>
+      serializeFeedPost(user, record, { ...opts, webHost: opts.webHost ?? opts.origin }),
+    ),
+  )
+  const counted = await withReactionCounts(
+    user,
+    posts,
+    fetchReactionCounts,
+    opts.tagActorHost ?? DEFAULT_TAG_ACTOR_HOST,
+  )
+  return opts.origin == null ? counted : withReplyCounts(user, opts.origin, counted, fetchReplyCounts)
+}
+
+/** One of the user's own posts, at any visibility, as `getFeedPage` lists it; null when there is none. */
+export const getOwnFeedPost = async (
+  user: string,
+  postId: string,
+  opts: FeedPageOpts = {},
+  fetchPost: (user: string, postId: string) => Promise<FeedPostRecord | null> = getFeedPostById,
+  fetchReactionCounts: FeedReactionCountsFetcher = countFeedPostReactions,
+  fetchReplyCounts: FeedReplyCountsFetcher = countTimelineRepliesTo,
+): Promise<FeedPost | null> => {
+  const record = await fetchPost(user, postId)
+  if (record == null) return null
+  const [post] = await serializeCountedFeedPosts(user, [record], opts, fetchReactionCounts, fetchReplyCounts)
+  return post ?? null
 }
 
 /**

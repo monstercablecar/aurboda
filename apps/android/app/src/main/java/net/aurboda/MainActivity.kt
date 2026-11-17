@@ -55,24 +55,16 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import net.aurboda.ui.screens.embeddedPageUrl
 import net.aurboda.ui.theme.AurbodaAppTheme
-import net.aurboda.update.DownloadState
-import net.aurboda.update.UpdateAvailableDialog
-import net.aurboda.update.UpdateCheckResult
-import net.aurboda.update.UpdateDownloadingDialog
-import net.aurboda.update.UpdateErrorDialog
-import net.aurboda.update.UpdateReadyToInstallDialog
-import net.aurboda.update.VersionInfo
-import net.aurboda.update.checkForUpdate
-import net.aurboda.update.downloadUpdate
-import net.aurboda.update.getExistingDownloadState
-import net.aurboda.update.installApk
+import net.aurboda.update.SelfUpdate
 import net.aurboda.widget.challengeWidgetUrls
 import net.aurboda.writableRecordTypes
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -150,6 +142,9 @@ class MainActivity : ComponentActivity() {
 
     /** With [EXTRA_OPEN_TAB] = [TAB_MORE], the More web page to open (e.g. "/goals"). */
     const val EXTRA_MORE_PATH = "more_path"
+
+    /** The server id of the central notification whose tap opened the app; marked read on arrival. */
+    const val EXTRA_NOTIFICATION_ID = "notification_id"
   }
 
   /**
@@ -165,7 +160,19 @@ class MainActivity : ComponentActivity() {
   // is already open — where they navigate the running app to the same place.
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    if (takeOidcCallback(intent) && !isTaskRoot) {
+      // The browser started this instance on top of its Custom Tab, which sits on the running
+      // activity (singleTop only reuses the top one). Hand over to that activity, whose login
+      // screen holds the pending sign-in, and close the tab and this copy.
+      startActivity(
+        Intent(this, MainActivity::class.java)
+          .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+      )
+      finish()
+      return
+    }
     val link = deepLinkFrom(intent)
+    markTappedNotificationRead(intent)
     setContent {
       AurbodaAppShell {
         AutoEnablePostNotifications()
@@ -177,7 +184,37 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    if (takeOidcCallback(intent)) return
     deepLinkFrom(intent)?.let { runningDeepLink = DeepLinkEvent(++deepLinkSeq, it) }
+    markTappedNotificationRead(intent)
+  }
+
+  private fun markTappedNotificationRead(intent: Intent?) {
+    if (intent == null) return
+    val id = intent.getStringExtra(EXTRA_NOTIFICATION_ID) ?: return
+    intent.removeExtra(EXTRA_NOTIFICATION_ID)
+    if (!isValidNotificationId(id)) return
+    val credentials = CredentialsManager.getCredentials(this) ?: return
+    lifecycleScope.launch(Dispatchers.IO) {
+      val client = syncHttpClient()
+      try {
+        markNotificationRead(client, credentials.apiUrl, credentials.authToken, id)
+      } finally {
+        client.close()
+      }
+    }
+  }
+
+  /**
+   * Routes a `net.aurboda.oidc://callback` intent to the login screen through [OidcLogin], and
+   * clears the intent's data so a rotation does not replay it. False for any other intent.
+   */
+  private fun takeOidcCallback(intent: Intent?): Boolean {
+    val uri = intent?.data ?: return false
+    if (!isOidcCallbackUri(uri)) return false
+    intent.data = null
+    OidcLogin.deliver(parseOidcCallback(uri) ?: OidcCallback.Failure("failed"))
+    return true
   }
 
   private fun deepLinkFrom(intent: Intent?): DeepLink? =
@@ -221,9 +258,6 @@ fun AurbodaAppShell(
   }
 }
 
-/** Update channel baked in at build time: stable (main) or beta (develop), see build.gradle.kts. */
-private const val VERSION_JSON_URL = BuildConfig.VERSION_JSON_URL
-
 @Suppress("ASSIGNED_VALUE_IS_NEVER_READ") // Compose state vars trigger false "assigned but never read" warnings
 @Composable
 fun AurbodaApp(
@@ -250,104 +284,17 @@ fun AurbodaApp(
     DisposableEffect(lifecycleOwner) {
       val observer =
         LifecycleEventObserver { _, event ->
-          if (event == Lifecycle.Event.ON_RESUME) scope.launch { verifyStoredToken(context, ktorHttpClient) }
+          if (event == Lifecycle.Event.ON_RESUME) {
+            scope.launch { verifyStoredToken(context, ktorHttpClient) }
+            scope.launch { appState.refreshUnreadNotifications(ktorHttpClient) }
+          }
         }
       lifecycleOwner.lifecycle.addObserver(observer)
       onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
   }
 
-  var updateAvailable by remember { mutableStateOf<VersionInfo?>(null) }
-  var showUpdateDialog by remember { mutableStateOf(false) }
-  var showDownloadingDialog by remember { mutableStateOf(false) }
-  var showInstallDialog by remember { mutableStateOf(false) }
-  var downloadedApkFile by remember { mutableStateOf<File?>(null) }
-  var updateError by remember { mutableStateOf<String?>(null) }
-
-  LaunchedEffect(Unit) {
-    val currentVersionCode = BuildConfig.VERSION_CODE_INT
-    Log.d("UpdateChecker", "Checking for updates. Current version code: $currentVersionCode")
-    when (val result = checkForUpdate(ktorHttpClient, VERSION_JSON_URL, currentVersionCode)) {
-      is UpdateCheckResult.UpdateAvailable -> {
-        Log.d("UpdateChecker", "Update available: ${result.versionInfo.versionName}")
-        updateAvailable = result.versionInfo
-
-        when (val downloadState = getExistingDownloadState(context, result.versionInfo.versionName)) {
-          is DownloadState.Downloaded -> {
-            Log.d("UpdateChecker", "APK already downloaded: ${downloadState.apkFile.name}")
-            downloadedApkFile = downloadState.apkFile
-            showInstallDialog = true
-          }
-          is DownloadState.InProgress -> {
-            Log.d("UpdateChecker", "Download already in progress")
-            showDownloadingDialog = true
-          }
-          is DownloadState.None -> {
-            showUpdateDialog = true
-          }
-        }
-      }
-      is UpdateCheckResult.NoUpdate -> {
-        Log.d("UpdateChecker", "No update available")
-      }
-      is UpdateCheckResult.Error -> {
-        Log.w("UpdateChecker", "Error checking for updates: ${result.message}")
-      }
-    }
-  }
-
-  if (showUpdateDialog && updateAvailable != null) {
-    UpdateAvailableDialog(
-      versionInfo = updateAvailable!!,
-      onUpdate = {
-        showUpdateDialog = false
-        showDownloadingDialog = true
-        downloadUpdate(
-          context = context,
-          downloadUrl = updateAvailable!!.downloadUrl,
-          versionName = updateAvailable!!.versionName,
-          onDownloadComplete = { apkFile ->
-            scope.launch {
-              showDownloadingDialog = false
-              downloadedApkFile = apkFile
-              showInstallDialog = true
-            }
-          },
-          onDownloadFailed = { error ->
-            scope.launch {
-              showDownloadingDialog = false
-              updateError = error
-            }
-          },
-        )
-      },
-      onDismiss = { showUpdateDialog = false },
-    )
-  }
-
-  if (showInstallDialog && updateAvailable != null && downloadedApkFile != null) {
-    UpdateReadyToInstallDialog(
-      versionInfo = updateAvailable!!,
-      onInstall = {
-        showInstallDialog = false
-        installApk(context, downloadedApkFile!!)
-      },
-      onDismiss = { showInstallDialog = false },
-    )
-  }
-
-  if (showDownloadingDialog) {
-    UpdateDownloadingDialog(
-      onDismiss = { showDownloadingDialog = false },
-    )
-  }
-
-  updateError?.let { error ->
-    UpdateErrorDialog(
-      errorMessage = error,
-      onDismiss = { updateError = null },
-    )
-  }
+  SelfUpdate(ktorHttpClient)
 
   when (appState.currentScreen) {
     AppScreen.Login -> {
@@ -366,11 +313,15 @@ fun AurbodaApp(
       if (credentials != null) {
         net.aurboda.ui.screens.MainScreen(
           currentTab = appState.currentTab,
-          onTabSelected = { appState.selectTab(it) },
+          onTabSelected = { tab ->
+            appState.selectTab(tab)
+            if (tab == MainTab.More) scope.launch { appState.refreshUnreadNotifications(ktorHttpClient) }
+          },
+          unreadNotifications = appState.unreadNotifications,
           homeContent = { modifier ->
             key(appState.tabReselections) {
               net.aurboda.ui.screens.EmbeddedWebScreen(
-                url = "${credentials.serverUrl.trimEnd('/')}/?embed=1",
+                url = embeddedPageUrl(credentials.serverUrl, "/"),
                 baseUrl = credentials.serverUrl,
                 username = credentials.username,
                 authToken = credentials.authToken,
@@ -390,12 +341,16 @@ fun AurbodaApp(
               apiUrl = credentials.apiUrl,
               authToken = credentials.authToken,
               modifier = modifier,
+              onOpenWebPage = { path ->
+                appState.selectTab(MainTab.More)
+                appState.openMoreDestination(MoreDestination.Web(path))
+              },
             )
           },
           feedContent = { modifier ->
             key(appState.tabReselections) {
               net.aurboda.ui.screens.EmbeddedWebScreen(
-                url = "${credentials.serverUrl.trimEnd('/')}/feed?embed=1",
+                url = embeddedPageUrl(credentials.serverUrl, "/feed"),
                 baseUrl = credentials.serverUrl,
                 username = credentials.username,
                 authToken = credentials.authToken,
@@ -408,7 +363,13 @@ fun AurbodaApp(
               credentials = credentials,
               destination = appState.moreDestination,
               onSelect = { destination -> appState.openMoreDestination(destination) },
-              onBack = { appState.closeMoreDestination() },
+              onBack = {
+                appState.closeMoreDestination()
+                scope.launch { appState.refreshUnreadNotifications(ktorHttpClient) }
+              },
+              onOpenWebPage = { path -> appState.openMoreDestination(MoreDestination.Web(path)) },
+              unreadNotifications = appState.unreadNotifications,
+              webPageLinks = appState.morePageLinks,
               onServerUrlChange = { newUrl -> appState.changeServerUrl(newUrl) },
               onLogout = { appState.logout() },
               modifier = modifier,

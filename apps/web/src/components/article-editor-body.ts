@@ -4,7 +4,7 @@
  * `buildShareBody`).
  */
 import type {
-  ActivityImpactType,
+  ArticleImpactType,
   ArticleBlock,
   ArticleContent,
   ArticleDraftBlock,
@@ -19,7 +19,7 @@ import type {
   UpdateArticleDraftBody,
 } from '@aurboda/api-spec'
 
-import { DEFAULT_IMPACT_WINDOW_MINUTES, isValidMetric } from '@aurboda/api-spec'
+import { DEFAULT_IMPACT_WINDOW_MINUTES, isCompleteArticleBlock, isValidMetric } from '@aurboda/api-spec'
 
 import { stillUploading } from './MarkdownEditor/image-upload'
 
@@ -60,7 +60,7 @@ export interface ImpactDraft {
   type: 'impact'
   /** The grouping key ('' = not chosen yet). */
   activity: string
-  activityType: ActivityImpactType
+  activityType: ArticleImpactType
   windowMinutes: number
   /** `datetime-local` value ('' = inherit the article default window). */
   start: string
@@ -83,7 +83,7 @@ export interface ImpactOption {
   /** Encodes both the type and the name, so one `<select>` value picks the pair. */
   value: string
   activity: string
-  activityType: ActivityImpactType
+  activityType: ArticleImpactType
 }
 
 export interface ImpactOptionGroup {
@@ -91,7 +91,7 @@ export interface ImpactOptionGroup {
   options: ImpactOption[]
 }
 
-const impactOption = (activityType: ActivityImpactType, activity: string): ImpactOption => ({
+const impactOption = (activityType: ArticleImpactType, activity: string): ImpactOption => ({
   activity,
   activityType,
   value: `${activityType}\u0000${activity}`,
@@ -100,10 +100,10 @@ const impactOption = (activityType: ActivityImpactType, activity: string): Impac
 /** A picked option's value back to its pair, or null for the empty pick. */
 export const parseImpactOptionValue = (
   value: string,
-): { activity: string; activityType: ActivityImpactType } | null => {
+): { activity: string; activityType: ArticleImpactType } | null => {
   const at = value.indexOf('\u0000')
   if (at < 0) return null
-  return { activity: value.slice(at + 1), activityType: value.slice(0, at) as ActivityImpactType }
+  return { activity: value.slice(at + 1), activityType: value.slice(0, at) as ArticleImpactType }
 }
 
 /**
@@ -120,7 +120,7 @@ export const impactPickerOptions = (
         productivity: Pick<HrvActivitiesData['correlations']['productivity'][number], 'category'>[]
       }
     | undefined,
-  selected: { activity: string; activityType: ActivityImpactType },
+  selected: { activity: string; activityType: ArticleImpactType },
 ): { groups: ImpactOptionGroup[]; extra: ImpactOption | null } => {
   const groups: ImpactOptionGroup[] = [
     {
@@ -179,7 +179,13 @@ export const emptyCorrelationDraft = (): CorrelationDraft => ({
 })
 
 const selectorIncomplete = (s: CorrelationSelector): boolean =>
-  s.kind === 'metric' ? !s.metric.trim() : s.kind === 'nutrition' ? false : !s.pattern.trim()
+  s.kind === 'metric'
+    ? !s.metric.trim()
+    : s.kind === 'nutrition'
+      ? false
+      : s.kind === 'sensitivity'
+        ? !s.flag.trim()
+        : !s.pattern.trim()
 
 export interface ArticleEditorState {
   title: string
@@ -318,56 +324,14 @@ export const buildDraftContent = (state: ArticleEditorState): ArticleDraftConten
   ...(state.tags ? { tags: state.tags } : {}),
 })
 
-const hasBoundedWindow = (block: { start?: string; end?: string }, content: ArticleDraftContent): boolean => {
-  const start = block.start ?? content.default_start
-  const end = block.end ?? content.default_end
-  return start !== undefined && end !== undefined && new Date(start).getTime() < new Date(end).getTime()
-}
-
-/** An http(s) `<base>/u/<username>/<slug>` link, as the server's challenge-URL parse requires. */
-const isChallengeUrl = (url: string | undefined): boolean => {
-  if (url === undefined || !URL.canParse(url)) return false
-  const { protocol } = new URL(url)
-  const at = url.indexOf('/u/')
-  return (
-    (protocol === 'http:' || protocol === 'https:') &&
-    at > 0 &&
-    url
-      .slice(at + 3)
-      .split('/')
-      .filter(Boolean).length >= 2
-  )
-}
-
-const isCompleteBlock = (block: ArticleDraftBlock, content: ArticleDraftContent): block is ArticleBlock => {
-  switch (block.type) {
-    case 'prose':
-      return true
-    case 'challenge':
-      return isChallengeUrl(block.challenge_url)
-    case 'chart':
-      return block.metric !== undefined && hasBoundedWindow(block, content)
-    case 'correlation':
-      return (
-        block.trigger !== undefined &&
-        block.outcome !== undefined &&
-        !selectorIncomplete(block.trigger) &&
-        !selectorIncomplete(block.outcome) &&
-        hasBoundedWindow(block, content)
-      )
-    case 'impact':
-      return Boolean(block.activity) && hasBoundedWindow(block, content)
-  }
-}
-
 /**
- * The editor state as the article a preview card shows: its complete blocks only (the server's
- * preview rule), windows as ISO, the title trimmed or `Untitled`.
+ * The editor state as the article a preview card shows: its complete blocks only (by
+ * `isCompleteArticleBlock`, the server's preview rule), windows as ISO, the title trimmed or `Untitled`.
  */
 export const buildPreviewArticle = (state: ArticleEditorState): ArticleContent => {
   const content = buildDraftContent(state)
   return {
-    blocks: content.blocks.filter((block) => isCompleteBlock(block, content)),
+    blocks: content.blocks.filter((block) => isCompleteArticleBlock(block, content)),
     title: content.title || 'Untitled',
     ...(content.default_start ? { default_start: content.default_start } : {}),
     ...(content.default_end ? { default_end: content.default_end } : {}),
@@ -397,11 +361,11 @@ export const draftUpdateBody = (state: ArticleEditorState): UpdateArticleDraftBo
   }
 }
 
-/** A comparable fingerprint of what saving a draft would store, to tell whether there are unsaved changes. */
 /** True while any prose block still holds a picture placeholder, so nothing saves it. */
 export const blocksStillUploading = (blocks: readonly BlockDraft[]): boolean =>
   blocks.some((block) => block.type === 'prose' && stillUploading(block.markdown))
 
+/** A comparable fingerprint of what saving a draft would store, to tell whether there are unsaved changes. */
 export const draftSnapshot = (state: ArticleEditorState): string =>
   JSON.stringify({ article: buildDraftContent(state), visibility: state.visibility })
 

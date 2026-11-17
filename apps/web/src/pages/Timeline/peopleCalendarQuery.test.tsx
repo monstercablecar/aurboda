@@ -57,6 +57,7 @@ function TimelineDataView({ end = '2030-01-02T00:00:00Z' }: { end?: string }) {
     mergeGapMs: 0,
     splitAbutting: false,
     collapseDepth: 0,
+    dailyTracksShown: false,
   })
   return (
     <div>

@@ -6,11 +6,19 @@ import { useEffect, useRef } from 'preact/hooks'
 
 import type { BaselineData } from '../../state/api'
 
+import {
+  extraMetricColor,
+  type ImpactAxisSide,
+  impactAxisSides,
+  IMPACT_METRICS,
+  type ImpactExtra,
+  type ImpactMetric,
+} from './impactMetrics'
 import './ImpactFigure.css'
 
-type ChartGroup = d3.Selection<SVGGElement, unknown, null, undefined>
+export type ChartGroup = d3.Selection<SVGGElement, unknown, null, undefined>
 
-const paddedDomain = (values: (number | null)[]): [number, number] => {
+export const paddedDomain = (values: (number | null)[]): [number, number] => {
   const present = values.filter((d): d is number => d !== null)
   if (present.length === 0) return [0, 100]
   const [lo, hi] = d3.extent(present) as [number, number]
@@ -18,39 +26,45 @@ const paddedDomain = (values: (number | null)[]): [number, number] => {
   return [lo - padding, hi + padding]
 }
 
-const drawHrvAxis = (g: ChartGroup, y: d3.ScaleLinear<number, number>) => {
-  g.append('g').call(d3.axisLeft(y).ticks(4)).selectAll('text').attr('fill', '#10b981')
+const OUTER_AXIS_WIDTH = 45
 
-  g.append('text')
-    .attr('x', 10)
-    .attr('y', -10)
-    .attr('fill', '#10b981')
-    .attr('font-size', '12px')
-    .text('HRV (ms)')
+const AXES: Record<ImpactMetric, { color: string; label: string }> = {
+  hr: { color: '#ef4444', label: 'HR (bpm)' },
+  hrv: { color: '#10b981', label: 'HRV (ms)' },
+  stress: { color: '#f59e0b', label: 'Stress' },
 }
 
-const drawHrAxis = (g: ChartGroup, y: d3.ScaleLinear<number, number>, innerWidth: number) => {
+const drawAxis = (
+  g: ChartGroup,
+  y: d3.ScaleLinear<number, number>,
+  metric: ImpactMetric,
+  side: ImpactAxisSide,
+  innerWidth: number,
+) => {
+  const { color, label } = AXES[metric]
+  const at = side === 'left' ? 0 : side === 'right' ? innerWidth : innerWidth + OUTER_AXIS_WIDTH
   g.append('g')
-    .attr('transform', `translate(${innerWidth},0)`)
-    .call(d3.axisRight(y).ticks(4))
+    .attr('transform', `translate(${at},0)`)
+    .call(side === 'left' ? d3.axisLeft(y).ticks(4) : d3.axisRight(y).ticks(4))
     .selectAll('text')
-    .attr('fill', '#ef4444')
+    .attr('fill', color)
 
   g.append('text')
-    .attr('x', innerWidth - 10)
+    .attr('x', side === 'left' ? 10 : side === 'right' ? innerWidth - 10 : at + OUTER_AXIS_WIDTH - 5)
     .attr('y', -10)
-    .attr('text-anchor', 'end')
-    .attr('fill', '#ef4444')
+    .attr('text-anchor', side === 'left' ? 'start' : 'end')
+    .attr('fill', color)
     .attr('font-size', '12px')
-    .text('HR (bpm)')
+    .text(label)
 }
 
-const drawSeries = (
+export const drawSeries = (
   g: ChartGroup,
   values: (number | null)[],
   x: d3.ScalePoint<number>,
   y: d3.ScaleLinear<number, number>,
   color: string,
+  strokeWidth = 2,
 ) => {
   const line = d3
     .line<number | null>()
@@ -63,7 +77,7 @@ const drawSeries = (
     .datum(values)
     .attr('fill', 'none')
     .attr('stroke', color)
-    .attr('stroke-width', 2)
+    .attr('stroke-width', strokeWidth)
     .attr('d', line)
 
   values.forEach((d, i) => {
@@ -79,14 +93,22 @@ const drawSeries = (
   })
 }
 
-/** HRV, heart rate and stress per bucket around the sessions, each on its own scale; the HRV baseline when given. */
+const NO_EXTRAS: readonly ImpactExtra[] = []
+
+/** HRV, heart rate, stress and any extras per bucket around the sessions, each on its own scale; the HRV baseline when given. */
 export function ImpactTimelineChart({
   timeline,
   baseline,
+  metrics = IMPACT_METRICS,
+  extras = NO_EXTRAS,
 }: {
   timeline: ImpactBucket[]
   baseline?: BaselineData | null
+  metrics?: readonly ImpactMetric[]
+  extras?: readonly ImpactExtra[]
 }) {
+  // The effect depends on extras through this key: callers rebuild the array on every render.
+  const extrasKey = extras.map((e) => e.metric).join(',')
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -98,17 +120,26 @@ export function ImpactTimelineChart({
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    const margin = { bottom: 40, left: 50, right: 50, top: 30 }
-    const width = containerWidth
-    const innerWidth = width - margin.left - margin.right
-    const innerHeight = height - margin.top - margin.bottom
-
     const labels = timeline.map(impactBucketLabel)
     const duringIndex = timeline.findIndex((b) => b.phase === 'during')
 
-    const hrvData = timeline.map((b) => b.hrv.mean)
-    const hrData = timeline.map((b) => b.hr.mean)
-    const stressData = timeline.map((b) => b.stress.mean)
+    const series: Record<ImpactMetric, (number | null)[]> = {
+      hr: timeline.map((b) => b.hr.mean),
+      hrv: timeline.map((b) => b.hrv.mean),
+      stress: timeline.map((b) => b.stress.mean),
+    }
+    const drawn = IMPACT_METRICS.filter((m) => metrics.includes(m) && series[m].some((d) => d !== null))
+    const sides = impactAxisSides(drawn)
+
+    const margin = {
+      bottom: 40,
+      left: 50,
+      right: sides.stress === 'outer-right' ? 50 + OUTER_AXIS_WIDTH : 50,
+      top: 30,
+    }
+    const width = containerWidth
+    const innerWidth = width - margin.left - margin.right
+    const innerHeight = height - margin.top - margin.bottom
 
     const g = svg
       .attr('width', width)
@@ -121,30 +152,34 @@ export function ImpactTimelineChart({
       .domain(timeline.map((_, i) => i))
       .range([0, innerWidth])
 
-    const hasHrv = hrvData.some((d) => d !== null)
-    const hasHr = hrData.some((d) => d !== null)
-    const hasStress = stressData.some((d) => d !== null)
-
-    const yHrv = d3.scaleLinear().domain(paddedDomain(hrvData)).range([innerHeight, 0])
-    const yHr = d3.scaleLinear().domain(paddedDomain(hrData)).range([innerHeight, 0])
-    const yStress = d3.scaleLinear().domain(paddedDomain(stressData)).range([innerHeight, 0])
+    const scale = (metric: ImpactMetric) =>
+      d3.scaleLinear().domain(paddedDomain(series[metric])).range([innerHeight, 0])
+    const scales: Record<ImpactMetric, d3.ScaleLinear<number, number>> = {
+      hr: scale('hr'),
+      hrv: scale('hrv'),
+      stress: scale('stress'),
+    }
 
     const hrvBaseline = baseline?.hrv.avg30day
-    if (hasHrv && hrvBaseline != null) {
+    if (drawn.includes('hrv') && hrvBaseline != null) {
       g.append('line')
         .attr('x1', 0)
-        .attr('y1', yHrv(hrvBaseline))
+        .attr('y1', scales.hrv(hrvBaseline))
         .attr('x2', innerWidth)
-        .attr('y2', yHrv(hrvBaseline))
-        .attr('stroke', '#10b981')
+        .attr('y2', scales.hrv(hrvBaseline))
+        .attr('stroke', AXES.hrv.color)
         .attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,4')
         .attr('opacity', 0.5)
     }
 
-    drawSeries(g, hrvData, x, yHrv, '#10b981')
-    drawSeries(g, hrData, x, yHr, '#ef4444')
-    if (hasStress) drawSeries(g, stressData, x, yStress, '#f59e0b')
+    for (const metric of drawn) drawSeries(g, series[metric], x, scales[metric], AXES[metric].color)
+    extras.forEach(({ metric }, i) => {
+      const values = timeline.map((b) => b.metrics?.[metric]?.mean ?? null)
+      if (!values.some((d) => d !== null)) return
+      const y = d3.scaleLinear().domain(paddedDomain(values)).range([innerHeight, 0])
+      drawSeries(g, values, x, y, extraMetricColor(i))
+    })
 
     if (duringIndex >= 0) {
       const zoneWidth = Math.min(60, x.step())
@@ -163,9 +198,11 @@ export function ImpactTimelineChart({
       .selectAll('text')
       .attr('fill', 'currentColor')
 
-    if (hasHrv) drawHrvAxis(g, yHrv)
-    if (hasHr) drawHrAxis(g, yHr, innerWidth)
-  }, [timeline, baseline])
+    for (const metric of drawn) {
+      const side = sides[metric]
+      if (side) drawAxis(g, scales[metric], metric, side, innerWidth)
+    }
+  }, [timeline, baseline, metrics, extrasKey])
 
   return (
     <div ref={containerRef} class="impact-chart-container">

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { GarminActivityDetailResponse } from './client.ts'
+import type { FitActivity } from './fit.ts'
 import type { GarminProcessDeps } from './process.ts'
 
 import { activityTrackSources } from '../gps-precedence.ts'
@@ -9,6 +10,7 @@ import {
   extractTrackPoints,
   garminSleepLevelsToStages,
   processActivityDetail,
+  processActivityFit,
   processGarminData,
 } from './process.ts'
 
@@ -291,15 +293,78 @@ describe('processGarminData', () => {
       expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
     })
 
-    test('returns 0 for missing calendarDate', async () => {
+    test('returns 0 for missing calendarDate, warning that the payload was not placed', async () => {
       expect(await processGarminData(user, 'hrv', { lastNightAvg: 42 }, mockDeps)).toBe(0)
       expect(mockDeps.insertRawRecord).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.stringContaining('hrv'),
+        expect.objectContaining({ data_type: 'hrv', keys: ['lastNightAvg'] }),
+      )
+    })
+
+    test('keeps a payload it cannot place under the requested date', async () => {
+      const data = { nightlyHrv: { avg: 42 } }
+
+      expect(await processGarminData(user, 'hrv', data, mockDeps, '2025-01-15')).toBe(0)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+        data,
+        external_id: 'garmin-hrv-2025-01-15',
+        record_type: 'garmin_hrv',
+        recorded_at: noonUTC('2025-01-15'),
+        source: 'garmin',
+      })
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.stringContaining('hrv'),
+        expect.objectContaining({ data_type: 'hrv', date: '2025-01-15' }),
+      )
+    })
+
+    test('a night without HRV data is neither stored nor warned about', async () => {
+      const data = { hrvReadings: null, hrvSummary: null }
+
+      expect(await processGarminData(user, 'hrv', data, mockDeps, '2025-01-15')).toBe(0)
+      expect(mockDeps.insertRawRecord).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
     })
 
     test('returns 1 on success', async () => {
       expect(
         await processGarminData(user, 'hrv', { calendarDate: '2025-01-15', lastNightAvg: 42 }, mockDeps),
       ).toBe(1)
+    })
+
+    test("reads Garmin's nested hrvSummary, storing the whole answer and skipping the readings", async () => {
+      const data = {
+        hrvReadings: [{ hrvValue: 50, readingTimeGMT: '2025-01-15T02:00:00.0' }],
+        hrvSummary: { calendarDate: '2025-01-15', lastNightAvg: 47, status: 'BALANCED', weeklyAvg: 45 },
+      }
+
+      expect(await processGarminData(user, 'hrv', data, mockDeps)).toBe(1)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+        data,
+        external_id: 'garmin-hrv-2025-01-15',
+        record_type: 'garmin_hrv',
+        recorded_at: noonUTC('2025-01-15'),
+        source: 'garmin',
+      })
+      expect(mockDeps.insertTimeSeries).toHaveBeenCalledTimes(1)
+      expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
+        { metric: 'hrv_rmssd', source: 'garmin', time: noonUTC('2025-01-15'), unit: 'ms', value: 47 },
+      ])
+    })
+
+    test('a nested summary without lastNightAvg stores the raw record only', async () => {
+      const data = { hrvReadings: null, hrvSummary: { calendarDate: '2025-01-15', lastNightAvg: null } }
+
+      expect(await processGarminData(user, 'hrv', data, mockDeps)).toBe(1)
+      expect(mockDeps.insertRawRecord).toHaveBeenCalled()
+      expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
     })
   })
 
@@ -1196,25 +1261,57 @@ describe('processGarminData', () => {
   })
 
   describe('trainingReadiness', () => {
-    test('inserts raw record with correct fields', async () => {
-      const data = { calendarDate: '2025-01-15', level: 'HIGH', overallScore: 72 }
+    const entry = (overrides: Record<string, unknown> = {}) => ({
+      calendarDate: '2025-01-15',
+      hrvFactorPercent: 90,
+      inputContext: 'AFTER_WAKEUP_RESET',
+      level: 'HIGH',
+      recoveryTime: 120,
+      score: 72,
+      sleepScore: 81,
+      timestamp: '2025-01-15T05:40:00.0',
+      ...overrides,
+    })
 
-      await processGarminData(user, 'trainingReadiness', data, mockDeps)
+    test('stores an array answer as entries and the latest score as training_readiness', async () => {
+      const data = [
+        entry({ score: 64, timestamp: '2025-01-15T05:40:00.0' }),
+        entry({ inputContext: 'UPDATE_REALTIME_VARIABLES', score: 70, timestamp: '2025-01-15T14:10:00.0' }),
+      ]
+
+      expect(await processGarminData(user, 'trainingReadiness', data, mockDeps, '2025-01-15')).toBe(1)
 
       expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
-        data: expect.objectContaining({ calendarDate: '2025-01-15' }),
+        data: { entries: data },
         external_id: 'garmin-tr-2025-01-15',
         record_type: 'garmin_training_readiness',
         recorded_at: noonUTC('2025-01-15'),
         source: 'garmin',
       })
+      expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
+        {
+          metric: 'training_readiness',
+          source: 'garmin',
+          time: noonUTC('2025-01-15'),
+          unit: 'score',
+          value: 70,
+        },
+      ])
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
     })
 
-    test('inserts training_readiness time series point', async () => {
+    test('reads a single object with overallScore', async () => {
       const data = { calendarDate: '2025-01-15', level: 'HIGH', overallScore: 72 }
 
-      await processGarminData(user, 'trainingReadiness', data, mockDeps)
+      expect(await processGarminData(user, 'trainingReadiness', data, mockDeps)).toBe(1)
 
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+        data,
+        external_id: 'garmin-tr-2025-01-15',
+        record_type: 'garmin_training_readiness',
+        recorded_at: noonUTC('2025-01-15'),
+        source: 'garmin',
+      })
       expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
         {
           metric: 'training_readiness',
@@ -1226,47 +1323,95 @@ describe('processGarminData', () => {
       ])
     })
 
-    test('skips time series when overallScore is 0', async () => {
-      const data = { calendarDate: '2025-01-15', level: 'LOW', overallScore: 0 }
+    test('an entry without calendarDate is dated by the requested day', async () => {
+      expect(await processGarminData(user, 'trainingReadiness', { score: 55 }, mockDeps, '2025-01-15')).toBe(
+        1,
+      )
 
-      await processGarminData(user, 'trainingReadiness', data, mockDeps)
-
-      expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
+      expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
+        {
+          metric: 'training_readiness',
+          source: 'garmin',
+          time: noonUTC('2025-01-15'),
+          unit: 'score',
+          value: 55,
+        },
+      ])
     })
 
-    test('skips time series when overallScore is null', async () => {
-      const data = { calendarDate: '2025-01-15', level: 'LOW', overallScore: null }
+    test('skips time series when the score is 0 or null', async () => {
+      await processGarminData(user, 'trainingReadiness', [entry({ score: 0 })], mockDeps)
+      await processGarminData(user, 'trainingReadiness', [entry({ score: null })], mockDeps)
 
-      await processGarminData(user, 'trainingReadiness', data, mockDeps)
-
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledTimes(2)
       expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
     })
 
-    test('returns 0 for missing calendarDate', async () => {
+    test('stores an answer it cannot read before warning about it', async () => {
+      const data = { readiness: { value: 72 } }
+
+      expect(await processGarminData(user, 'trainingReadiness', data, mockDeps, '2025-01-15')).toBe(1)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+        data,
+        external_id: 'garmin-tr-2025-01-15',
+        record_type: 'garmin_training_readiness',
+        recorded_at: noonUTC('2025-01-15'),
+        source: 'garmin',
+      })
+      expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.stringContaining('trainingReadiness'),
+        expect.objectContaining({ data_type: 'trainingReadiness', date: '2025-01-15', keys: ['readiness'] }),
+      )
+    })
+
+    test('an empty answer is stored without a warning', async () => {
+      expect(await processGarminData(user, 'trainingReadiness', [], mockDeps, '2025-01-15')).toBe(1)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(
+        user,
+        expect.objectContaining({ data: { entries: [] }, external_id: 'garmin-tr-2025-01-15' }),
+      )
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
+    })
+
+    test('without any date it returns 0 and warns', async () => {
       expect(await processGarminData(user, 'trainingReadiness', { overallScore: 72 }, mockDeps)).toBe(0)
       expect(mockDeps.insertRawRecord).not.toHaveBeenCalled()
-    })
-
-    test('returns 1 on success', async () => {
-      expect(
-        await processGarminData(
-          user,
-          'trainingReadiness',
-          { calendarDate: '2025-01-15', level: 'HIGH', overallScore: 72 },
-          mockDeps,
-        ),
-      ).toBe(1)
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.any(String),
+        expect.objectContaining({ data_type: 'trainingReadiness' }),
+      )
     })
   })
 
   describe('intensityMinutes', () => {
+    const imPayload = (overrides: Record<string, unknown> = {}) => ({
+      calendarDate: '2025-01-15',
+      endDayMinutes: 95,
+      moderateMinutes: 30,
+      startDayMinutes: 50,
+      vigorousMinutes: 15,
+      weekGoal: 150,
+      weeklyModerate: 60,
+      weeklyTotal: 110,
+      weeklyVigorous: 25,
+      ...overrides,
+    })
+
     test('inserts raw record with correct fields', async () => {
-      const data = { calendarDate: '2025-01-15', moderateIntensityMinutes: 30, vigorousIntensityMinutes: 15 }
+      const data = imPayload()
 
       await processGarminData(user, 'intensityMinutes', data, mockDeps)
 
       expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
-        data: expect.objectContaining({ calendarDate: '2025-01-15' }),
+        data,
         external_id: 'garmin-im-2025-01-15',
         record_type: 'garmin_intensity_minutes',
         recorded_at: noonUTC('2025-01-15'),
@@ -1274,12 +1419,26 @@ describe('processGarminData', () => {
       })
     })
 
-    test('inserts intensity_minutes = moderate + vigorous*2', async () => {
+    test('inserts intensity_minutes = moderate + vigorous*2 from moderateMinutes/vigorousMinutes', async () => {
+      await processGarminData(user, 'intensityMinutes', imPayload(), mockDeps)
+
+      expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
+        {
+          metric: 'intensity_minutes',
+          source: 'garmin',
+          time: noonUTC('2025-01-15'),
+          unit: 'min',
+          value: 60,
+        },
+      ])
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
+    })
+
+    test('still reads the daily summary names the Personal API path maps to', async () => {
       const data = { calendarDate: '2025-01-15', moderateIntensityMinutes: 30, vigorousIntensityMinutes: 15 }
 
       await processGarminData(user, 'intensityMinutes', data, mockDeps)
 
-      // 30 + 15*2 = 60
       expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
         {
           metric: 'intensity_minutes',
@@ -1292,9 +1451,7 @@ describe('processGarminData', () => {
     })
 
     test('handles only moderate minutes', async () => {
-      const data = { calendarDate: '2025-01-15', moderateIntensityMinutes: 45, vigorousIntensityMinutes: 0 }
-
-      await processGarminData(user, 'intensityMinutes', data, mockDeps)
+      await processGarminData(user, 'intensityMinutes', imPayload({ vigorousMinutes: 0 }), mockDeps)
 
       expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
         {
@@ -1302,57 +1459,74 @@ describe('processGarminData', () => {
           source: 'garmin',
           time: noonUTC('2025-01-15'),
           unit: 'min',
-          value: 45,
+          value: 30,
         },
       ])
     })
 
     test('handles only vigorous minutes', async () => {
-      const data = { calendarDate: '2025-01-15', moderateIntensityMinutes: 0, vigorousIntensityMinutes: 20 }
+      await processGarminData(user, 'intensityMinutes', imPayload({ moderateMinutes: null }), mockDeps)
 
-      await processGarminData(user, 'intensityMinutes', data, mockDeps)
-
-      // 0 + 20*2 = 40
       expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
         {
           metric: 'intensity_minutes',
           source: 'garmin',
           time: noonUTC('2025-01-15'),
           unit: 'min',
-          value: 40,
+          value: 30,
         },
       ])
     })
 
     test('skips time series when both are 0', async () => {
-      const data = { calendarDate: '2025-01-15', moderateIntensityMinutes: 0, vigorousIntensityMinutes: 0 }
-
-      await processGarminData(user, 'intensityMinutes', data, mockDeps)
+      await processGarminData(
+        user,
+        'intensityMinutes',
+        imPayload({ moderateMinutes: 0, vigorousMinutes: 0 }),
+        mockDeps,
+      )
 
       expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).not.toHaveBeenCalled()
     })
 
-    test('returns 0 for missing calendarDate', async () => {
-      expect(
-        await processGarminData(
-          user,
-          'intensityMinutes',
-          { moderateIntensityMinutes: 30, vigorousIntensityMinutes: 15 },
-          mockDeps,
-        ),
-      ).toBe(0)
-      expect(mockDeps.insertRawRecord).not.toHaveBeenCalled()
+    test('a payload with none of the minute fields is stored and warned about', async () => {
+      const data = { calendarDate: '2025-01-15', minutes: { moderate: 30 } }
+
+      expect(await processGarminData(user, 'intensityMinutes', data, mockDeps)).toBe(1)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalled()
+      expect(mockDeps.insertTimeSeries).not.toHaveBeenCalled()
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.stringContaining('intensityMinutes'),
+        expect.objectContaining({ data_type: 'intensityMinutes', date: '2025-01-15' }),
+      )
+    })
+
+    test('without calendarDate it is kept under the requested date and warned about', async () => {
+      const data = { moderateMinutes: 30, vigorousMinutes: 15 }
+
+      expect(await processGarminData(user, 'intensityMinutes', data, mockDeps, '2025-01-15')).toBe(0)
+
+      expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+        data,
+        external_id: 'garmin-im-2025-01-15',
+        record_type: 'garmin_intensity_minutes',
+        recorded_at: noonUTC('2025-01-15'),
+        source: 'garmin',
+      })
+      expect(mockDeps.auditWarn).toHaveBeenCalledWith(
+        user,
+        'sync',
+        expect.any(String),
+        expect.objectContaining({ data_type: 'intensityMinutes' }),
+      )
     })
 
     test('returns 1 on success', async () => {
-      expect(
-        await processGarminData(
-          user,
-          'intensityMinutes',
-          { calendarDate: '2025-01-15', moderateIntensityMinutes: 30, vigorousIntensityMinutes: 15 },
-          mockDeps,
-        ),
-      ).toBe(1)
+      expect(await processGarminData(user, 'intensityMinutes', imPayload(), mockDeps)).toBe(1)
     })
   })
 })
@@ -1908,6 +2082,112 @@ describe('processActivityDetail', () => {
 
   test('writes no track without an activity id', async () => {
     await processActivityDetail(user, gpsDetail, { deps: mockDeps })
+    expect(mockDeps.upsertActivityTrack).not.toHaveBeenCalled()
+  })
+})
+
+describe('processActivityFit', () => {
+  const user = 'testuser'
+  const semicircles = (degrees: number): number => Math.round((degrees * 2 ** 31) / 180)
+  const start = new Date(1700000000000)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const fit: FitActivity = {
+    fileIds: [{ manufacturer: 'garmin', type: 'activity' }],
+    laps: [{ totalElapsedTime: 2 }],
+    records: [
+      {
+        enhancedAltitude: 10.5,
+        heartRate: 120,
+        positionLat: semicircles(57.65),
+        positionLong: semicircles(12.62),
+        timestamp: new Date(1700000001000),
+      },
+      {
+        enhancedAltitude: 11,
+        enhancedRespirationRate: 21.5,
+        heartRate: 121,
+        positionLat: semicircles(57.6501),
+        positionLong: semicircles(12.6201),
+        timestamp: new Date(1700000002000),
+      },
+    ],
+    sessions: [{ sport: 'cycling', totalElapsedTime: 2 }],
+  }
+
+  test('writes the time series, GPS with precedence over the span, the track and the callback', async () => {
+    const onTrackWritten = vi.fn()
+    const activitySpan = { end: new Date(1700000600000), start }
+    vi.mocked(mockDeps.softDeleteSupersededLocations).mockResolvedValueOnce(3)
+
+    const count = await processActivityFit(
+      user,
+      { fit, garminActivityId: 4242 },
+      { activityId: 'act-1', activitySpan, activityStart: start, deps: mockDeps, onTrackWritten },
+    )
+
+    expect(count).toBe(5)
+    expect(mockDeps.insertTimeSeries).toHaveBeenCalledWith(user, [
+      { metric: 'heart_rate', source: 'garmin', time: new Date(1700000001000), unit: 'bpm', value: 120 },
+      { metric: 'elevation', source: 'garmin', time: new Date(1700000001000), unit: 'm', value: 10.5 },
+      { metric: 'heart_rate', source: 'garmin', time: new Date(1700000002000), unit: 'bpm', value: 121 },
+      {
+        metric: 'respiratory_rate',
+        source: 'garmin',
+        time: new Date(1700000002000),
+        unit: 'brpm',
+        value: 21.5,
+      },
+      { metric: 'elevation', source: 'garmin', time: new Date(1700000002000), unit: 'm', value: 11 },
+    ])
+    expect(mockDeps.softDeleteSupersededLocations).toHaveBeenCalledWith(
+      user,
+      activityTrackSources,
+      activitySpan.start,
+      activitySpan.end,
+    )
+    const locations = vi.mocked(mockDeps.insertLocations).mock.calls[0]![1]
+    expect(locations).toHaveLength(2)
+    expect(locations[0]).toMatchObject({ source: 'garmin', time: new Date(1700000001000) })
+    expect(locations[0]!.lat).toBeCloseTo(57.65, 6)
+    expect(mockDeps.auditInfo).toHaveBeenCalledWith(
+      user,
+      'sync',
+      expect.stringContaining('3 location point(s)'),
+      expect.objectContaining({ garmin_activity_id: 4242 }),
+    )
+    expect(mockDeps.upsertActivityTrack).toHaveBeenCalledWith(user, {
+      activity_id: 'act-1',
+      ewkt: 'SRID=4326;LINESTRING ZM(12.62 57.65 10.5 1, 12.6201 57.6501 11 2)',
+      full_resolution: true,
+      source: 'garmin',
+    })
+    expect(onTrackWritten).toHaveBeenCalledWith(user, 'act-1')
+  })
+
+  test('the raw record holds only the summary, under its own type and id', async () => {
+    await processActivityFit(user, { fit, garminActivityId: 4242 }, { activityStart: start, deps: mockDeps })
+
+    expect(mockDeps.insertRawRecord).toHaveBeenCalledWith(user, {
+      data: {
+        file_id: [{ manufacturer: 'garmin', type: 'activity' }],
+        laps: [{ totalElapsedTime: 2 }],
+        record_count: 2,
+        sessions: [{ sport: 'cycling', totalElapsedTime: 2 }],
+      },
+      external_id: 'garmin-activity-fit-4242',
+      record_type: 'garmin_activity_fit',
+      recorded_at: new Date(1700000001000),
+      source: 'garmin',
+    })
+  })
+
+  test('writes no track without an activity id', async () => {
+    await processActivityFit(user, { fit, garminActivityId: 4242 }, { activityStart: start, deps: mockDeps })
+
     expect(mockDeps.upsertActivityTrack).not.toHaveBeenCalled()
   })
 })

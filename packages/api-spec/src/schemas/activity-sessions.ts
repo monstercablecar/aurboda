@@ -11,6 +11,9 @@ import {
   iso8601DateTimeSchema,
 } from './common.ts'
 import { sleepStageSummarySchema } from './daily-summary.ts'
+import { dataFieldCatalogSchema } from './data-schema.ts'
+import { exerciseMuscleGroupSchema } from './exercise-catalog.ts'
+import { itemValueIdentityStateSchema } from './item-value-identities.ts'
 import { sharedExerciseSetSchema } from './shared-exercises.ts'
 
 const listItemSchema = z.record(z.string(), z.unknown())
@@ -40,9 +43,10 @@ export const activitySessionSchema = z
     distance: z.number().optional().meta({ description: 'Distance (m)' }),
     duration: z.number().optional().meta({ description: 'Duration in minutes' }),
     end_time: iso8601DateTimeSchema.optional(),
-    fields: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-      .meta({ description: "Values of the activity type's data_schema fields present on this session" }),
+    fields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).meta({
+      description:
+        "Values of the activity type's data_schema fields present on this session. With group_by=place, place holds the session's named place instead (absent when it has none)",
+    }),
     hr: valueDistributionSchema.optional().meta({ description: 'Distribution of heart rate samples (bpm)' }),
     hr_zone_secs: hrZoneSecsSchema.optional().meta({ description: 'Time spent in each HR zone' }),
     id: z.string().meta({
@@ -100,7 +104,7 @@ export const activitySessionGroupSchema = z
     session_ids: z.array(z.string()).meta({ description: 'IDs of the sessions in the group, newest first' }),
     value: z.union([z.string(), z.number(), z.boolean()]).nullable().meta({
       description:
-        'The group-by field value; null groups the sessions without one. For an item path, the most recent spelling of a value compared trimmed and case-insensitively',
+        'The group-by field value (with group_by=place, the named place); null groups the sessions without one. For an item path, the most recent spelling of a value compared trimmed and case-insensitively',
     }),
   })
   .meta({
@@ -125,7 +129,7 @@ export const activitySessionsQuerySchema = z
     }),
     group_by: dataFieldPathSchema.optional().meta({
       description:
-        'Data field to group sessions by, typically one marked is_categorical; an item path (sets.exercise) gives one group per item value, a session in every group it has an item for',
+        'Data field to group sessions by, typically one marked is_categorical; an item path (sets.exercise) gives one group per item value, a session in every group it has an item for. The reserved value place groups by where the session happened instead: the named location (or a region named like one) it overlaps longest, or with no GPS fix in the session the place of the last fix up to 6 hours before it; a data field literally named place cannot be grouped by',
       example: 'session_name',
     }),
     start: iso8601DateTimeSchema.optional().meta({ description: 'Start date/time (defaults to all time)' }),
@@ -339,8 +343,15 @@ export type ActivityFieldValuesQuery = z.infer<typeof activityFieldValuesQuerySc
 
 export const activityFieldValueSchema = z
   .object({
+    catalog_key: z.string().nullable().optional().meta({
+      description:
+        'For a catalogue-backed field: the catalogue entry the value stands for, null when dismissed or unmapped',
+    }),
     count: z.number().int().meta({ description: 'Number of activities with this value' }),
     last_used: iso8601DateTimeSchema.meta({ description: 'Start time of the latest activity with it' }),
+    state: itemValueIdentityStateSchema
+      .optional()
+      .meta({ description: 'For a catalogue-backed field: how the value resolves to the catalogue' }),
     value: z.string(),
   })
   .meta({ id: 'ActivityFieldValue' })
@@ -350,6 +361,13 @@ export type ActivityFieldValue = z.infer<typeof activityFieldValueSchema>
 export const activityFieldValuesSchema = z
   .object({
     activity_type: z.string(),
+    catalog: dataFieldCatalogSchema
+      .optional()
+      .meta({ description: 'The catalogue the field is matched against, when it is catalogue-backed' }),
+    catalog_version: z
+      .string()
+      .optional()
+      .meta({ description: 'Version of the catalogue the values were resolved against' }),
     field: z.string(),
     values: z.array(activityFieldValueSchema).meta({ description: 'Most recently used first' }),
   })
@@ -429,6 +447,29 @@ export const activityItemGroupSchema = z
 
 export type ActivityItemGroup = z.infer<typeof activityItemGroupSchema>
 
+export const muscleGroupMeasuresSchema = z
+  .object({
+    measures: activityMeasuresSchema.meta({
+      description:
+        "set_count, volume and total_reps of the working sets, each set weighted by the exercise's recruitment of the group",
+    }),
+    in_catalogue: z.boolean().optional().meta({
+      description:
+        'Only with muscle_group null: true for exercises in the catalogue without muscle data ("No muscle group"), false for exercises not in the catalogue ("Not in the catalogue")',
+    }),
+    muscle_group: exerciseMuscleGroupSchema.nullable().meta({
+      description:
+        'The muscle group; null for exercises that train none in the catalogue, told apart by in_catalogue',
+    }),
+    name: z.string().meta({ description: 'Display name of the muscle group' }),
+  })
+  .meta({
+    description: 'Summed measures of working sets attributed to one muscle group by recruitment weight',
+    id: 'MuscleGroupMeasures',
+  })
+
+export type MuscleGroupMeasures = z.infer<typeof muscleGroupMeasuresSchema>
+
 export const activityItemHistorySchema = z
   .object({
     activity_id: z.string(),
@@ -436,6 +477,10 @@ export const activityItemHistorySchema = z
     groups: z
       .array(activityItemGroupSchema)
       .meta({ description: 'In order of first appearance in the list' }),
+    muscle_groups: z.array(muscleGroupMeasuresSchema).optional().meta({
+      description:
+        "With a catalogue-backed item field: the session's working sets per muscle group, most sets first",
+    }),
     totals: activityMeasuresSchema.meta({ description: "Measures over all the session's items" }),
     trend_half_life_days: z
       .number()

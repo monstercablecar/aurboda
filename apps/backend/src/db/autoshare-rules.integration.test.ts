@@ -11,6 +11,7 @@ import {
   getAutoshareRules,
   getEnabledAutoshareRules,
   insertAutoshareRule,
+  insertAutoshareSuppressions,
   listAutoshareCandidates,
   listAutoshareSuppressedIds,
   updateAutoshareRule,
@@ -18,7 +19,7 @@ import {
 import { query, withUserTransaction } from './connection.ts'
 import {
   createFeedPost,
-  deleteFeedPost,
+  deleteFeedPostWithQuotes,
   listActivityPostVersions,
   listFeedPostIdsByActivityIds,
   listSharedActivities,
@@ -39,6 +40,7 @@ const changeTimes = async (user: string, id: string) => {
 const ruleInput = (over: Partial<AutoshareRuleInput> = {}): AutoshareRuleInput => ({
   activity_types: ['running'],
   data_filters: [],
+  delay_minutes: 10,
   include_chart: false,
   include_map: true,
   include_exercises: false,
@@ -181,6 +183,31 @@ describe('Auto-share rules integration', () => {
     expect(untouched?.max_age_hours).toBe(6)
   })
 
+  test('delay_minutes round-trips through insert, list and patch, and defaults to 10', async () => {
+    const user = getTestUser()
+    const created = await insertAutoshareRule(user, ruleInput({ delay_minutes: 30 }))
+    expect(created.delay_minutes).toBe(30)
+    expect((await getAutoshareRules(user)).find((r) => r.id === created.id)?.delay_minutes).toBe(30)
+
+    const patched = await updateAutoshareRule(user, created.id, { delay_minutes: 120 })
+    expect(patched?.delay_minutes).toBe(120)
+    expect((await updateAutoshareRule(user, created.id, { name: 'Renamed' }))?.delay_minutes).toBe(120)
+
+    await query(user, `INSERT INTO autoshare_rules (name) VALUES ('bare')`)
+    expect((await getAutoshareRules(user)).find((r) => r.name === 'bare')?.delay_minutes).toBe(10)
+  })
+
+  test('insertAutoshareSuppressions records ids once, ignoring ones already suppressed', async () => {
+    const user = getTestUser()
+    const a = '11111111-1111-4111-8111-111111111111'
+    const b = '22222222-2222-4222-8222-222222222222'
+    await insertAutoshareSuppressions(user, [a])
+    await insertAutoshareSuppressions(user, [a, b])
+    await insertAutoshareSuppressions(user, [])
+
+    expect((await listAutoshareSuppressedIds(user, [a, b])).sort()).toEqual([a, b])
+  })
+
   test('deletes a rule; posts it created keep their marker and count', async () => {
     const user = getTestUser()
     const rule = await insertAutoshareRule(user, ruleInput())
@@ -257,7 +284,7 @@ describe('Auto-share rules integration', () => {
     })
     expect(await listAutoshareSuppressedIds(user, [activityId])).toEqual([])
 
-    expect(await deleteFeedPost(user, post.id)).toBe(true)
+    expect(await deleteFeedPostWithQuotes(user, post.id)).not.toBeNull()
     // The post row is gone, but the suppression keeps the dedupe intact (#903).
     expect(await listFeedPostIdsByActivityIds(user, [activityId])).toEqual([])
     expect(await listAutoshareSuppressedIds(user, [activityId])).toEqual([activityId])

@@ -1,6 +1,13 @@
-import { addReportBodySchema, reportsQuerySchema, tzSchema, updateReportBodySchema } from '@aurboda/api-spec'
+import {
+  addReportBodySchema,
+  importReportsBodySchema,
+  reportsQuerySchema,
+  tzSchema,
+  updateReportBodySchema,
+} from '@aurboda/api-spec'
 import { z } from 'zod'
 
+import { importReports } from '../services/report-import.ts'
 import {
   addReport,
   deleteReportById,
@@ -14,7 +21,7 @@ import { errorResponse, jsonResponse, type McpServer, tzJsonResponse } from './h
 export const registerReportTools = (server: McpServer, user: string) => {
   server.tool(
     'add_report',
-    'Create a structured lab report with grouped measurements (e.g., InBody scan, blood panel, hair mineral analysis). Each entry is also written to the metric time series for trend tracking. Flags are auto-derived from reference ranges if not set.',
+    'Create a structured lab report with grouped measurements (e.g., InBody scan, blood panel, hair mineral analysis). Each entry is also written to the metric time series for trend tracking. An entry metric that is a name or alias from list_metric_catalog resolves to the catalogue metric (added on first use), and its value is converted to the unit the metric is stored in; the entry keeps the value and unit as printed, with stored_value/stored_unit when they differ. An entry whose unit cannot be converted refuses the whole report. Flags are auto-derived from reference ranges if not set.',
     { ...addReportBodySchema.shape, tz: tzSchema },
     async ({ tz, ...params }) => {
       const result = await addReport(user, {
@@ -24,7 +31,21 @@ export const registerReportTools = (server: McpServer, user: string) => {
         notes: params.notes,
         report_type: params.report_type,
       })
+      if (!result.success) {
+        return errorResponse(result.error ?? 'Failed to add report')
+      }
       return tzJsonResponse(result, tz)
+    },
+  )
+
+  server.tool(
+    'import_reports',
+    'Import lab results from a spreadsheet table given as text (tab-, semicolon- or comma-separated; decimal comma or point). mapping says which column (index from 0) holds what: layout "long" has one row per result with date, metric and value columns; layout "wide" has one row per test and one column per date, the date in the header. Creates one report per date, resolving and converting each result as add_report does. A result the user already has (a report on that date with the same metric) is skipped as "exists", so re-importing a sheet adds only what is new; new results for a date that already has a report of the same report_type are added to it. Rows that cannot be read are reported as errors and left out; other rows still import. Run with dry_run true first to preview. The mapping is remembered in the user settings (report_import_mapping).',
+    { ...importReportsBodySchema.shape },
+    async (params) => {
+      const result = await importReports(user, params)
+      if ('error' in result) return errorResponse(result.error)
+      return jsonResponse({ data: result.data, success: true })
     },
   )
 
@@ -57,7 +78,7 @@ export const registerReportTools = (server: McpServer, user: string) => {
 
   server.tool(
     'update_report',
-    'Update a lab report. Can modify metadata (report_type, date, location, notes) and/or replace all entries. When entries are provided, they fully replace existing entries. Flags are auto-derived from reference ranges if not set.',
+    'Update a lab report. Can modify metadata (report_type, date, location, notes) and/or replace all entries. When entries are provided, they fully replace existing entries, resolved and converted as in add_report. Flags are auto-derived from reference ranges if not set.',
     {
       id: z.string().uuid().describe('The report ID to update'),
       ...updateReportBodySchema.shape,

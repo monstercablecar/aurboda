@@ -1,5 +1,3 @@
-import type { RequestHandler } from 'express'
-
 import {
   type ActivityTypeDefinitionResponse,
   type ActivityTypeDefinitionsResponse,
@@ -21,6 +19,9 @@ import {
   type ItemValueAliasesQuery,
   itemValueAliasesQuerySchema,
   type ItemValueAliasesResponse,
+  type ItemValueIdentityQuery,
+  itemValueIdentityQuerySchema,
+  type ItemValueIdentityResponse,
   type MergeActivityTypeBody,
   mergeActivityTypeBodySchema,
   type MergeActivityTypeResponse,
@@ -30,6 +31,19 @@ import {
   type RenameActivityTypeBody,
   renameActivityTypeBodySchema,
   type RenameActivityTypeResponse,
+  type SetItemValueIdentityBody,
+  setItemValueIdentityBodySchema,
+  exerciseMuscleGroupSchema,
+  type MuscleGroupHistoryQuery,
+  muscleGroupHistoryPeriod,
+  muscleGroupHistoryQuerySchema,
+  type MuscleGroupHistoryResponse,
+  type MuscleGroupsQuery,
+  muscleGroupsQuerySchema,
+  type MuscleGroupsResponse,
+  type UnmappedItemValuesQuery,
+  unmappedItemValuesQuerySchema,
+  type UnmappedItemValuesResponse,
   type UpdateActivityTypeDefinitionBody,
   updateActivityTypeDefinitionBodySchema,
 } from '@aurboda/api-spec'
@@ -37,6 +51,7 @@ import {
 import { getActivityRecords } from '../services/activity-records.ts'
 import {
   addActivityTypeDefinition,
+  addCatalogFieldsToActivityType,
   deleteActivityTypeDefinition,
   listActivityTypeDefinitions,
   mergeActivityType,
@@ -45,15 +60,23 @@ import {
 } from '../services/activity-type-definitions.ts'
 import { deleteAlias, listAliases, mergeItemValues } from '../services/item-value-aliases.ts'
 import {
+  clearItemValueIdentity,
+  getItemValueIdentity,
+  listUnmappedItemValues,
+  setItemValueIdentity,
+} from '../services/item-value-identities.ts'
+import {
   getActivityTypeSummary,
   queryActivityFieldValues,
   queryActivitySessions,
+  queryMuscleGroupHistory,
+  queryMuscleGroupOverview,
   sessionsOptionsFromQuery,
 } from '../services/queries/index.ts'
-import { type TypedRouter, typedRouter } from '../typed-router.ts'
+import { type AnyMiddleware, type TypedRouter, typedRouter } from '../typed-router.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
-export const createActivityTypesRouter = (authMiddleware: RequestHandler): TypedRouter => {
+export const createActivityTypesRouter = (authMiddleware: AnyMiddleware): TypedRouter => {
   const router = typedRouter()
 
   router.get<Record<string, never>, ActivityTypeDefinitionsResponse>(
@@ -148,6 +171,106 @@ export const createActivityTypesRouter = (authMiddleware: RequestHandler): Typed
     },
   )
 
+  router.get<{ name: string }, ItemValueIdentityResponse, unknown, ItemValueIdentityQuery>(
+    '/:name/item-values/identity',
+    authMiddleware,
+    validateQuery(itemValueIdentityQuerySchema),
+    async (req, res) => {
+      const result = await getItemValueIdentity(req.user!, req.params.name, req.query.field, req.query.value)
+      if (!result.success) {
+        const status = result.error.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
+    },
+  )
+
+  router.put<{ name: string }, ItemValueIdentityResponse, SetItemValueIdentityBody>(
+    '/:name/item-values/identity',
+    authMiddleware,
+    validateBody(setItemValueIdentityBodySchema),
+    async (req, res) => {
+      const result = await setItemValueIdentity(req.user!, req.params.name, req.body)
+      if (!result.success) {
+        const status = result.error.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
+    },
+  )
+
+  router.delete<{ name: string }, BaseResponse, unknown, ItemValueIdentityQuery>(
+    '/:name/item-values/identity',
+    authMiddleware,
+    validateQuery(itemValueIdentityQuerySchema),
+    async (req, res) => {
+      const result = await clearItemValueIdentity(
+        req.user!,
+        req.params.name,
+        req.query.field,
+        req.query.value,
+      )
+      if (!result.success) {
+        const status = result.error?.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ success: true })
+    },
+  )
+
+  router.get<{ name: string }, UnmappedItemValuesResponse, unknown, UnmappedItemValuesQuery>(
+    '/:name/item-values/unmapped',
+    authMiddleware,
+    validateQuery(unmappedItemValuesQuerySchema),
+    async (req, res) => {
+      const { field, limit, offset } = req.query
+      const result = await listUnmappedItemValues(req.user!, req.params.name, field, { limit, offset })
+      if (!result.success) {
+        const status = result.error.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
+    },
+  )
+
+  router.get<{ name: string }, MuscleGroupsResponse, unknown, MuscleGroupsQuery>(
+    '/:name/muscle-groups',
+    authMiddleware,
+    validateQuery(muscleGroupsQuerySchema),
+    async (req, res) => {
+      const result = await queryMuscleGroupOverview(req.user!, req.params.name, req.query.field)
+      if (!result.success) {
+        const status = result.error.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
+    },
+  )
+
+  router.get<{ group: string; name: string }, MuscleGroupHistoryResponse, unknown, MuscleGroupHistoryQuery>(
+    '/:name/muscle-groups/:group',
+    authMiddleware,
+    validateQuery(muscleGroupHistoryQuerySchema),
+    async (req, res) => {
+      const group = exerciseMuscleGroupSchema.safeParse(req.params.group)
+      if (!group.success) {
+        return res.status(400).json({ error: `Unknown muscle group "${req.params.group}"`, success: false })
+      }
+      const result = await queryMuscleGroupHistory(
+        req.user!,
+        req.params.name,
+        req.query.field,
+        group.data,
+        muscleGroupHistoryPeriod(req.query),
+      )
+      if (!result.success) {
+        const status = result.error.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
+    },
+  )
+
   router.post<Record<string, never>, ActivityTypeDefinitionResponse, AddActivityTypeDefinitionBody>(
     '/',
     authMiddleware,
@@ -168,14 +291,27 @@ export const createActivityTypesRouter = (authMiddleware: RequestHandler): Typed
     authMiddleware,
     validateBody(mergeActivityTypeBodySchema),
     async (req, res) => {
-      const { source, target } = req.body
+      const { set_data, source, target } = req.body
       const user = req.user!
-      const result = await mergeActivityType(user, source, target)
+      const result = await mergeActivityType(user, source, target, set_data)
       if (!result.success) {
         const status = result.error?.includes('not found') ? 404 : 400
         return res.status(status).json({ error: result.error, success: false })
       }
       res.json(result)
+    },
+  )
+
+  router.post<{ name: string }, ActivityTypeDefinitionResponse>(
+    '/:name/catalog-fields',
+    authMiddleware,
+    async (req, res) => {
+      const result = await addCatalogFieldsToActivityType(req.user!, req.params.name)
+      if (!result.success) {
+        const status = result.error?.includes('not found') ? 404 : 400
+        return res.status(status).json({ error: result.error, success: false })
+      }
+      res.json({ data: result.data, success: true })
     },
   )
 

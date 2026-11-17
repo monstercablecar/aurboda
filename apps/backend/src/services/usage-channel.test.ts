@@ -47,6 +47,8 @@ describe('isMutatingMcpTool', () => {
     'submit_assessment',
     'void_administration',
     'resend_post_updates',
+    'hide_public_tag_post',
+    'unhide_public_tag_post',
   ])('%s mutates', (name) => {
     expect(isMutatingMcpTool(name)).toBe(true)
   })

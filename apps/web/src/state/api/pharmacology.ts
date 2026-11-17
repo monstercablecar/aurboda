@@ -145,9 +145,7 @@ export const fetchAdministrations = async (
   return response.data.data ?? []
 }
 
-export const createAdministration = async (
-  body: CreateAdministrationBody,
-): Promise<AdministrationEvent> => {
+export const createAdministration = async (body: CreateAdministrationBody): Promise<AdministrationEvent> => {
   const response = await axios.post<AdministrationResponse>(`${BASE}/administrations`, body, options())
   return dataOrThrow(response.data, 'Failed to record administration.')
 }
@@ -190,9 +188,7 @@ export const updateTreatmentType = async (
   return dataOrThrow(response.data, 'Failed to update treatment type.')
 }
 
-export const fetchTreatmentSessions = async (
-  params?: PharmacologyListQuery,
-): Promise<TreatmentSession[]> => {
+export const fetchTreatmentSessions = async (params?: PharmacologyListQuery): Promise<TreatmentSession[]> => {
   const response = await axios.get<TreatmentSessionsResponse>(`${BASE}/treatments`, {
     ...options(),
     params,
@@ -200,9 +196,7 @@ export const fetchTreatmentSessions = async (
   return response.data.data ?? []
 }
 
-export const createTreatmentSession = async (
-  body: CreateTreatmentSessionBody,
-): Promise<TreatmentSession> => {
+export const createTreatmentSession = async (body: CreateTreatmentSessionBody): Promise<TreatmentSession> => {
   const response = await axios.post<TreatmentSessionResponse>(`${BASE}/treatments`, body, options())
   return dataOrThrow(response.data, 'Failed to create treatment session.')
 }
@@ -228,9 +222,7 @@ export const fetchQuestionnaires = async (): Promise<QuestionnaireTemplate[]> =>
   return response.data.data ?? []
 }
 
-export const createQuestionnaire = async (
-  body: CreateQuestionnaireBody,
-): Promise<QuestionnaireTemplate> => {
+export const createQuestionnaire = async (body: CreateQuestionnaireBody): Promise<QuestionnaireTemplate> => {
   const response = await axios.post<QuestionnaireResponse>(`${BASE}/questionnaires`, body, options())
   return dataOrThrow(response.data, 'Failed to create questionnaire.')
 }
@@ -257,15 +249,8 @@ export const submitAssessment = async (body: SubmitAssessmentBody): Promise<Asse
   return dataOrThrow(response.data, 'Failed to save assessment.')
 }
 
-export const correctAssessment = async (
-  id: string,
-  body: CorrectAssessmentBody,
-): Promise<Assessment> => {
-  const response = await axios.patch<AssessmentResponse>(
-    `${BASE}/assessments/${idPath(id)}`,
-    body,
-    options(),
-  )
+export const correctAssessment = async (id: string, body: CorrectAssessmentBody): Promise<Assessment> => {
+  const response = await axios.patch<AssessmentResponse>(`${BASE}/assessments/${idPath(id)}`, body, options())
   return dataOrThrow(response.data, 'Failed to correct assessment.')
 }
 
@@ -278,9 +263,7 @@ export const fetchContextTypes = async (): Promise<ContextEventType[]> => {
   return response.data.data ?? []
 }
 
-export const createContextType = async (
-  body: CreateContextEventTypeBody,
-): Promise<ContextEventType> => {
+export const createContextType = async (body: CreateContextEventTypeBody): Promise<ContextEventType> => {
   const response = await axios.post<ContextEventTypeResponse>(`${BASE}/context-types`, body, options())
   return dataOrThrow(response.data, 'Failed to create context type.')
 }
@@ -310,10 +293,7 @@ export const createContextEvent = async (body: CreateContextEventBody): Promise<
   return dataOrThrow(response.data, 'Failed to record context event.')
 }
 
-export const updateContextEvent = async (
-  id: string,
-  body: UpdateContextEventBody,
-): Promise<ContextEvent> => {
+export const updateContextEvent = async (id: string, body: UpdateContextEventBody): Promise<ContextEvent> => {
   const response = await axios.patch<ContextEventResponse>(
     `${BASE}/context-events/${idPath(id)}`,
     body,
@@ -336,9 +316,7 @@ export const fetchPharmacologyTimeline = async (
   return response.data.data
 }
 
-export const fetchPharmacologyInsights = async (
-  params: InsightsQuery,
-): Promise<InsightsResponse['data']> => {
+export const fetchPharmacologyInsights = async (params: InsightsQuery): Promise<InsightsResponse['data']> => {
   const response = await axios.get<InsightsResponse>(`${BASE}/insights`, { ...options(), params })
   return response.data.data
 }

@@ -279,13 +279,14 @@ export function LibraryView({ notify }: { notify: (message: string, tone?: 'succ
     typesQuery.error ??
     questionnairesQuery.error ??
     contextTypesQuery.error
-  if (error)
-    {return (
+  if (error) {
+    return (
       <div class="empty-state error-state">
         <h2>Library could not load</h2>
         <p>{pharmacologyErrorMessage(error)}</p>
       </div>
-    )}
+    )
+  }
 
   return (
     <div class="library-view">

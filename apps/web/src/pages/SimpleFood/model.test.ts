@@ -13,18 +13,21 @@ import {
   symptomTimeBucket,
 } from './model'
 
-const withIds = (template: typeof dailyQuestionnaireDefinition | typeof reapsDefinition): QuestionnaireTemplate => ({
-  ...template,
-  id: `${template.stable_key}-id`,
-  version: 1,
-  created_at: '2026-11-11T00:00:00Z',
-  updated_at: '2026-11-11T00:00:00Z',
-  questions: template.questions.map((question, index) => ({
-    ...question,
-    id: `${template.stable_key}-q${index}`,
+const withIds = (
+  template: typeof dailyQuestionnaireDefinition | typeof reapsDefinition,
+): QuestionnaireTemplate =>
+  ({
+    ...template,
+    id: `${template.stable_key}-id`,
     version: 1,
-  })),
-}) as QuestionnaireTemplate
+    created_at: '2026-11-11T00:00:00Z',
+    updated_at: '2026-11-11T00:00:00Z',
+    questions: template.questions.map((question, index) => ({
+      ...question,
+      id: `${template.stable_key}-q${index}`,
+      version: 1,
+    })),
+  }) as QuestionnaireTemplate
 
 describe('simple food model', () => {
   test('scores REAP-S v2 with published section cut points and readiness separate from total', () => {

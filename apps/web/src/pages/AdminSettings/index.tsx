@@ -1,4 +1,9 @@
-import type { PublicTagFollow, RelayStyle } from '@aurboda/api-spec'
+import type {
+  FederationDeliveryFailure,
+  PublicTagBlockKind,
+  PublicTagFollow,
+  RelayStyle,
+} from '@aurboda/api-spec'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
@@ -7,6 +12,7 @@ import { useCallback, useState } from 'preact/hooks'
 
 import type { AdminSettings, InvitationResult, SignupMode } from '../../state/api'
 
+import { EmailSmtpSettings } from '../../components/EmailSmtpSettings'
 import { formatTagsInput, parseTagFilterInput } from '../../components/hashtags'
 import { ImportPanel } from '../../components/ImportPanel'
 import {
@@ -17,6 +23,8 @@ import {
   parseHandlesInput,
   parseUsernamesInput,
 } from '../../components/official-feed'
+import { OidcProvidersAdmin } from '../../components/OidcProvidersAdmin'
+import { blockKindLabel } from '../../components/public-tag-moderation'
 import {
   hasTagsPubRelay,
   relayStateLabel,
@@ -28,14 +36,20 @@ import { type SaveStatus, SaveStatusIndicator } from '../../components/SaveStatu
 import { TagsInput } from '../../components/TagsInput'
 import '../../components/ShareActivityDialog.css'
 import {
+  addPublicTagBlock,
   addRelay,
   apiErrorMessage,
   fetchAdminSettings,
+  fetchHiddenPublicTagPosts,
+  fetchPublicTagBlocks,
+  fetchFederationDeliveryFailures,
   fetchRelays,
   generateInvitation,
   officialFeedPath,
   publicTagPath,
+  removePublicTagBlock,
   removeRelay,
+  unhidePublicTagPost,
   updateAdminSettings,
 } from '../../state/api'
 import { auth, contactFediverse, contactReddit, officialFeedEnabled, publicTagPages } from '../../state/auth'
@@ -158,6 +172,137 @@ function GravlApiSection() {
         ); register the redirect URI <code>{redirectUri ?? '…'}</code> and request the{' '}
         <code>workouts:read</code> scope.
       </p>
+    </div>
+  )
+}
+
+// eslint-disable-next-line complexity -- simple form with save/clear handlers
+function GarminApiSection() {
+  const queryClient = useQueryClient()
+  const { data: settings } = useQuery({
+    queryFn: fetchAdminSettings,
+    queryKey: ['adminSettings'],
+  })
+
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+
+  const idSet = settings?.garmin_client_id_set ?? false
+  const secretSet = settings?.garmin_client_secret_set ?? false
+  const redirectUri = settings?.garmin_redirect_uri
+  const pushUrl = settings?.garmin_push_url
+  const [pushUrlCopied, setPushUrlCopied] = useState(false)
+
+  const handleCopyPushUrl = useCallback(async () => {
+    if (!pushUrl) return
+    try {
+      await navigator.clipboard.writeText(pushUrl)
+      setPushUrlCopied(true)
+      setTimeout(() => setPushUrlCopied(false), 3000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [pushUrl])
+
+  const saveGarmin = useCallback(
+    async (params: { garmin_client_id?: string | null; garmin_client_secret?: string | null }) => {
+      setSaveStatus({ status: 'saving' })
+      try {
+        const result = await updateAdminSettings(params)
+        queryClient.setQueryData(['adminSettings'], result)
+        setClientId('')
+        setClientSecret('')
+        setSaveStatus({ status: 'saved', time: new Date() })
+      } catch (err) {
+        setSaveStatus({ error: getErrorMessage(err), status: 'error' })
+      }
+    },
+    [queryClient],
+  )
+
+  const handleSave = useCallback(() => {
+    if (!clientId && !clientSecret) return
+    saveGarmin({
+      ...(clientId ? { garmin_client_id: clientId } : {}),
+      ...(clientSecret ? { garmin_client_secret: clientSecret } : {}),
+    })
+  }, [clientId, clientSecret, saveGarmin])
+
+  const handleClear = useCallback(
+    () => saveGarmin({ garmin_client_id: null, garmin_client_secret: null }),
+    [saveGarmin],
+  )
+
+  return (
+    <div class="form-field">
+      <div class="section-header-row">
+        <label>Garmin Connect Developer Program</label>
+        <SaveStatusIndicator state={saveStatus} />
+      </div>
+      {(idSet || secretSet) && (
+        <p class={`connected-status${idSet && secretSet ? '' : ' warning'}`}>
+          {idSet && secretSet ? 'Configured' : 'Partially configured'}
+        </p>
+      )}
+      <p class="field-description">
+        Redirect URL: <code>{redirectUri ?? '…'}</code>
+      </p>
+      <div class="api-key-input-row">
+        <input
+          type="text"
+          value={clientId}
+          onInput={(e) => setClientId((e.target as HTMLInputElement).value)}
+          placeholder={idSet ? 'Enter new client ID to update' : 'Client ID'}
+        />
+      </div>
+      <div class="api-key-input-row">
+        <input
+          type="password"
+          value={clientSecret}
+          onInput={(e) => setClientSecret((e.target as HTMLInputElement).value)}
+          placeholder={secretSet ? 'Enter new client secret to update' : 'Client Secret'}
+        />
+        {(idSet || secretSet) && (
+          <button type="button" class="clear-button" onClick={handleClear}>
+            Clear
+          </button>
+        )}
+      </div>
+      <button
+        type="button"
+        class="generate-button"
+        onClick={handleSave}
+        disabled={!clientId && !clientSecret}
+      >
+        Save Garmin Credentials
+      </button>
+      <p class="field-description">
+        Lets users connect Garmin by signing in at Garmin. Needs an app in the Garmin Connect Developer
+        Program (
+        <a href="https://developerportal.garmin.com" target="_blank" rel="noopener noreferrer">
+          developerportal.garmin.com
+        </a>
+        ); register the redirect URL above with it.
+      </p>
+      {pushUrl && (
+        <>
+          <p class="field-description">Push URL (keep it private):</p>
+          <div class="invitation-url">
+            <input type="text" value={pushUrl} readOnly />
+            <button type="button" class="copy-button" onClick={handleCopyPushUrl}>
+              {pushUrlCopied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p class="field-description">
+            Paste it into every endpoint at{' '}
+            <a href="https://apis.garmin.com/tools/endpoints" target="_blank" rel="noopener noreferrer">
+              apis.garmin.com/tools/endpoints
+            </a>{' '}
+            and choose &quot;push&quot;.
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -352,6 +497,47 @@ function OuraApiSection() {
   )
 }
 
+function GarminPersonalKeySwitch() {
+  const queryClient = useQueryClient()
+  const { data: settings } = useQuery({ queryFn: fetchAdminSettings, queryKey: ['adminSettings'] })
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+
+  const handleToggle = useCallback(async () => {
+    setSaveStatus({ status: 'saving' })
+    try {
+      const result = await updateAdminSettings({
+        garmin_personal_key_enabled: !(settings?.garmin_personal_key_enabled ?? true),
+      })
+      queryClient.setQueryData(['adminSettings'], result)
+      setSaveStatus({ status: 'saved', time: new Date() })
+    } catch (err) {
+      setSaveStatus({ error: getErrorMessage(err), status: 'error' })
+    }
+  }, [settings?.garmin_personal_key_enabled, queryClient])
+
+  return (
+    <div class="form-field">
+      <div class="section-header-row">
+        <label for="garmin-personal-key-toggle">Garmin Personal API keys</label>
+        <SaveStatusIndicator state={saveStatus} />
+      </div>
+      <label class="toggle-row">
+        <input
+          id="garmin-personal-key-toggle"
+          type="checkbox"
+          checked={settings?.garmin_personal_key_enabled ?? true}
+          onChange={handleToggle}
+        />
+        <span>Let users connect Garmin with a Personal API key</span>
+      </label>
+      <p class="field-description">
+        Garmin's terms restrict a Personal API key to tools its owner operates for their own use. Keys already
+        connected keep syncing when this is off.
+      </p>
+    </div>
+  )
+}
+
 function IntegrationsSection() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({
@@ -460,6 +646,10 @@ function IntegrationsSection() {
       <StravaApiSection />
 
       <GravlApiSection />
+
+      <GarminApiSection />
+
+      <GarminPersonalKeySwitch />
     </section>
   )
 }
@@ -974,6 +1164,153 @@ function PublicTagPagesSection() {
   )
 }
 
+const formatModerationDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+
+function PublicTagModerationSection() {
+  const queryClient = useQueryClient()
+  const { data: blocks = [] } = useQuery({
+    queryFn: fetchPublicTagBlocks,
+    queryKey: ['adminPublicTagBlocks'],
+  })
+  const { data: hidden = [] } = useQuery({
+    queryFn: fetchHiddenPublicTagPosts,
+    queryKey: ['adminPublicTagHidden'],
+  })
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [kind, setKind] = useState<PublicTagBlockKind>('domain')
+  const [value, setValue] = useState('')
+  const [removed, setRemoved] = useState<number | null>(null)
+
+  const run = useCallback(
+    async (action: () => Promise<unknown>, after?: (result: unknown) => void) => {
+      setSaveStatus({ status: 'saving' })
+      setRemoved(null)
+      try {
+        const result = await action()
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['adminPublicTagBlocks'] }),
+          queryClient.invalidateQueries({ queryKey: ['adminPublicTagHidden'] }),
+          queryClient.invalidateQueries({ queryKey: ['publicTag'] }),
+          queryClient.invalidateQueries({ queryKey: ['officialFeed'] }),
+        ])
+        after?.(result)
+        setSaveStatus({ status: 'saved', time: new Date() })
+      } catch (err) {
+        setSaveStatus({ error: apiErrorMessage(err, getErrorMessage(err)), status: 'error' })
+      }
+    },
+    [queryClient],
+  )
+
+  const add = () =>
+    run(
+      () => addPublicTagBlock({ kind, value: value.trim() }),
+      (result) => {
+        setValue('')
+        setRemoved((result as { removed_posts: number }).removed_posts)
+      },
+    )
+
+  return (
+    <section class="settings-section">
+      <div class="section-header-row">
+        <h2>Tag page moderation</h2>
+        <SaveStatusIndicator state={saveStatus} />
+      </div>
+      <p class="field-description">
+        Blocked authors and domains, and hidden posts, are kept off the public tag pages and the official
+        feed. A domain block covers its subdomains too. Removing a block or unhiding a post fetches nothing
+        back: posts return when they are announced or edited again. Admins can also hide and block from the
+        tag pages themselves.
+      </p>
+
+      <div class="form-field">
+        <label for="tag-block-value">Blocks</label>
+        {blocks.length === 0 ? (
+          <p class="field-description">Nobody is blocked.</p>
+        ) : (
+          <ul class="relay-list">
+            {blocks.map((block) => (
+              <li key={block.id} class="relay-row">
+                <span class="relay-style">{blockKindLabel(block.kind)}</span>
+                <span class="relay-url">{block.value}</span>
+                <span class="relay-style" title={`Added by ${block.created_by}`}>
+                  {formatModerationDate(block.created_at)}
+                </span>
+                <button
+                  type="button"
+                  class="clear-button"
+                  onClick={() => run(() => removePublicTagBlock(block.id))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div class="api-key-input-row">
+          <select
+            aria-label="Block kind"
+            value={kind}
+            onChange={(e) => setKind((e.target as HTMLSelectElement).value as PublicTagBlockKind)}
+          >
+            <option value="domain">Domain</option>
+            <option value="actor">Author</option>
+          </select>
+          <input
+            id="tag-block-value"
+            type="text"
+            value={value}
+            onInput={(e) => setValue((e.target as HTMLInputElement).value)}
+            placeholder={kind === 'domain' ? 'spam.example' : 'https://spam.example/users/someone'}
+            autocapitalize="off"
+            spellcheck={false}
+          />
+        </div>
+        <div class="relay-actions">
+          <button type="button" class="generate-button" disabled={value.trim() === ''} onClick={add}>
+            Block
+          </button>
+        </div>
+        {removed != null && (
+          <p class="field-description">
+            {removed === 1 ? '1 post was removed.' : `${removed} posts were removed.`}
+          </p>
+        )}
+      </div>
+
+      <div class="form-field">
+        <span class="form-label">Hidden posts</span>
+        {hidden.length === 0 ? (
+          <p class="field-description">No posts are hidden.</p>
+        ) : (
+          <ul class="relay-list">
+            {hidden.map((post) => (
+              <li key={post.id} class="relay-row">
+                <a class="relay-url" href={post.note_uri} target="_blank" rel="noopener noreferrer">
+                  {post.note_uri}
+                </a>
+                {post.actor_uri != null && <span class="relay-style">{post.actor_uri}</span>}
+                <span class="relay-style" title={`Hidden by ${post.hidden_by}`}>
+                  {formatModerationDate(post.hidden_at)}
+                </span>
+                <button
+                  type="button"
+                  class="clear-button"
+                  onClick={() => run(() => unhidePublicTagPost(post.id))}
+                >
+                  Unhide
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function FederationSection() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({
@@ -1029,7 +1366,51 @@ function FederationSection() {
         </p>
       </div>
       <RelaysField />
+      <DeliveryFailuresField />
     </section>
+  )
+}
+
+const failureTitle = (failure: FederationDeliveryFailure): string =>
+  [
+    `Last inbox: ${failure.last_inbox}`,
+    `Failing since ${new Date(failure.first_failed_at).toLocaleString()}`,
+    failure.last_succeeded_at == null
+      ? 'No delivery accepted since recording began'
+      : `Last accepted ${new Date(failure.last_succeeded_at).toLocaleString()}`,
+  ].join('\n')
+
+function DeliveryFailuresField() {
+  const { data: failures = [] } = useQuery({
+    queryFn: fetchFederationDeliveryFailures,
+    queryKey: ['adminFederationDeliveryFailures'],
+  })
+
+  return (
+    <div class="form-field">
+      <label>Servers that could not be reached</label>
+      {failures.length === 0 ? (
+        <p class="field-description">No server is failing deliveries.</p>
+      ) : (
+        <ul class="relay-list">
+          {failures.map((failure) => (
+            <li key={failure.inbox_host} class="relay-row" title={failureTitle(failure)}>
+              <span class="relay-url">{failure.inbox_host}</span>
+              <span class="relay-style">{failure.last_error}</span>
+              <span class="relay-style">
+                {failure.failures} {failure.failures === 1 ? 'failure' : 'failures'}
+              </span>
+              <span class="relay-style">{new Date(failure.last_failed_at).toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p class="field-description">
+        Posts and other activities are queued and retried with backoff for about two to three days; a server
+        answering 404 or 410 is given up on at once. A server leaves this list once it accepts a delivery
+        again.
+      </p>
+    </div>
   )
 }
 
@@ -1269,6 +1650,10 @@ export function AdminSettings() {
 
       <BillingSection />
 
+      <EmailSmtpSettings />
+
+      <OidcProvidersAdmin />
+
       <IntegrationsSection />
 
       <SentrySection />
@@ -1278,6 +1663,7 @@ export function AdminSettings() {
       <OfficialFeedSection />
 
       <PublicTagPagesSection />
+      <PublicTagModerationSection />
 
       <FederationSection />
 

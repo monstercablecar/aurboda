@@ -8,6 +8,7 @@ import type { ComponentChild } from 'preact'
  *   /chart?source_type=metric&pattern=weight&chart_type=bar&bucket_size=1w&since=2026-03-01
  *   /chart?source_type=activity_type&pattern=strength_training&chart_type=bar&bucket_size=1w&measure=e1rm&aggregation=max&filter_field=sets.exercise&filter_value=Squat
  *   /chart?source_type=activity_type&pattern=strength_training&chart_type=trend&half_life_days=120&measure=e1rm&filter_field=sets.exercise&filter_value=Squat
+ *   /chart?source_type=activity_type&pattern=yoga&chart_type=scatter&y=z3_minutes&group_by=session_name&collapse=1
  */
 import {
   activityMeasureLabels,
@@ -15,6 +16,7 @@ import {
   type ChartDataAggregation,
   type DashboardConfig,
   type DashboardWidget,
+  muscleGroupFilter,
   type TrendMissingDays,
 } from '@aurboda/api-spec'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -28,14 +30,32 @@ import { BreakdownMaskPicker } from '../../components/AddToDashboardModal'
 import { BarChart, type BarClickInfo } from '../../components/charts/BarChart'
 import { BreakdownLegend, SERIES_COLORS } from '../../components/charts/breakdown'
 import { ChartMenu } from '../../components/charts/ChartMenu'
+import {
+  buildLegend,
+  buildSessionPoints,
+  collapsePoints,
+  missingCaption,
+  NONE_KEY,
+  type ScatterPoint,
+  scatterYOptions,
+  sessionGroupKeys,
+} from '../../components/charts/session-scatter'
+import { SessionScatterChart } from '../../components/charts/SessionScatterChart'
 import { trendPlot, trendPlotSeries } from '../../components/charts/trendGaps'
 import { TrendLineChart } from '../../components/charts/TrendLineChart'
 import { goalsHref } from '../../components/goalPrefill'
 import { MetricPicker } from '../../components/MetricPicker'
-import { categoricalFields, listFields } from '../../components/sessions/sessionView'
+import { SessionGroupPicker } from '../../components/sessions/SessionGroupPicker'
+import {
+  categoricalFields,
+  fieldLabel,
+  listFields,
+  sessionGroupings,
+} from '../../components/sessions/sessionView'
 import {
   type ActivityTypeDefinition,
   fetchActivityFieldValues,
+  fetchActivitySessions,
   fetchActivityTypeDefinitions,
   fetchChartData,
   type FetchChartDataParams,
@@ -60,13 +80,22 @@ import {
   MEASURE_HALF_LIFE_DEFAULT,
   type MeasureChoice,
   measureParams,
+  itemBreakdownOptions,
   measurePatch,
+  muscleFilterOf,
+  muscleFilterPatch,
+  muscleFilterPath,
   parseAggregation,
   parseChartMode,
   parseMeasureQuery,
   sourceDefaultAggregation,
+  toggleBreakdownField,
+  trendFilterPatch,
+  withMuscleFilterRules,
 } from './chartMeasures'
 import { mapLegacyCategorySource } from './legacySource'
+import { MuscleGroupSelect } from './MuscleGroupSelect'
+import { parseScatterQuery, scatterAllowed, scatterParams, type ScatterState } from './scatterState'
 import {
   boardReturnPath,
   chartWidgetMaskedFields,
@@ -77,7 +106,7 @@ import {
 import './style.css'
 
 type SourceType = 'metric' | 'activity_type'
-type ChartType = 'trend' | 'bar'
+type ChartType = 'trend' | 'bar' | 'scatter'
 type BucketSize = '1m' | '5m' | '15m' | '1h' | '1d' | '1w' | '1M'
 
 const LOOKBACK_OPTIONS = [
@@ -105,7 +134,7 @@ const BUCKET_SIZE_OPTIONS: { label: string; value: BucketSize }[] = [
 
 type MissingDaysChoice = '' | TrendMissingDays
 
-interface ChartState {
+interface ChartState extends ScatterState {
   aggregation: ChartDataAggregation
   breakdown_fields: string[]
   bucket_size: BucketSize
@@ -141,13 +170,23 @@ const parseSinceQuery = (value: string | undefined): string => {
 
 function parseQuery(query: Record<string, string>): ChartState {
   const source_type: SourceType = query.source_type === 'metric' ? 'metric' : 'activity_type'
-  const measureState = parseMeasureQuery(query, source_type)
-  const { measure } = measureState
+  const scatter = scatterAllowed(query)
+  const parsedMeasure = parseMeasureQuery(scatter ? {} : query, source_type)
+  const { measure } = parsedMeasure
+  const mode = parseChartMode(query, measure)
+  const measureState = withMuscleFilterRules(
+    {
+      ...parsedMeasure,
+      breakdown_fields: query.breakdown_fields ? query.breakdown_fields.split(',').filter(Boolean) : [],
+    },
+    mode.chart_type,
+  )
   return {
     aggregation: parseAggregation(query.aggregation, source_type, measure),
-    breakdown_fields: query.breakdown_fields ? query.breakdown_fields.split(',').filter(Boolean) : [],
     bucket_size: (query.bucket_size ?? '1d') as BucketSize,
-    ...parseChartMode(query, measure),
+    ...mode,
+    chart_type: scatter ? 'scatter' : mode.chart_type,
+    ...parseScatterQuery(query),
     display_period: (query.display_period ?? 'monthly') as TrendDisplayPeriod,
     ...measureState,
     lookback_days: Number(query.lookback_days) || 90,
@@ -159,6 +198,13 @@ function parseQuery(query: Record<string, string>): ChartState {
   }
 }
 
+const setOriginParams = (params: URLSearchParams, origin: ChartOrigin | null) => {
+  if (!origin) return
+  params.set('board_id', origin.board_id)
+  params.set('section_id', origin.section_id)
+  params.set('widget_id', origin.widget_id)
+}
+
 /** Sync current state to URL query params, preserving any board-chart origin. */
 function syncUrl(state: ChartState, origin: ChartOrigin | null) {
   const params = new URLSearchParams()
@@ -168,6 +214,12 @@ function syncUrl(state: ChartState, origin: ChartOrigin | null) {
   if (state.since) params.set('since', state.since)
   else params.set('lookback_days', String(state.lookback_days))
   params.set('chart_type', state.chart_type)
+  if (state.chart_type === 'scatter') {
+    for (const [key, value] of Object.entries(scatterParams(state))) params.set(key, value)
+    setOriginParams(params, origin)
+    history.replaceState(null, '', `${window.location.pathname}?${params}`)
+    return
+  }
   const measureTrend = isMeasureTrend(state)
   if (state.chart_type === 'trend') {
     if (!measureTrend) params.set('display_period', state.display_period)
@@ -183,11 +235,7 @@ function syncUrl(state: ChartState, origin: ChartOrigin | null) {
     params.set('breakdown_fields', state.breakdown_fields.join(','))
   }
   for (const [key, value] of Object.entries(measureParams(state))) params.set(key, value)
-  if (origin) {
-    params.set('board_id', origin.board_id)
-    params.set('section_id', origin.section_id)
-    params.set('widget_id', origin.widget_id)
-  }
+  setOriginParams(params, origin)
   history.replaceState(null, '', `${window.location.pathname}?${params}`)
 }
 
@@ -203,6 +251,9 @@ function MeasureControls({
 }) {
   const filter = measureFilter(typeDef)
   const filterPath = filter?.path ?? ''
+  const muscle = muscleFilterOf(state)
+  const exerciseValue = muscle ? '' : state.filter_value
+  const musclePath = muscleFilterPath(typeDef.data_schema, state.measure)
   const { data: fieldValues } = useQuery({
     enabled: Boolean(state.measure && filterPath),
     queryFn: () => fetchActivityFieldValues(state.pattern, filterPath),
@@ -218,7 +269,11 @@ function MeasureControls({
           value={state.measure}
           onChange={(e) =>
             onUpdate(
-              measurePatch(state.breakdown_fields, (e.target as HTMLSelectElement).value as MeasureChoice),
+              measurePatch(
+                state.breakdown_fields,
+                (e.target as HTMLSelectElement).value as MeasureChoice,
+                state.filter_field,
+              ),
             )
           }
         >
@@ -234,12 +289,12 @@ function MeasureControls({
         <label>
           {filter.label}
           <select
-            value={state.filter_value}
+            value={exerciseValue}
             onChange={(e) => onUpdate(filterPatch(filter.path, (e.target as HTMLSelectElement).value))}
           >
             <option value="">All</option>
-            {state.filter_value && !fieldValues?.values.some((v) => v.value === state.filter_value) && (
-              <option value={state.filter_value}>{state.filter_value}</option>
+            {exerciseValue && !fieldValues?.values.some((v) => v.value === exerciseValue) && (
+              <option value={exerciseValue}>{exerciseValue}</option>
             )}
             {fieldValues?.values.map((v) => (
               <option key={v.value} value={v.value}>
@@ -249,21 +304,37 @@ function MeasureControls({
           </select>
         </label>
       )}
+      {musclePath && state.chart_type !== 'trend' && (
+        <MuscleGroupSelect
+          value={muscle?.group ?? ''}
+          onChange={(group) => onUpdate(muscleFilterPatch(state.breakdown_fields, musclePath, group))}
+        />
+      )}
     </>
   )
 }
 
-/** Scalar categorical fields, plus the measure's item field (one series per exercise) when charting a measure. */
+/** Scalar categorical fields, plus the measure's item breakdowns (per exercise, per muscle group) when charting a measure. */
 const breakdownOptions = (
   typeDef: ActivityTypeDefinition | undefined,
-  measure: MeasureChoice,
+  state: ChartState,
 ): { label: string; name: string }[] => {
   const scalar = categoricalFields(typeDef?.data_schema).map((f) => ({
     label: f.label ?? f.name,
     name: f.name,
   }))
-  const filter = measure ? measureFilter(typeDef) : undefined
-  return filter ? [...scalar, { label: filter.label, name: filter.path }] : scalar
+  return [...scalar, ...itemBreakdownOptions(typeDef?.data_schema, state.measure, state)]
+}
+
+const useActivityTypeDef = (state: ChartState): ActivityTypeDefinition | undefined => {
+  const { data: activityTypes = [] } = useQuery({
+    queryFn: fetchActivityTypeDefinitions,
+    queryKey: ['activityTypeDefinitions'],
+    staleTime: 5 * 60 * 1000,
+  })
+  return state.source_type === 'activity_type' && state.pattern
+    ? activityTypes.find((d) => d.name === state.pattern)
+    : undefined
 }
 
 /** Source picker shared between both chart modes. */
@@ -274,16 +345,9 @@ function SourcePicker({
   state: ChartState
   onUpdate: (patch: Partial<ChartState>) => void
 }) {
-  const { data: activityTypes = [] } = useQuery({
-    queryFn: fetchActivityTypeDefinitions,
-    queryKey: ['activityTypeDefinitions'],
-    staleTime: 5 * 60 * 1000,
-  })
-  const typeDef =
-    state.source_type === 'activity_type' && state.pattern
-      ? activityTypes.find((d) => d.name === state.pattern)
-      : undefined
-  const breakdownFields = typeDef ? breakdownOptions(typeDef, state.measure) : []
+  const typeDef = useActivityTypeDef(state)
+  const scatter = state.chart_type === 'scatter'
+  const breakdownFields = typeDef && !scatter ? breakdownOptions(typeDef, state) : []
 
   return (
     <div class="chart-controls-row">
@@ -302,6 +366,7 @@ function SourcePicker({
               missing_days: '',
               pattern: '',
               source_type,
+              ...(source_type === 'metric' && scatter ? { chart_type: 'trend' as const } : {}),
             })
           }}
         >
@@ -317,7 +382,12 @@ function SourcePicker({
             <ActivityTypePicker
               value={state.pattern}
               onChange={(pattern) =>
-                onUpdate({ breakdown_fields: [], pattern, ...(state.measure ? measurePatch([], '') : {}) })
+                onUpdate({
+                  breakdown_fields: [],
+                  pattern,
+                  ...(state.measure ? measurePatch([], '') : {}),
+                  ...(pattern === state.pattern ? {} : { collapse: false, group_by: '' }),
+                })
               }
               placeholder="Search activity types..."
             />
@@ -334,7 +404,7 @@ function SourcePicker({
         )}
       </label>
 
-      {typeDef && listFields(typeDef.data_schema).length > 0 && (
+      {typeDef && !scatter && listFields(typeDef.data_schema).length > 0 && (
         <MeasureControls state={state} typeDef={typeDef} onUpdate={onUpdate} />
       )}
 
@@ -346,12 +416,9 @@ function SourcePicker({
               <input
                 type="checkbox"
                 checked={state.breakdown_fields.includes(field.name)}
-                onChange={() => {
-                  const next = state.breakdown_fields.includes(field.name)
-                    ? state.breakdown_fields.filter((f) => f !== field.name)
-                    : [...state.breakdown_fields, field.name]
-                  onUpdate({ breakdown_fields: next })
-                }}
+                onChange={() =>
+                  onUpdate({ breakdown_fields: toggleBreakdownField(state.breakdown_fields, field.name) })
+                }
               />
               {field.label}
             </label>
@@ -428,6 +495,55 @@ function RangeControl({
   )
 }
 
+/** The sessions scatter's exertion axis, and the field that colours (and can collapse) its dots. */
+function ScatterControls({
+  state,
+  onUpdate,
+}: {
+  state: ChartState
+  onUpdate: (patch: Partial<ChartState>) => void
+}) {
+  const typeDef = useActivityTypeDef(state)
+  const groupings = sessionGroupings(categoricalFields(typeDef?.data_schema))
+  return (
+    <>
+      <label>
+        Exertion
+        <div class="chart-type-toggle chart-scatter-y">
+          {scatterYOptions.map((o) => (
+            <button
+              key={o.value}
+              class={`chart-type-btn ${state.scatter_y === o.value ? 'active' : ''}`}
+              onClick={() => onUpdate({ scatter_y: o.value })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </label>
+      <label>
+        Colour
+        <SessionGroupPicker
+          fields={groupings}
+          value={state.group_by}
+          onChange={(group_by) => onUpdate({ collapse: group_by ? state.collapse : false, group_by })}
+          noneLabel="None"
+        />
+      </label>
+      {state.group_by && (
+        <label class="breakdown-checkbox chart-scatter-collapse">
+          <input
+            type="checkbox"
+            checked={state.collapse}
+            onChange={() => onUpdate({ collapse: !state.collapse })}
+          />
+          One dot per value
+        </label>
+      )}
+    </>
+  )
+}
+
 function ChartControls({
   state,
   onUpdate,
@@ -451,6 +567,7 @@ function ChartControls({
                         chart_type: 'trend',
                         half_life_days:
                           state.half_life_days >= 30 ? state.half_life_days : MEASURE_HALF_LIFE_DEFAULT,
+                        ...trendFilterPatch(state),
                       }
                     : { chart_type: 'trend' },
                 )
@@ -464,6 +581,14 @@ function ChartControls({
             >
               Bar
             </button>
+            {state.source_type === 'activity_type' && (
+              <button
+                class={`chart-type-btn ${state.chart_type === 'scatter' ? 'active' : ''}`}
+                onClick={() => onUpdate({ chart_type: 'scatter' })}
+              >
+                Sessions
+              </button>
+            )}
           </div>
         </label>
       </div>
@@ -473,7 +598,9 @@ function ChartControls({
       <div class="chart-controls-row">
         <RangeControl state={state} onUpdate={onUpdate} />
 
-        {state.chart_type === 'trend' ? (
+        {state.chart_type === 'scatter' ? (
+          <ScatterControls state={state} onUpdate={onUpdate} />
+        ) : state.chart_type === 'trend' ? (
           <>
             {!measureTrend && (
               <label>
@@ -521,7 +648,7 @@ function ChartControls({
           </label>
         )}
 
-        {!measureTrend && (
+        {!measureTrend && state.chart_type !== 'scatter' && (
           <label>
             Aggregation
             <select
@@ -736,6 +863,7 @@ function BarDisplay({ params, menu }: { params: FetchChartDataParams; menu: Comp
           rangeEnd={params.end}
           getBarHref={getBarHref}
           multiSeries={multiSeries}
+          stacked={muscleGroupFilter(params.filter_field, params.filter_value) !== undefined}
         />
       </div>
     )
@@ -755,6 +883,105 @@ function BarDisplay({ params, menu }: { params: FetchChartDataParams; menu: Comp
         rangeEnd={params.end}
         getBarHref={getBarHref}
       />
+    </div>
+  )
+}
+
+const NO_SESSIONS: never[] = []
+
+/** The type's sessions in the range as dots: duration across, exertion up, coloured by a field. */
+function ScatterDisplay({
+  state,
+  start,
+  end,
+  onUpdate,
+}: {
+  state: ChartState
+  start: string
+  end: string
+  onUpdate: (patch: Partial<ChartState>) => void
+}) {
+  const { route } = useLocation()
+  const typeDef = useActivityTypeDef(state)
+  const [highlight, setHighlight] = useState<string | undefined>(undefined)
+  const groupBy = state.group_by || undefined
+  const sessionsQuery = useQuery({
+    enabled: Boolean(state.pattern),
+    queryFn: () => fetchActivitySessions(state.pattern, { end, group_by: groupBy, start }),
+    queryKey: ['activity-sessions', state.pattern, groupBy, start, end],
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const field = sessionGroupings(categoricalFields(typeDef?.data_schema)).find((f) => f.name === groupBy)
+  const fieldName = field ? fieldLabel(field) : groupBy
+  const labelOf = useCallback(
+    (key: string) => (key === NONE_KEY ? `No ${(fieldName ?? 'value').toLowerCase()}` : key),
+    [fieldName],
+  )
+
+  const data = sessionsQuery.data
+  const sessionPoints = useMemo(
+    () =>
+      buildSessionPoints(
+        data?.sessions ?? NO_SESSIONS,
+        state.scatter_y,
+        groupBy ? sessionGroupKeys(data?.groups) : undefined,
+      ),
+    [data, state.scatter_y, groupBy],
+  )
+  const collapsed = Boolean(groupBy) && state.collapse
+  const points = useMemo(
+    () => (collapsed ? collapsePoints(sessionPoints.points) : sessionPoints.points),
+    [collapsed, sessionPoints],
+  )
+  const legend = useMemo(() => buildLegend(sessionPoints.points, labelOf), [sessionPoints, labelOf])
+  const onSessionClick = useCallback((p: ScatterPoint) => route(`/detail/activity/${p.id}`), [route])
+  const onGroupClick = useCallback(
+    (p: ScatterPoint) => {
+      setHighlight(p.group)
+      onUpdate({ collapse: false })
+    },
+    [onUpdate],
+  )
+
+  if (!state.pattern) return <div class="chart-empty">Select an activity type to plot its sessions.</div>
+  if (sessionsQuery.isLoading) return <div class="chart-loading">Loading sessions...</div>
+  if (sessionsQuery.isError || !data) return <div class="chart-error">Failed to load sessions.</div>
+
+  const shownHighlight = legend.entries.some((e) => e.key === highlight) ? highlight : undefined
+  const caption = missingCaption(sessionPoints, state.scatter_y)
+
+  return (
+    <div class="chart-display">
+      {legend.entries.length > 0 && (
+        <div class="session-scatter-legend" role="group" aria-label={fieldName}>
+          {legend.entries.map((e) => (
+            <button
+              key={e.key}
+              type="button"
+              class={`session-scatter-legend-item${shownHighlight && shownHighlight !== e.key ? ' dimmed' : ''}`}
+              aria-pressed={shownHighlight === e.key}
+              onClick={() => setHighlight(shownHighlight === e.key ? undefined : e.key)}
+            >
+              <span class="session-scatter-legend-dot" style={{ background: e.color }} />
+              {e.label}
+              <span class="session-scatter-legend-count">{e.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <SessionScatterChart
+        points={points}
+        y={state.scatter_y}
+        collapsed={collapsed}
+        colorOf={legend.colorOf}
+        entries={legend.entries}
+        highlight={shownHighlight}
+        labelOf={labelOf}
+        onSessionClick={onSessionClick}
+        onGroupClick={onGroupClick}
+      />
+      {caption.length > 0 && <p class="chart-caption">{caption.join(' ')}</p>}
     </div>
   )
 }
@@ -819,7 +1046,7 @@ function buildWidgetFromState(
 
 /** The Goals page prefilled with a goal on this chart: its trend, or its measure for a measure's bars. */
 function chartGoalHref(state: ChartState): string | undefined {
-  if (!state.pattern) return undefined
+  if (!state.pattern || muscleFilterOf(state)) return undefined
   if (state.chart_type === 'trend') {
     return goalsHref({
       ...(state.measure
@@ -1009,8 +1236,9 @@ export function Chart() {
     () => chartRange({ lookback_days: state.lookback_days, since: state.since }, new Date()),
     [state.lookback_days, state.since],
   )
+  const scatter = state.chart_type === 'scatter'
   const menu =
-    state.pattern || state.activity_type_id ? (
+    !scatter && (state.pattern || state.activity_type_id) ? (
       <ChartMenu
         widget={(title, masked) => buildWidgetFromState(state, title, undefined, masked)}
         breakdownFields={state.breakdown_fields}
@@ -1023,13 +1251,16 @@ export function Chart() {
       <h1>Chart Explorer</h1>
       <p class="chart-page-description">
         Explore time-weighted averages (EMA) or raw bucketed data for activity types and metrics. Screentime
-        categories are activity types too. Toggle between Trend and Bar chart modes. A measure of an
-        activity's list items, such as an exercise's e1RM, charts as bars or as its decaying best.
+        categories are activity types too. Toggle between Trend and Bar chart modes, or plot an activity
+        type's Sessions by length and exertion. A measure of an activity's list items, such as an exercise's
+        e1RM, charts as bars or as its decaying best.
       </p>
 
       <ChartControls state={state} onUpdate={handleUpdate} />
 
-      {state.chart_type === 'trend' ? (
+      {scatter ? (
+        <ScatterDisplay key={state.group_by} state={state} start={start} end={end} onUpdate={handleUpdate} />
+      ) : state.chart_type === 'trend' ? (
         <TrendDisplay
           menu={menu}
           params={{
@@ -1064,7 +1295,7 @@ export function Chart() {
         />
       )}
 
-      {origin && <UpdateChartOnBoard state={state} origin={origin} />}
+      {origin && !scatter && <UpdateChartOnBoard state={state} origin={origin} />}
     </div>
   )
 }

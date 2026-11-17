@@ -26,7 +26,6 @@ These controls update server-served web menus, including mobile browsers. Embedd
 
 Tests cover discovery without a description, all existing navigation collections, new-page defaults, unknown key preservation, Settings recovery, immediate desktop/mobile/collapsed menu updates, empty groups, independent source visibility, saved failure/retry, unsuccessful API responses, stale-account saves and inline onboarding selection/completion/skip.
 
-
 November 13, 2026 validation: 48 focused frontend tests and the full web suite (211 files / 1,940 tests) passed. The full suite was rerun after the final in-flight-query cancellation safeguard and new-page DOM test; the final guard refactor also passed all eight Feature Control DOM tests. Web/backend type and lint checks and the API package check passed with existing warnings; the web production build and OpenAPI/TypeScript/Kotlin generation passed. Backend settings and settings-migration units passed (103 tests). Generated files remain excluded according to the repository policy.
 
 The settings database integration test was added but could not start locally because no container runtime was available. The wider backend unit run was interrupted by automatic approval review over a possible unmocked external Oura request; no passing result is claimed for that run. GitHub CI must establish the complete backend/database and Android results. No native Android build, manual browser/device visual check, server deployment or live-data modification was performed here.

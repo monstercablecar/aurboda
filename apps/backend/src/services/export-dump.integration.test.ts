@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, inject, test } from 'vitest'
 import { _setDbForUser, initializeSchema, migrateSchemaIfNeeded, userDbName } from '../db/index.ts'
 import { createRolePool, type UserDb } from '../db/pool.ts'
 import { createExportRouter } from '../routes/export-router.ts'
+import { restoreDumpAsDocumented } from '../test/restore-dump.ts'
 import { createDumpExporter, createDumpLinkIssuer, type PgConnection } from './export-dump.ts'
 import { createExportTokens } from './export-token.ts'
 import * as journal from './journal.ts'
@@ -543,11 +544,7 @@ describe('database export', () => {
       await db.query('CREATE EXTENSION unaccent')
     })
 
-    const restore = `set -o pipefail; (echo 'SET ROLE "${target}";'; gunzip -c "$DUMP" | grep -v -e '^COMMENT ON EXTENSION' -e '^SET transaction_timeout') | psql -v ON_ERROR_STOP=1 --quiet "$TARGET_URI"`
-    execFileSync('bash', ['-c', restore], {
-      env: { ...process.env, DUMP: dumpPath, TARGET_URI: databaseUri(database) },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    })
+    restoreDumpAsDocumented(dumpPath, target, database)
 
     const restored = createRolePool({ connectionString: databaseUri(database), max: 2 }, target)
     pools.push(restored)

@@ -68,22 +68,23 @@ CREATE INDEX idx_time_series_metric_time ON time_series (metric, time DESC);
 ```
 
 **Supported metrics:**
-| Metric | Unit | Sources |
-|--------|------|---------|
-| `heart_rate` | bpm | health_connect, oura, garmin |
-| `resting_heart_rate` | bpm | oura, garmin |
-| `hrv_rmssd` | ms | health_connect, oura |
-| `weight` | kg | health_connect, manual |
-| `body_fat` | percent | health_connect |
-| `steps` | count | health_connect, garmin |
-| `calories_active` | kcal | health_connect, garmin |
-| `calories_total` | kcal | health_connect, garmin |
-| `spo2` | percent | health_connect, oura |
-| `respiratory_rate` | brpm | oura |
-| `body_temperature` | celsius | health_connect |
-| `blood_glucose` | mmol/L | health_connect |
-| `blood_pressure_systolic` | mmHg | health_connect |
-| `blood_pressure_diastolic` | mmHg | health_connect |
+
+| Metric                     | Unit    | Sources                      |
+| -------------------------- | ------- | ---------------------------- |
+| `heart_rate`               | bpm     | health_connect, oura, garmin |
+| `resting_heart_rate`       | bpm     | oura, garmin                 |
+| `hrv_rmssd`                | ms      | health_connect, oura         |
+| `weight`                   | kg      | health_connect, manual       |
+| `body_fat`                 | percent | health_connect               |
+| `steps`                    | count   | health_connect, garmin       |
+| `calories_active`          | kcal    | health_connect, garmin       |
+| `calories_total`           | kcal    | health_connect, garmin       |
+| `spo2`                     | percent | health_connect, oura         |
+| `respiratory_rate`         | brpm    | oura                         |
+| `body_temperature`         | celsius | health_connect               |
+| `blood_glucose`            | mmol/L  | health_connect               |
+| `blood_pressure_systolic`  | mmHg    | health_connect               |
+| `blood_pressure_diastolic` | mmHg    | health_connect               |
 
 #### `activities` - Time-Ranged Events
 
@@ -134,13 +135,13 @@ Location tracking with geospatial support.
 ```sql
 CREATE TABLE locations (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source          VARCHAR(50) NOT NULL DEFAULT 'owntracks',
+    source          VARCHAR(50) NOT NULL DEFAULT 'owntracks', -- owntracks, home_assistant, garmin, strava
     time            TIMESTAMPTZ NOT NULL,
     location        GEOGRAPHY(POINT, 4326) NOT NULL,
     accuracy        DOUBLE PRECISION,      -- Horizontal accuracy in meters
     altitude        DOUBLE PRECISION,      -- Meters above sea level
-    velocity        DOUBLE PRECISION,      -- Speed in m/s
-    regions         VARCHAR[] DEFAULT '{}', -- Named regions device is in
+    velocity        DOUBLE PRECISION,      -- Speed in km/h (OwnTracks' vel unit)
+    regions         VARCHAR[] DEFAULT '{}', -- Named regions / Home Assistant zone the device is in
     deleted_at      TIMESTAMPTZ,           -- Soft delete (superseded by an activity's GPS track)
 
     CONSTRAINT unique_location UNIQUE (source, time)
@@ -168,6 +169,7 @@ CREATE TABLE activity_tracks (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     route_matched_at TIMESTAMPTZ,                            -- route matching tried; NULL again on rewrite or retype
+    segments_suggested_at TIMESTAMPTZ,                       -- segment suggestion looked at it; NULL again on rewrite
     PRIMARY KEY (activity_id, source)
 );
 
@@ -241,6 +243,71 @@ non-deleted activities, where rows of the same session from several sources (the
 time) count once. Deleting a route sets `deleted_at` and keeps its `activity_routes` rows, so
 its runs are never matched into a route again; merging moves the `activity_routes` rows and
 deletes the source route.
+
+#### `segments` and `segment_efforts` - Timed Stretches (PostGIS)
+
+A segment is a directional stretch cut by hand from an activity's track or a route, and every
+pass over it is timed. See [Routes and segments](./features/routes-and-segments.md#phase-4-segments).
+
+```sql
+CREATE TABLE segments (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                      VARCHAR(255) NOT NULL,
+    activity_type             VARCHAR(100) NOT NULL REFERENCES activity_type_definitions(name) ON UPDATE CASCADE,
+    geom                      GEOMETRY(LINESTRING, 4326) NOT NULL,   -- start to end; direction matters
+    buffer                    GEOMETRY(GEOMETRY, 4326) NOT NULL,     -- ST_Buffer(geom::geography, 25)::geometry
+    length_m                  DOUBLE PRECISION NOT NULL,
+    created_from_activity_id  UUID REFERENCES activities(id) ON DELETE SET NULL,
+    created_from_route_id     UUID REFERENCES routes(id) ON DELETE SET NULL,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_segments_geom ON segments USING GIST (geom);
+
+CREATE TABLE segment_efforts (
+    segment_id      UUID NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    activity_id     UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+    source          VARCHAR(50) NOT NULL,            -- the timed track's source
+    start_offset_s  DOUBLE PRECISION NOT NULL,       -- seconds since the activity's start
+    elapsed_s       DOUBLE PRECISION NOT NULL,
+    avg_hr          DOUBLE PRECISION,
+    pace_s_per_km   DOUBLE PRECISION,
+    approximate     BOOLEAN NOT NULL DEFAULT false,  -- timed on a shape-only track
+    matched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (segment_id, activity_id, source, start_offset_s)
+);
+CREATE INDEX idx_segment_efforts_activity ON segment_efforts (activity_id);
+```
+
+One row per pass, so hill repeats give several. Deleting a segment deletes it outright and its
+efforts with it. Effort counts, best times and ranks are derived when read: passes of one
+session recorded by several sources (rows or tracks overlapping in time) count once, the
+non-approximate one kept.
+
+#### `suggested_segments` - Stretches Offered as Segments (PostGIS)
+
+A stretch at least three activities of one type pass in the same direction on different routes,
+offered to add as a segment or dismiss. See
+[Routes and segments](./features/routes-and-segments.md#suggested-segments).
+
+```sql
+CREATE TABLE suggested_segments (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    activity_type       VARCHAR(100) NOT NULL REFERENCES activity_type_definitions(name) ON UPDATE CASCADE,
+    geom                GEOMETRY(LINESTRING, 4326) NOT NULL,
+    length_m            DOUBLE PRECISION NOT NULL,
+    activity_count      INTEGER NOT NULL,                -- the activities passing it, the source one included
+    source_activity_id  UUID REFERENCES activities(id) ON DELETE SET NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending | dismissed | promoted
+    segment_id          UUID REFERENCES segments(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    decided_at          TIMESTAMPTZ
+);
+CREATE INDEX idx_suggested_segments_geom ON suggested_segments USING GIST (geom);
+```
+
+Dismissed and promoted rows are kept, so the same stretch is never suggested again, also after
+the promoted segment is deleted.
 
 #### `places` - Named Locations/Geofences
 
@@ -439,7 +506,43 @@ CREATE TABLE oauth_tokens (
 
 ### Querying
 
-For charting heart rate over a week:
+#### Time-weighted averages
+
+Instantaneous-sample metrics arrive at uneven rates: Garmin sends `heart_rate`
+and `stress_level` (and `body_battery` and `respiratory_rate`) once a second
+during a recorded activity and every 2–3 minutes otherwise, and a BLE strap on
+the Live screen records 1 Hz. A plain `avg(value)` would weigh a recorded hour
+100–200 times more than any other hour (on 90 days of real data: heart rate
+80.6 pooled against 72.4 time-weighted, stress 38.4 against 31.0).
+
+So every average Aurboda shows of the metrics in `timeWeightedMetrics`
+(`packages/api-spec/src/schemas/common.ts`: `heart_rate`, `stress_level`,
+`body_battery`, `respiratory_rate`, `spo2`) is taken per 5-minute bin first
+(epoch-aligned, the bins the Analyze context analysis uses) and then across
+bins. Stored samples are unchanged; the weighting happens at query time, in
+`apps/backend/src/db/time-weighted.ts` (`sampleRowsSql`, used by
+`getTimeSeriesStats`, `getDailyAggregates`, `getTimeSeriesBucketed`, the metric
+trend and the chart buckets) and, for series already in memory, in
+`sampleMean` (`apps/backend/src/services/time-weighted-mean.ts`). Where the
+standard deviation is shown with the mean, it is weighted the same way. Min,
+max, sum and count stay those of the samples. A bucket of 5 minutes or less is
+its own bin, so its mean is the plain one. Daily values such as
+`resting_heart_rate` or `sleep_score` are one sample a day and are averaged
+plainly.
+
+This covers the baseline cards (`get_baseline`), the period summary behind the
+dashboard metric and sparkline cards (`query_period_summary`), the daily
+summary's heart rate and `metrics_today`, metric trends (`get_trend`), the chart
+buckets (`query_chart_data`, `query_metrics_bucketed`), the daily values of
+a correlation `metric` selector and the metric outcome of
+`get_generic_correlation`. There the samples of each lag window and of the
+baseline days are binned, the mean and standard deviation are taken across the
+bins, `sample_count` stays the number of raw samples and `bin_count` (only
+present for a time-weighted metric) counts the bins. Averages inside a single activity (a run's
+average heart rate, a session's HR summary) are not reweighted: within an
+activity the samples come at one rate.
+
+For charting heart rate over a week (plain, sample-weighted SQL):
 
 ```sql
 SELECT
@@ -544,6 +647,12 @@ Record types mapped to normalized tables:
 | ------------ | ------------ |
 | location     | locations    |
 | waypoint     | places       |
+
+### Home Assistant
+
+| Data                                      | Target Table                                               |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| `device_tracker` / `person` state history | locations (`source = 'home_assistant'`, zone in `regions`) |
 
 ## Future Extensions
 

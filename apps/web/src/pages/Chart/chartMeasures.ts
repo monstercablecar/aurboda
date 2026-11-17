@@ -1,5 +1,15 @@
-import { type ActivityMeasure, activityMeasures, type ChartDataAggregation } from '@aurboda/api-spec'
+import {
+  type ActivityMeasure,
+  activityMeasures,
+  type ChartDataAggregation,
+  type DataSchemaDefinition,
+  isSummedActivityMeasure,
+  MUSCLE_GROUP_SUFFIX,
+  muscleGroupBreakdownPath,
+  muscleGroupFilter,
+} from '@aurboda/api-spec'
 
+import { categoricalItemFields, fieldLabel, itemPath } from '../../components/sessions/sessionView'
 import { EMA_HALF_LIFE_DEFAULT, MEASURE_HALF_LIFE_DEFAULT } from '../../utils/half-life'
 
 export { MEASURE_HALF_LIFE_DEFAULT }
@@ -14,6 +24,10 @@ export interface MeasureState {
   filter_value: string
   measure: MeasureChoice
 }
+
+const isItemPath = (field: string): boolean => field.includes('.')
+
+const isMuscleGroupPath = (field: string): boolean => muscleGroupBreakdownPath(field) !== undefined
 
 const AGGREGATIONS: readonly string[] = ['count', 'sum', 'mean', 'max'] satisfies ChartDataAggregation[]
 
@@ -33,7 +47,64 @@ export const parseMeasureQuery = (
   source_type: SourceType,
 ): MeasureState => {
   const measure = parseMeasure(query.measure, source_type)
-  return { measure, ...filterPatch(measure ? query.filter_field : undefined, query.filter_value ?? '') }
+  const filter = filterPatch(measure ? query.filter_field : undefined, query.filter_value ?? '')
+  const invalidMuscleFilter =
+    isMuscleGroupPath(filter.filter_field) &&
+    (!isSummedActivityMeasure(measure) || !muscleGroupFilter(filter.filter_field, filter.filter_value))
+  return { measure, ...(invalidMuscleFilter ? filterPatch(undefined, '') : filter) }
+}
+
+/** The muscle group a chart is filtered to: `{ path: 'sets.exercise', group: 'chest' }`. */
+export const muscleFilterOf = (state: Pick<MeasureState, 'filter_field' | 'filter_value'>) =>
+  muscleGroupFilter(state.filter_field || undefined, state.filter_value || undefined)
+
+/**
+ * The breakdowns a muscle filter on `path` allows: no muscle-group breakdown, and of item paths only
+ * its own (one series per exercise).
+ */
+export const breakdownsWithMuscleFilter = (breakdown_fields: string[], path: string): string[] =>
+  breakdown_fields.filter((f) => !isMuscleGroupPath(f) && (!isItemPath(f) || f === path))
+
+/**
+ * Filter to one muscle group of an item path, or with an empty group clear the filter. It replaces
+ * any exercise filter, as a chart has one filter.
+ */
+export const muscleFilterPatch = (
+  breakdown_fields: string[],
+  path: string | undefined,
+  group: string,
+): Omit<MeasureState, 'measure'> & { breakdown_fields: string[] } =>
+  path && group
+    ? {
+        breakdown_fields: breakdownsWithMuscleFilter(breakdown_fields, path),
+        filter_field: `${path}${MUSCLE_GROUP_SUFFIX}`,
+        filter_value: group,
+      }
+    : { breakdown_fields, ...filterPatch(undefined, '') }
+
+/** A trend takes no muscle filter: switching to one drops it. */
+export const trendFilterPatch = (
+  state: Pick<MeasureState, 'filter_field' | 'filter_value'>,
+): Partial<Omit<MeasureState, 'measure'>> => (muscleFilterOf(state) ? filterPatch(undefined, '') : {})
+
+/** A parsed chart's measure and breakdowns made consistent: a trend drops a muscle filter, bars keep only the breakdowns it allows. */
+export const withMuscleFilterRules = (
+  state: MeasureState & { breakdown_fields: string[] },
+  chart_type: string,
+): MeasureState & { breakdown_fields: string[] } => {
+  const muscle = muscleFilterOf(state)
+  if (!muscle) return state
+  if (chart_type === 'trend') return { ...state, ...filterPatch(undefined, '') }
+  return { ...state, breakdown_fields: breakdownsWithMuscleFilter(state.breakdown_fields, muscle.path) }
+}
+
+/** The item path whose muscle groups a summed measure can be filtered to: the first categorical, catalogue-backed one. */
+export const muscleFilterPath = (
+  schema: DataSchemaDefinition | undefined,
+  measure: MeasureChoice,
+): string | undefined => {
+  const first = isSummedActivityMeasure(measure) ? categoricalItemFields(schema)[0] : undefined
+  return first?.item.catalog ? itemPath(first.list, first.item) : undefined
 }
 
 /** A measure is never counted, and only a measure has a max. */
@@ -48,11 +119,23 @@ export const parseAggregation = (
   return raw as ChartDataAggregation
 }
 
-const isItemPath = (field: string): boolean => field.includes('.')
-
-export const measurePatch = (breakdown_fields: string[], measure: MeasureChoice) =>
+/**
+ * A measure that is not summed drops a muscle-group breakdown and a muscle filter; no measure drops
+ * every item path and filter.
+ */
+export const measurePatch = (breakdown_fields: string[], measure: MeasureChoice, filter_field = '') =>
   measure
-    ? { aggregation: defaultAggregation(measure), chart_type: 'bar' as const, measure }
+    ? {
+        aggregation: defaultAggregation(measure),
+        chart_type: 'bar' as const,
+        measure,
+        ...(!isSummedActivityMeasure(measure) && breakdown_fields.some(isMuscleGroupPath)
+          ? { breakdown_fields: breakdown_fields.filter((f) => !isMuscleGroupPath(f)) }
+          : {}),
+        ...(!isSummedActivityMeasure(measure) && isMuscleGroupPath(filter_field)
+          ? filterPatch(undefined, '')
+          : {}),
+      }
     : {
         aggregation: 'count' as const,
         breakdown_fields: breakdown_fields.filter((f) => !isItemPath(f)),
@@ -60,6 +143,34 @@ export const measurePatch = (breakdown_fields: string[], measure: MeasureChoice)
         filter_value: '',
         measure: '' as const,
       }
+
+/**
+ * The item-path breakdowns a measure offers: one series per value of the first categorical item
+ * field, and with a summed measure and a catalogue-backed field one per muscle group.
+ */
+export const itemBreakdownOptions = (
+  schema: DataSchemaDefinition | undefined,
+  measure: MeasureChoice,
+  filter: Pick<MeasureState, 'filter_field' | 'filter_value'> = { filter_field: '', filter_value: '' },
+): { label: string; name: string }[] => {
+  const first = measure ? categoricalItemFields(schema)[0] : undefined
+  if (!first) return []
+  const path = itemPath(first.list, first.item)
+  const byValue = { label: fieldLabel(first.item), name: path }
+  const muscle = muscleFilterOf(filter)
+  if (muscle) return muscle.path === path ? [byValue] : []
+  return first.item.catalog && isSummedActivityMeasure(measure)
+    ? [byValue, { label: 'Muscle group', name: `${path}${MUSCLE_GROUP_SUFFIX}` }]
+    : [byValue]
+}
+
+/** Toggle a breakdown field; a muscle-group breakdown and another item path exclude each other. */
+export const toggleBreakdownField = (fields: string[], field: string): string[] => {
+  if (fields.includes(field)) return fields.filter((f) => f !== field)
+  if (isMuscleGroupPath(field)) return [...fields.filter((f) => !isItemPath(f)), field]
+  if (isItemPath(field)) return [...fields.filter((f) => !isMuscleGroupPath(f)), field]
+  return [...fields, field]
+}
 
 /** An empty value is the "All" choice. */
 export const filterPatch = (path: string | undefined, value: string): Omit<MeasureState, 'measure'> =>

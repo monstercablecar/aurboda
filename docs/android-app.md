@@ -18,11 +18,31 @@ A bottom navigation bar (`ui/screens/MainScreen.kt`, tabs in `AppState.kt`'s
 | Sync | Native   | Health Connect permissions, background sync management                          |
 | More | Hub      | Native list of everything else (`ui/screens/MoreScreen.kt`)                     |
 
+The Add tab's Activity form starts with **Log a strength session**, which opens the web
+[strength session page](features/strength-logging.md) (`/strength`) in the More tab's web view:
+sets are logged there, not natively. The form's data fields are sent as the type's `data_schema`
+declares them (numbers as JSON numbers, a decimal comma accepted, booleans as booleans); a number
+field that does not parse, or falls outside the field's `min` and `max` ("Must be between 0 and 10"),
+is marked on the field and nothing is sent. A queued entry whose values are strings (the older queue
+format) is converted with the cached activity types when it is sent.
+
+Like the web Add data form, the Add tab offers the built-in catalogues. The activity type picker lists
+the [activity type catalogue](features/activity-type-catalog.md)'s types not in use yet under
+**Built-in**, after your own (matched by name, display name or alias; variants are not listed), and a
+picked one shows its fields at once; saving the activity adds the type. The metric picker lists the
+[metric catalogue](features/metric-catalog.md)'s metrics not in use yet under **Catalogue**, and a
+catalogue metric gets a **Unit** choice next to the value, offering the same units as the web form,
+the unit the metric is stored in preselected. A unit is sent only when another one is picked, and a
+queued metric keeps it. Both catalogues are cached, so the pickers offer them offline after one
+successful load; after logging a type or metric not in use yet, the tab reloads the lists.
+
 There are far more web pages than fit on a bottom bar, so the **More** tab is a
 hub (`MoreScreen.kt`, `moreGroups`): a grouped list where each entry opens the
-corresponding web page in an embedded WebView (Timeline, Data, Chart, Meals,
-Reports, Settings, Data sources, Help & support, …). The two native-only screens — **Live**
-sensors (BLE) and **Account** (server URL, logout) — also live in the hub.
+corresponding web page in an embedded WebView (Timeline, Data, Chart, Training load, Meals,
+Reports, Settings, Data sources, Help & support, …). Its first group, **Inbox**, holds
+**Notifications** (the web `/notifications` page, see
+[Notifications](features/notifications.md)). The two native-only screens — **Live**
+sensors ([BLE](#live-sensors)) and **Account** (server URL, logout) — also live in the hub.
 Selecting an entry pushes it in place; the system back gesture returns to the
 hub (after any embedded page has exhausted its own WebView history), and so does
 tapping **More** on the bottom bar again. The pushed sub-page lives in
@@ -35,36 +55,72 @@ a fresh WebView (with fresh history): `selectTab` bumps `AppState.tabReselection
 when the current tab is tapped again, and both embedded tabs are wrapped in
 `key(appState.tabReselections)`. The native Add and Sync tabs are not reset, so a
 half-filled form survives an accidental tap, and a notification or widget link to
-the tab already showing (`AppState.open`) switches tabs without reloading it.
+the tab already showing (`AppState.open`) switches tabs without reloading it. A
+link that names a More page is the exception: it always loads that page (see
+below).
 
 A tab can move from embedded to native later (e.g. if the feed becomes a heavily
 used, interaction-rich screen) without affecting the other tabs.
 
-## Post notifications
+## Notifications
 
-A native background poller (`NotificationWorker`, a periodic WorkManager job)
-notifies the user when accounts they follow post to their home timeline. Each
-run fetches `/feed/following` and `/feed/timeline`, then the pure, unit-tested
-`decideNotifications` (`PostNotifications.kt`) picks which posts to notify: those
-newer than a stored high-water mark (judged by `received_at` — when the server
-stored the post — since `published_at` arrives out of order after federation
-retries), from a followed actor whose server-side `notify_on_post` flag is on
-(toggled per-account on the web Feed page), and not a reply to someone else —
-posts the user is **involved** in (a reply to their own post, a Mention of
-them) notify whoever wrote them (#1060). The first
-run only records the high-water mark, so enabling the feature doesn't dump the
-backlog. The user opts in with the **"Notify me about new posts"** switch on the
-Account screen, which requests `POST_NOTIFICATIONS` (Android 13+) and
-schedules/cancels the worker; tapping a notification opens the Feed tab. When
-the toggle is on but Android's app-level notification permission is off (the
-worker would silently skip posting), the Account screen shows a warning with a
-button into the system notification settings, re-checked on every resume.
-On launch, `AutoEnablePostNotifications` reconciles the Feed page's
-per-account bells with the device: if any bell is on and the user never made
-an explicit on/off choice, it requests the permission and starts the poller —
-so an active bell can't silently mean nothing. An explicit "off" is never
-overridden, and a denied request records "off" so the user isn't re-prompted
-every launch.
+The phone shows the server's [notifications](features/notifications.md) that are meant for
+push. The server decides what is pushed: each notification type has its own **Push** switch,
+set on the web Settings page under Notifications. The app only delivers them.
+
+**The device switch.** "Notifications on this device" on the Account screen turns delivery on
+or off for this phone. Turning it on requests `POST_NOTIFICATIONS` (Android 13+) and schedules
+the poller; "Choose which kinds" opens the embedded `/settings#notifications` page. When the
+switch is on but Android's app-level notification permission is off (nothing would be shown),
+the Account screen shows a warning with a button into the system notification settings,
+re-checked on every resume. On launch, `AutoEnablePostNotifications` turns the switch on by
+itself, requesting the permission, when the user never made an explicit choice and the server
+pushes at least one type (`GET /notifications/types`, any `push`). An explicit "off" is never
+overridden, and a denied request records "off" so the user isn't re-prompted every launch.
+
+**The poll.** There is no FCM (the app ships on F-Droid): `NotificationWorker` is a periodic
+WorkManager job, every 15 minutes, that reads `GET /notifications?push_only=true&unread_only=true`
+after a stored high-water mark. The pure, unit-tested `decideCentralNotifications`
+(`CentralNotifications.kt`) picks the notifications created after the mark; the first run only
+records it, so turning delivery on doesn't dump the backlog (the old post poller's mark seeds
+it after an upgrade, so nothing that arrived since its last run is lost). After a background
+sync succeeds, `SyncWorker` asks for one extra poll a minute later (`NotificationWorker.checkSoon`):
+an auto-share announces itself shortly after the activity lands and shares after the rule's
+wait, 10 minutes by default, which is shorter than the poll interval. The periodic poll and
+`checkSoon` are two unique works, so they share one lock and never post the same notification
+at once.
+
+**Keeping the shade current.** Every poll also re-reads the server notifications still in the
+shade: their server id and a key of what they show (title, body, link and actions,
+`notificationContentKey`) ride in the notification's extras, and
+`GET /notifications?push_only=true&ids=…` answers their current state. The pure
+`reconcileShownNotifications` withdraws the ones read elsewhere (the web bell, **Mark all read**)
+or no longer on the server, and reposts the revised ones under the same Android id without
+alerting again (`setOnlyAlertOnce`): a pending auto-share turns into "was shared" or "will not be
+shared" and loses its "Don't share" button. A server that predates `ids` ignores it and answers
+notifications that were not asked for; the app then leaves the shade alone. Notifications posted
+before this version carry no extras and are left as they are.
+
+**Showing one.** Each notification shows its title and body on a channel per notification
+group (`notifications_<group>`, named after the group, e.g. "Feed"; a type the server lists
+without a group, or one unknown to it, goes to "Other"), so the user can mute a group in
+Android's settings. Tapping it opens its link — `/feed` on the Feed tab, any other site path as
+an embedded page in the More tab, `/notifications` when there is none — and marks it read
+(`EXTRA_NOTIFICATION_ID`, validated as a UUID since the activity is exported). The
+notification's action buttons (e.g. "Don't share" on a pending auto-share) run on the server
+through `NotificationActionReceiver` (`POST /notifications/{id}/actions/{key}`); on success the
+notification goes away, on failure it is replaced by one saying the action failed.
+
+**Unread badge.** The More tab's icon and its Notifications row show the number of unread in-app
+notifications (`unread_count`, "9+" above nine), refreshed when the app resumes, when More is
+selected, and when a page opened from More is closed.
+
+**Older servers.** A server without `/notifications` answers 404. Then the worker falls back to
+the old post notifier: it fetches `/feed/following` and `/feed/timeline` and `decideNotifications`
+(`PostNotifications.kt`) notifies posts newer than its own high-water mark (judged by
+`received_at`), from a followed actor whose `notify_on_post` bell is on, and not a reply to
+someone else, plus posts the user is involved in (a reply to their post, a Mention of them).
+Tapping one opens the Feed tab. Auto-enable likewise falls back to "any bell is on".
 
 ## Embedded web views
 
@@ -90,6 +146,24 @@ and every `<input type="file">`. `EmbeddedWebScreen` installs one
 native dialogs (back or an outside tap counts as Cancel) and backs file inputs,
 including `multiple`, with the system picker. Embedded pages can therefore keep
 using the browser's own dialogs and file inputs.
+
+### Camera (barcode scanning)
+
+The food pages can read a product barcode with the camera (see
+[openfoodfacts.md → Scanning](openfoodfacts.md#scanning)), which in the WebView
+needs both the app's `CAMERA` permission and a `WebChromeClient` that answers the
+page's `getUserMedia` request. The manifest declares `android.permission.CAMERA`
+with `android.hardware.camera` marked `required="false"`, so the app still installs
+on devices without a camera. The permission is not asked for at install or start:
+the first time a page opens the scanner, the system dialog asks for it, and a
+refusal shows the page's "camera is blocked" message.
+
+`EmbeddedWebChrome.kt` (`rememberWebCameraPermission`) grants only
+`RESOURCE_VIDEO_CAPTURE` (never the microphone or anything else a page asks for),
+and only to a request whose origin has the scheme, host and port of the signed-in
+server (`isSameOrigin`). A page that is not on that origin (a challenge on another
+instance) gets a chrome client that denies every such request. A request still
+pending when the screen leaves is denied.
 
 ### Page height and `vh` units
 
@@ -172,6 +246,24 @@ The decision is a pure, unit-tested helper: `ui/screens/WebLink.kt`
 (`isExternalLink`). Non-http(s) schemes (`mailto:`, `tel:`, …) are treated as
 external.
 
+## Login screen
+
+The login screen (`ui/screens/LoginScreen.kt`) is native, since it works logged out: the server
+URL, **Sign in with passkey** (Credential Manager), one button per
+[sign-in provider](sso.md#in-the-android-app) the server offers, and username and password. The
+providers load with the email check, half a second after the server URL stops changing
+(`AuthApi.oidcProviders`; an older server without them shows none).
+
+A provider button starts an app sign-in (`AuthApi.oidcStart`, `{"client": "app"}`), keeps the
+verifier in memory (`OidcLogin.pending`, `OidcLogin.kt`, for ten minutes) and opens the provider in a
+Custom Tab (`androidx.browser`), falling back to `ACTION_VIEW`. The server sends the browser back to
+`net.aurboda.oidc://callback?code=…` (or `?error=…`), which `MainActivity` claims with an intent
+filter. `MainActivity` hands the callback to `OidcLogin.callback` and clears the intent's data so a
+rotation does not replay it; when the browser started a second `MainActivity` on top of its tab, that
+copy brings the running one forward (`CLEAR_TOP | SINGLE_TOP`) and finishes. The login screen trades
+the code with the verifier (`AuthApi.oidcExchange`) and saves the session like a password login.
+Linking a provider is web-only: the embedded Settings page shows no Link buttons.
+
 ## Refused tokens and read-only accounts
 
 - **401: logged out.** The HTTP clients that carry the stored token (background
@@ -192,12 +284,34 @@ external.
   schedule. `classifyHttpStatus` (`HttpOutcome.kt`) is where the status codes get
   their meaning.
 
+## Live sensors
+
+The native **Live** screen (`ui/screens/LiveScreen.kt`) connects to Bluetooth LE sensors that
+speak the standard profiles: heart-rate monitors (Heart Rate service `0x180D`, e.g. a Polar H10)
+and running speed and cadence pods (RSC service `0x1814`, e.g. a Zwift Runpod). It scans for them
+and lists what it finds; each connected sensor gets a card with its live heart rate, or cadence
+and steps, the sync state (with **Enable HC** while Health Connect writes are not permitted), an
+**Auto-reconnect** switch and **Disconnect**. A heart-rate card also shows HRV (RMSSD over the
+RR intervals, with a five-minute chart) once enough intervals are in. The **Phone Step Counter**
+card counts steps from the phone's own step sensor instead.
+
+The connections run in a foreground service (`ble/SensorService.kt`), so they go on with the
+screen closed; **Stop All Sensors**, or the notification's stop action, ends it. Every five
+seconds the service sends the new samples to the backend as Health Connect records
+(`POST /sync/HeartRateRecord`, `/sync/StepsRecord`, and `/sync/HeartRateVariabilityRmssdRecord`
+when the RR window is reliable) and writes them to Health Connect where permitted. A sensor with
+auto-reconnect on is reconnected with backoff after a drop, and after a reboot or when Bluetooth
+comes back on (`ble/BleAutoConnectReceiver.kt`).
+
 ## Home-screen widgets
 
 Two `AppWidgetProvider`s live in `widget/`:
 
 - **HR Zones** (`HrZoneWidgetProvider` + `GoalsWidgetService`): the goal
-  progress bars, see `docs/GOAL_WIDGET.md`. Tapping it opens the Goals page.
+  progress bars from `GET /goals/progress/widget`, one row per goal in the web
+  order, with the same colours and overflow bar as the web Goals page (see
+  [Goals: Android Widget](features/goals.md#android-widget)). It is resizable and
+  its rows scroll. Tapping it opens the Goals page.
 - **Challenge** (`ChallengeWidgetProvider`, min 2×2, resizable): the race chart
   and leaderboard of **one** challenge, hosted or joined. When the widget is
   placed the launcher opens `ChallengeWidgetConfigActivity` (a Compose list of
@@ -258,7 +372,11 @@ Widget taps and notification taps reach `MainActivity` as `EXTRA_OPEN_TAB` /
 `EXTRA_MORE_PATH` extras (`deepLinkFrom` in `AppState.kt`). On a cold start they
 pick the initial tab/page; because the activity is `singleTop`, a tap while the
 app is running arrives in `onNewIntent` and navigates the running app to the same
-place (`AppState.open`). `MoreDestination.Web` accepts either a site path or an
+place (`AppState.open`). A link with a More page always opens it in a fresh
+WebView, also when More already shows a page (even that same page):
+`AppState.open` bumps `AppState.morePageLinks`, and `MoreScreen` keys the
+embedded page on the path and that counter, because `EmbeddedWebScreen` loads its
+URL only when its WebView is built. `MoreDestination.Web` accepts either a site path or an
 absolute URL (`embeddedPageUrl`), so a joined challenge hosted elsewhere opens
 embedded too — its own in-page links open in the browser as any external link.
 Because the activity is exported, any app can send these extras, so `deepLinkFrom`
@@ -268,8 +386,13 @@ anything else opens the More hub.
 
 ## Update channels
 
-The app checks `BuildConfig.VERSION_JSON_URL` for a newer build (`checkForUpdate` in
-`MainActivity.kt`). CI bakes the URL in per branch (`.github/workflows/android.yml`):
+Only the `github` build flavor (the APK on GitHub releases) updates itself; the Google Play and
+F-Droid builds are updated by their store and share a no-op `SelfUpdate`. See
+[Android distribution: GitHub, Google Play and F-Droid](android-stores.md) for the flavors.
+
+The `github` build checks `BuildConfig.VERSION_JSON_URL` for a newer build (`checkForUpdate`,
+called from `SelfUpdate` in `src/github/java/net/aurboda/update/`). CI bakes the URL in per branch
+(`.github/workflows/android.yml`):
 
 | Built from | Release                             | `VERSION_JSON_URL`                      |
 | ---------- | ----------------------------------- | --------------------------------------- |
@@ -279,4 +402,6 @@ The app checks `BuildConfig.VERSION_JSON_URL` for a newer build (`checkForUpdate
 A stable install therefore only ever updates to the next main release; a beta install
 (APK from the `beta` pre-release) follows develop. Local builds default to the beta
 channel. The tag is `beta`, not `develop`: a tag named like a branch shadows the branch in
-git ref resolution (`git fetch origin develop` would fetch the tag). `versionCode` is `git rev-list --count HEAD`, monotonic within each channel.
+git ref resolution (`git fetch origin develop` would fetch the tag). `versionCode` is `git rev-list --count HEAD` (`scripts/release-version.sh`), monotonic within each channel. On `main`
+every release builds the APK, whether or not it touches `apps/android`, because `v1.0.<versionCode>` is also the
+release's Docker image tag (`.github/workflows/release.yml`); its release notes are the release PR's change list.

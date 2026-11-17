@@ -54,6 +54,7 @@ export {
   migrateSchemaIfNeeded,
   query,
   schemaInitialized,
+  setUserPassword,
   userDbName,
   withUserTransaction,
 } from './connection.ts'
@@ -66,6 +67,7 @@ export {
   getAllScrobbles,
   getScrobbles,
   insertRawRecord,
+  insertRawRecords,
   queryRawRecords,
   type QueryRawRecordsParams,
   type RawRecordRow,
@@ -76,7 +78,9 @@ export {
   deleteTimeSeriesBySource,
   deleteTimeSeriesMetric,
   deleteTimeSeriesPoint,
+  getBinnedTimeSeries,
   getDailyAggregates,
+  getDailySampleCounts,
   getDistinctMetrics,
   getHrZoneSecs,
   getHrZoneSecsForWindows,
@@ -100,6 +104,14 @@ export {
 } from './time-series.ts'
 
 export {
+  countTimeSeriesInWindows,
+  type FlaggedWindow,
+  getFlaggedWindows,
+  inWindowsSql,
+  windowParams,
+} from './flagged-windows.ts'
+
+export {
   deleteDeductionRule,
   deleteRuleActivities,
   deleteStaleRuleActivities,
@@ -118,9 +130,12 @@ export { getMediaPlayById, getMediaPlays, storeMediaPlays } from './media-plays.
 
 export {
   activityTypeExists,
+  adoptCatalogActivityType,
   deleteActivityTypeDefinition,
+  ensureActivityType,
   expandActivityTypes,
   expandAncestorTypes,
+  findActivityTypeForName,
   getActivityTypeDefinition,
   getActivityTypeDefinitions,
   getActivityTypeNames,
@@ -143,6 +158,7 @@ export {
   softDeleteActivityByExternalId,
   findActivityByExternalId,
   findAdjacentActivity,
+  type ActivityFieldValueRow,
   getActivityFieldValues,
   type DataFilter,
   findDeletedActivityByExternalId,
@@ -152,6 +168,7 @@ export {
   getActivitiesByCategory,
   getActivitiesExcludingCategories,
   getActivitiesNeedingDetail,
+  getGarminActivitiesNeedingSets,
   getEffectiveActivitiesInRange,
   getScreentimeActivities,
   migrateExerciseTypes,
@@ -173,10 +190,13 @@ export {
   insertMergedActivity,
   insertOverride,
   markActivityDetailSynced,
+  setGarminActivitySets,
   materializeSuperseded,
   rematerializeSupersededOnce,
+  retireSingleLiftTypes,
   mergeOverlappingActivities,
   pickOverrideWinner,
+  blendGroupData,
   restoreActivity,
   restoreEmptyImportTombstone,
   restoreSetlessTombstone,
@@ -206,6 +226,7 @@ export {
   insertLocations,
   insertNamedLocation,
   insertPlace,
+  softDeleteLocationsInTrackedActivities,
   softDeleteSupersededLocations,
   updateDetectedLocation,
   updateNamedLocation,
@@ -294,6 +315,7 @@ export {
   type ChallengeParticipationInput,
   type ChallengeParticipationProtocol,
   type ChallengeParticipationRecord,
+  type ChallengeParticipationSnapshotPatch,
   type ChallengePatch,
   type ChallengeRecord,
   type ChallengeSpecFields,
@@ -308,7 +330,6 @@ export {
   getParticipationById,
   getParticipationByToken,
   getParticipationByUrl,
-  hasRemoteChallengeMember,
   listChallengeMembers,
   listChallengeParticipations,
   listChallenges,
@@ -319,6 +340,7 @@ export {
   removeChallengeMember,
   updateChallenge,
   updateChallengeMemberCache,
+  updateChallengeParticipationSnapshot,
   upsertChallengeMember,
 } from './challenges.ts'
 
@@ -373,6 +395,7 @@ export {
   markFeedFollowingAccepted,
   removeFeedFollowing,
   removeFeedFollowingByActor,
+  updateFeedFollowedTagNotify,
   updateFeedFollowingNotify,
   updateFeedFollowingPresentation,
   upsertFeedFollowing,
@@ -467,9 +490,9 @@ export {
   createDashboardPost,
   createExercisePost,
   createFeedPost,
+  createFeedPostUnlessSuppressed,
   createReplyPost,
   type DashboardPostInput,
-  deleteFeedPost,
   deleteFeedPostWithQuotes,
   type ExercisePostInput,
   type FeedPostCursor,
@@ -506,6 +529,7 @@ export {
   getAutoshareRules,
   getEnabledAutoshareRules,
   insertAutoshareRule,
+  insertAutoshareSuppressions,
   listAutoshareCandidates,
   listAutoshareSuppressedIds,
   updateAutoshareRule,
@@ -582,11 +606,13 @@ export {
   getFrequentFoodItems,
   getFrequentMeals,
   getMealById,
+  getMealFlagsInRange,
   getMealLogCompleted,
   getMealLogCompletedInRange,
   getMeals,
   getNutritionCompleteDaysInRange,
   insertMeal,
+  type MealFlags,
   type NutrientKey,
   NUTRIENT_KEYS,
   upsertMeal,
@@ -607,7 +633,14 @@ export {
   updateReport,
 } from './reports.ts'
 
-export { deleteOAuthToken, getOAuthToken, upsertOAuthToken } from './oauth.ts'
+export {
+  deleteOAuthToken,
+  getOAuthToken,
+  markOAuthTokenRefused,
+  updateOAuthAccessToken,
+  updateOAuthTokenScopes,
+  upsertOAuthToken,
+} from './oauth.ts'
 
 export { getAllSyncStates, getSyncState, resetSyncState, upsertSyncState } from './sync-state.ts'
 
@@ -672,6 +705,7 @@ export { claimSettingsFlag, claimSettingsFlagIn, getUserSettings, upsertUserSett
 export { deleteGoal, getGoals, insertGoal, replaceGoals } from './goals.ts'
 
 export {
+  adoptCatalogMetric,
   bulkInsertCustomMetricDefinitions,
   type CustomMetricDefinitionUpdates,
   deleteCustomMetricDefinition,
@@ -681,6 +715,8 @@ export {
   mergeCustomMetric,
   updateCustomMetricDefinition,
 } from './custom-metrics.ts'
+
+export { getDataPresence } from './data-presence.ts'
 
 export {
   deleteExpiredMcpSessions,
@@ -757,6 +793,30 @@ export {
 } from './routes.ts'
 
 export {
+  deleteSegment,
+  findSegmentCandidatesForActivity,
+  findTrackCandidatesForSegment,
+  getSegmentById,
+  getSegmentLine,
+  getTimingTrack,
+  insertSegment,
+  listActivitySegmentEfforts,
+  listSegmentEfforts,
+  listSegments,
+  replaceSegmentEfforts,
+  segmentLineFromActivity,
+  segmentLineFromRoute,
+  updateSegment,
+  type ActivitySegmentEffortRow,
+  type SegmentEffortInput,
+  type SegmentEffortRow,
+  type SegmentLine,
+  type SegmentLineResult,
+  type SegmentRecord,
+  type TimingTrack,
+} from './segments.ts'
+
+export {
   getActivityTrack,
   getGarminTrackBackfillCandidates,
   getStravaTrackBackfillCandidates,
@@ -778,3 +838,36 @@ export {
   repointItemValueAliases,
   upsertItemValueAlias,
 } from './item-value-aliases.ts'
+
+export type { NotificationPageRow, NotificationPreferenceRecord, NotificationRecord } from './types.ts'
+
+export {
+  countUnreadNotifications,
+  getNotificationById,
+  getNotificationPreference,
+  insertNotification,
+  listNotificationPreferences,
+  listNotifications,
+  type ListNotificationsOptions,
+  listOpenNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  markNotificationsReadByType,
+  type NotificationCursor,
+  type NotificationInsert,
+  type NotificationPreferencePatch,
+  type NotificationRevisionPatch,
+  type NotificationTarget,
+  pruneNotifications,
+  reviseNotification,
+  reviseOpenNotifications,
+  upsertNotificationPreference,
+} from './notifications.ts'
+
+export {
+  deleteItemValueIdentity,
+  type ItemValueIdentityRow,
+  listItemValueIdentities,
+  moveItemValueIdentity,
+  upsertItemValueIdentity,
+} from './item-value-identities.ts'

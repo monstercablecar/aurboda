@@ -13,11 +13,13 @@ import type { NutrientKey } from '../../db/index.ts'
 import {
   getEffectiveActivitiesInRange,
   getDailyNutrientTotals,
+  getMealFlagsInRange,
   getMealLogCompletedInRange,
   getNutritionCompleteDaysInRange,
   getProductivity,
   getTimeSeries,
 } from '../../db/index.ts'
+import { sampleMean } from '../time-weighted-mean.ts'
 
 /** Comparison used to turn a numeric value into a discrete event. */
 export interface ThresholdSpec {
@@ -59,12 +61,21 @@ export interface ProductivitySelector {
   pattern: string
 }
 
+export interface SensitivitySelector {
+  kind: 'sensitivity'
+  /** Sensitivity flag id. */
+  flag: string
+  /** Threshold for event mode on the daily count of flagged meals (default: value > 0). */
+  threshold?: ThresholdSpec
+}
+
 export type Selector =
   | TagSelector
   | ActivitySelector
   | MetricSelector
   | NutritionSelector
   | ProductivitySelector
+  | SensitivitySelector
 
 /** Uniform resolved representation of a selector over a date range. */
 export interface ResolvedSeries {
@@ -76,8 +87,9 @@ export interface ResolvedSeries {
   knownDays: string[]
   /**
    * Days with *complete* data, when the dimension distinguishes complete from
-   * partial logging. Only nutrition populates this (days with real macros, vs
-   * flag-only days); undefined for dimensions where every known day is complete.
+   * partial logging: for nutrition the days with real macros (vs flag-only
+   * days), for a sensitivity the days marked meal log completed; undefined for
+   * dimensions where every known day is complete.
    */
   completeDays?: string[]
 }
@@ -172,25 +184,28 @@ const resolveMetric = async (
 ): Promise<ResolvedSeries> => {
   const entries = await getTimeSeries(user, selector.metric, start, end)
   const agg = selector.agg ?? 'avg'
-  const sums = new Map<string, number>()
-  const counts = new Map<string, number>()
+  const byDay = new Map<string, [Date, number][]>()
   // Track whether any single entry on the day passes the threshold (event mode).
   const eventDaySet = new Set<string>()
 
-  for (const [time, value] of entries) {
-    const day = toUtcDay(time)
-    sums.set(day, (sums.get(day) ?? 0) + value)
-    counts.set(day, (counts.get(day) ?? 0) + 1)
-    if (passesThreshold(value, selector.threshold)) eventDaySet.add(day)
+  for (const entry of entries) {
+    const day = toUtcDay(entry[0])
+    byDay.getOrInsert(day, []).push(entry)
+    if (passesThreshold(entry[1], selector.threshold)) eventDaySet.add(day)
   }
 
   const daily = new Map<string, number>()
-  for (const [day, sum] of sums) {
-    daily.set(day, agg === 'sum' ? sum : sum / (counts.get(day) ?? 1))
+  for (const [day, dayEntries] of byDay) {
+    daily.set(
+      day,
+      agg === 'sum'
+        ? dayEntries.reduce((sum, [, value]) => sum + value, 0)
+        : (sampleMean(selector.metric, dayEntries) ?? 0),
+    )
   }
 
   // A metric's status is known only on days it was logged (incl. explicit 0s).
-  return { eventDays: [...eventDaySet], daily, knownDays: [...sums.keys()] }
+  return { eventDays: [...eventDaySet], daily, knownDays: [...byDay.keys()] }
 }
 
 /** Daily nutrient totals; known days include meal-log-completed zero days. */
@@ -217,6 +232,31 @@ const resolveNutrition = async (
   // Complete = days with a real logged value for *this* nutrient, so callers can
   // exclude or count flag-only days that otherwise read as noisy zeros.
   return { ...fromDailyValues(daily, [...knownSet], selector.threshold), completeDays }
+}
+
+/**
+ * Meals carrying the flag per day. Known days follow resolveNutrition: a day with any meal, or one
+ * marked meal log completed; a known day without a flagged meal is 0.
+ */
+const resolveSensitivity = async (
+  user: string,
+  selector: SensitivitySelector,
+  start: Date,
+  end: Date,
+): Promise<ResolvedSeries> => {
+  const [meals, completed] = await Promise.all([
+    getMealFlagsInRange(user, start, end),
+    getMealLogCompletedInRange(user, toUtcDay(start), toUtcDay(end)),
+  ])
+
+  const daily = new Map<string, number>()
+  for (const meal of meals) {
+    const day = toUtcDay(meal.time)
+    daily.set(day, (daily.get(day) ?? 0) + (meal.flag_ids.includes(selector.flag) ? 1 : 0))
+  }
+  for (const day of completed) daily.getOrInsert(day, 0)
+
+  return { ...fromDailyValues(daily, [...daily.keys()], selector.threshold), completeDays: completed }
 }
 
 /** Productivity minutes per day for a matching category or app. */
@@ -260,5 +300,7 @@ export const resolveSelector = (
     case 'productivity_category':
     case 'productivity_app':
       return resolveProductivity(user, selector, start, end)
+    case 'sensitivity':
+      return resolveSensitivity(user, selector, start, end)
   }
 }

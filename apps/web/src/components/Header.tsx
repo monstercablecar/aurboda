@@ -11,6 +11,7 @@ import {
   pageTitleForPath,
   SHARING_LINKS,
 } from './nav-links'
+import { NotificationBellLink } from './NotificationBell'
 import { usePageVisibility } from './usePageVisibility'
 
 // eslint-disable-next-line complexity -- navigation component with many branches
@@ -74,6 +75,7 @@ export function Header() {
         </a>
         <span class="nav-mobile-title">{pageTitleForPath(url)}</span>
         <span class="spacer" />
+        {isLoggedIn && <NotificationBellLink />}
         {!isLoggedIn && canSignup && (
           <a href="/signup" class={`nav-mobile-home${url === '/signup' ? ' active' : ''}`}>
             Sign up

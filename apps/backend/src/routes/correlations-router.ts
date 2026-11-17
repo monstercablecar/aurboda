@@ -1,5 +1,3 @@
-import type { RequestHandler } from 'express'
-
 import {
   type ActivityImpactQuery,
   activityImpactQuerySchema,
@@ -20,6 +18,15 @@ import {
   type HrvActivitiesQuery,
   hrvActivitiesQuerySchema,
   type HrvActivitiesResponse,
+  impactDurationBucketsError,
+  impactExtraMetricsError,
+  type ImpactMetricsQuery,
+  impactMetricsQuerySchema,
+  type ImpactMetricsResponse,
+  impactTimeBucketsError,
+  parseImpactBucketLimits,
+  parseImpactFilters,
+  parseImpactMetricsParam,
 } from '@aurboda/api-spec'
 
 import type { SyncProvider } from '../services/queries/index.ts'
@@ -32,13 +39,14 @@ import {
   getEventProbability,
   getGenericCorrelation,
   getHrvActivitiesCorrelation,
+  getImpactMetrics,
   parseImpactPeriod,
 } from '../services/correlations/index.ts'
-import { type TypedRouter, typedRouter } from '../typed-router.ts'
+import { type AnyMiddleware, type TypedRouter, typedRouter } from '../typed-router.ts'
 import { validateBody, validateQuery } from '../validation.ts'
 
 export const createCorrelationsRouter = (
-  authMiddleware: RequestHandler,
+  authMiddleware: AnyMiddleware,
   syncProvider?: SyncProvider,
 ): TypedRouter => {
   const router = typedRouter()
@@ -48,11 +56,11 @@ export const createCorrelationsRouter = (
     authMiddleware,
     validateQuery(baselineQuerySchema),
     async (req, res) => {
-      const { reference_date } = req.query
+      const { include_flagged, reference_date } = req.query
       const user = req.user!
 
       const referenceDate = reference_date ? new Date(reference_date) : undefined
-      const baseline = await getBaseline(user, referenceDate)
+      const baseline = await getBaseline(user, referenceDate, { excludeFlagged: !include_flagged })
       res.json({ data: baseline, success: true })
     },
   )
@@ -62,9 +70,12 @@ export const createCorrelationsRouter = (
     authMiddleware,
     validateQuery(hrvActivitiesQuerySchema),
     async (req, res) => {
-      const { period_days, context_metric, window_minutes } = req.query
+      const { period_days, context_metric, include_flagged, metrics, window_minutes } = req.query
       const user = req.user!
 
+      const extraMetrics = parseImpactMetricsParam(metrics)
+      const metricsError = impactExtraMetricsError(extraMetrics)
+      if (metricsError) return res.status(400).json({ error: metricsError, success: false })
       const periodDays = period_days ? parseInt(period_days, 10) : 30
       const windowMinutes = window_minutes ? parseInt(window_minutes, 10) : 30
       const correlations = await getHrvActivitiesCorrelation(
@@ -73,6 +84,8 @@ export const createCorrelationsRouter = (
         syncProvider,
         context_metric,
         windowMinutes,
+        extraMetrics,
+        { excludeFlagged: !include_flagged },
       )
       res.json({ data: correlations, success: true })
     },
@@ -84,11 +97,37 @@ export const createCorrelationsRouter = (
     validateQuery(activityImpactQuerySchema),
     async (req, res) => {
       const { activity } = req.params
-      const { activity_type, end, match, period_days, start, window_minutes } = req.query
+      const {
+        activity_type,
+        breakdown,
+        duration_buckets,
+        end,
+        filters,
+        include_dimensions,
+        include_flagged,
+        match,
+        metrics,
+        period_days,
+        start,
+        time_buckets,
+        tz,
+        window_minutes,
+      } = req.query
       const user = req.user!
 
       const period = parseImpactPeriod(start, end)
       if (!period.ok) return res.status(400).json({ error: period.error, success: false })
+      const extraMetrics = parseImpactMetricsParam(metrics)
+      const metricsError = impactExtraMetricsError(extraMetrics)
+      if (metricsError) return res.status(400).json({ error: metricsError, success: false })
+      const durationBuckets = parseImpactBucketLimits(duration_buckets)
+      const durationError = durationBuckets && impactDurationBucketsError(durationBuckets)
+      if (durationError) return res.status(400).json({ error: durationError, success: false })
+      const timeBuckets = parseImpactBucketLimits(time_buckets)
+      const timeError = timeBuckets && impactTimeBucketsError(timeBuckets)
+      if (timeError) return res.status(400).json({ error: timeError, success: false })
+      const parsedFilters = parseImpactFilters(filters)
+      if (!parsedFilters) return res.status(400).json({ error: 'Malformed filters', success: false })
       const periodDays = period_days ? parseInt(period_days, 10) : 90
       const windowMinutes = window_minutes ? parseInt(window_minutes, 10) : 30
 
@@ -102,8 +141,30 @@ export const createCorrelationsRouter = (
         period.until,
         period.since,
         match,
+        extraMetrics,
+        {
+          breakdown,
+          durationBuckets: durationBuckets ?? undefined,
+          filters: parsedFilters,
+          includeDimensions: include_dimensions,
+          timeBuckets: timeBuckets ?? undefined,
+          tz,
+        },
+        { excludeFlagged: !include_flagged },
       )
       res.json({ data: impact, success: true })
+    },
+  )
+
+  router.get<Record<string, never>, ImpactMetricsResponse, unknown, ImpactMetricsQuery>(
+    '/impact-metrics',
+    authMiddleware,
+    validateQuery(impactMetricsQuerySchema),
+    async (req, res) => {
+      const { period_days } = req.query
+      const periodDays = period_days ? parseInt(period_days, 10) : 30
+      const metrics = await getImpactMetrics(req.user!, periodDays)
+      res.json({ data: { metrics }, success: true })
     },
   )
 
@@ -132,7 +193,16 @@ export const createCorrelationsRouter = (
     authMiddleware,
     validateBody(genericCorrelationBodySchema),
     async (req, res) => {
-      const { triggers, outcome, lag_windows, period_days, period_start, period_end, denominator } = req.body
+      const {
+        triggers,
+        outcome,
+        lag_windows,
+        period_days,
+        period_start,
+        period_end,
+        denominator,
+        include_flagged,
+      } = req.body
       const user = req.user!
 
       const result = await getGenericCorrelation(
@@ -142,7 +212,7 @@ export const createCorrelationsRouter = (
         lag_windows ?? ['24h', '48h', '7d'],
         period_days ?? 90,
         syncProvider,
-        { denominator, periodEnd: period_end, periodStart: period_start },
+        { denominator, excludeFlagged: !include_flagged, periodEnd: period_end, periodStart: period_start },
       )
       res.json({ data: result, success: true })
     },
@@ -153,13 +223,22 @@ export const createCorrelationsRouter = (
     authMiddleware,
     validateBody(continuousCorrelationBodySchema),
     async (req, res) => {
-      const { trigger, outcome, lag_days, period_days, period_start, period_end, nutrition_completeness } =
-        req.body
+      const {
+        trigger,
+        outcome,
+        include_flagged,
+        lag_days,
+        period_days,
+        period_start,
+        period_end,
+        nutrition_completeness,
+      } = req.body
       const user = req.user!
 
       const result = await getContinuousCorrelation(
         user,
         {
+          excludeFlagged: !include_flagged,
           lagDays: lag_days,
           nutritionCompleteness: nutrition_completeness,
           outcome,

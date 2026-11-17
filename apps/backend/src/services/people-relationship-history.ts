@@ -36,17 +36,15 @@ export const relationshipTransitions = (
       }),
     ...[...next]
       .filter((state) => !previous.has(state))
-      .map(
-        (state): Transition => ({
-          type: 'relationship_state',
-          source: 'system',
-          timestamp,
-          payload: {
-            relationship_state: state,
-            relationship_state_change: 'started',
-            relationship_state_started_at: timestamp,
-          },
-        }),
-      ),
+      .map((state): Transition => ({
+        type: 'relationship_state',
+        source: 'system',
+        timestamp,
+        payload: {
+          relationship_state: state,
+          relationship_state_change: 'started',
+          relationship_state_started_at: timestamp,
+        },
+      })),
   ]
 }

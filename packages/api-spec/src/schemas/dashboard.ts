@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { activityMeasureSchema, recordMeasures } from './activity-measures.ts'
+import { chartFilterFieldSchema } from './chart-data.ts'
 import { baseResponseSchema, dataFieldPathSchema } from './common.ts'
 import { mediaPlaySourceSchema } from './media.ts'
 import { trendMeasureShape, trendMissingDaysSchema } from './trends.ts'
@@ -129,10 +130,14 @@ export const barChartConfigSchema = z
       .enum(['count', 'sum', 'mean', 'max'])
       .optional()
       .meta({ description: 'Aggregation method' }),
-    filter_field: dataFieldPathSchema
-      .optional()
-      .meta({ description: 'With measure: item path whose items are measured (sets.exercise)' }),
-    filter_value: z.string().optional().meta({ description: 'With filter_field: the item value to keep' }),
+    filter_field: chartFilterFieldSchema.optional().meta({
+      description:
+        'With measure: item path whose items are measured (sets.exercise), or a muscle-group path (sets.exercise.muscle_group) to measure the exercises training the muscle group in filter_value, weighted by recruitment (summed measures only)',
+    }),
+    filter_value: z.string().optional().meta({
+      description:
+        'With filter_field: the item value to keep, or a muscle group key (chest) with a muscle-group path',
+    }),
     measure: activityMeasureSchema.optional().meta({
       description: 'For activity_type sources: chart this list-item measure instead of duration or count',
     }),
@@ -411,6 +416,50 @@ export const lastSleepConfigSchema = z
 
 export type LastSleepConfig = z.infer<typeof lastSleepConfigSchema>
 
+export const sleepDebtConfigSchema = z
+  .object({
+    title: z.string().optional().meta({ description: 'Widget title (default: "Sleep debt")' }),
+  })
+  .meta({ id: 'SleepDebtConfig' })
+
+export type SleepDebtConfig = z.infer<typeof sleepDebtConfigSchema>
+
+export const dayOverviewWindows = ['rolling_24h', 'yesterday', 'today'] as const
+
+export const dayOverviewWindowSchema = z.enum(dayOverviewWindows).meta({
+  description: 'The span shown: the last 24 hours up to now, yesterday, or today so far (local days)',
+  id: 'DayOverviewWindow',
+})
+
+export type DayOverviewWindow = z.infer<typeof dayOverviewWindowSchema>
+
+export const dayOverviewDefaultMetrics = ['stress_level', 'body_battery'] as const
+
+export const dayOverviewConfigSchema = z
+  .object({
+    metrics: z
+      .array(dashboardMetricSchema)
+      .min(1)
+      .max(2)
+      .default([...dayOverviewDefaultMetrics])
+      .meta({
+        description:
+          'One or two metrics: the first drawn as bars (stress bands for stress_level), the second as a line with a soft area (default: stress_level, body_battery)',
+      }),
+    title: z
+      .string()
+      .optional()
+      .meta({ description: 'Card title (default: "Last 24 hours", "Yesterday" or "Today" by window)' }),
+    window: dayOverviewWindowSchema.default('rolling_24h'),
+  })
+  .meta({
+    description:
+      'One day at a glance on a single time axis: bars and a line of two metrics, sleep shaded behind, activities as icons. Not shown on shared dashboards',
+    id: 'DayOverviewConfig',
+  })
+
+export type DayOverviewConfig = z.infer<typeof dayOverviewConfigSchema>
+
 export const widgetTypeSchema = z.enum([
   'metric_card',
   'sparkline_card',
@@ -422,11 +471,13 @@ export const widgetTypeSchema = z.enum([
   'hr_zones',
   'goal_progress',
   'last_sleep',
+  'sleep_debt',
   'combined_chart',
   'record_card',
   'activity_type_card',
   'top_list_card',
   'places_card',
+  'day_overview',
 ])
 
 export type WidgetType = z.infer<typeof widgetTypeSchema>
@@ -483,6 +534,11 @@ export const dashboardWidgetSchema = z.discriminatedUnion('type', [
     type: z.literal('last_sleep'),
   }),
   z.object({
+    config: sleepDebtConfigSchema,
+    id: z.string().min(1).meta({ description: 'Unique widget ID' }),
+    type: z.literal('sleep_debt'),
+  }),
+  z.object({
     config: combinedChartConfigSchema,
     id: z.string().min(1).meta({ description: 'Unique widget ID' }),
     type: z.literal('combined_chart'),
@@ -506,6 +562,11 @@ export const dashboardWidgetSchema = z.discriminatedUnion('type', [
     config: placesCardConfigSchema,
     id: z.string().min(1).meta({ description: 'Unique widget ID' }),
     type: z.literal('places_card'),
+  }),
+  z.object({
+    config: dayOverviewConfigSchema,
+    id: z.string().min(1).meta({ description: 'Unique widget ID' }),
+    type: z.literal('day_overview'),
   }),
 ])
 
@@ -592,6 +653,46 @@ export const dashboardDataQuerySchema = z
   .meta({ id: 'DashboardDataQuery' })
 
 export type DashboardDataQuery = z.infer<typeof dashboardDataQuerySchema>
+
+const nameListSchema = z.string().max(4000).optional()
+
+export const dataPresenceQuerySchema = z
+  .object({
+    activity_types: nameListSchema.meta({
+      description: 'Comma-separated activity types; a type counts its subtypes',
+      example: 'exercise,sleep',
+    }),
+    metrics: nameListSchema.meta({
+      description: 'Comma-separated metric names (built-in or custom), as stored',
+      example: 'hrv_rmssd,steps',
+    }),
+  })
+  .meta({ id: 'DataPresenceQuery' })
+
+export type DataPresenceQuery = z.infer<typeof dataPresenceQuerySchema>
+
+export const dataPresenceSchema = z
+  .object({
+    activity_types: z.record(z.string(), z.boolean()).meta({
+      description: 'Per asked activity type: whether any activity of it or a subtype was ever recorded',
+    }),
+    metrics: z.record(z.string(), z.boolean()).meta({
+      description: 'Per asked metric: whether any sample of it was ever recorded',
+    }),
+  })
+  .meta({
+    description:
+      'Whether each source has ever delivered anything, at any time. The dashboard hides a widget whose sources never have.',
+    id: 'DataPresence',
+  })
+
+export type DataPresence = z.infer<typeof dataPresenceSchema>
+
+export const dataPresenceResponseSchema = baseResponseSchema
+  .extend(dataPresenceSchema.shape)
+  .meta({ id: 'DataPresenceResponse' })
+
+export type DataPresenceResponse = z.infer<typeof dataPresenceResponseSchema>
 
 export const updateDashboardInputSchema = dashboardConfigSchema.meta({ id: 'UpdateDashboardInput' })
 

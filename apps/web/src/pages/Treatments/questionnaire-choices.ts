@@ -17,8 +17,9 @@ export const configuredChoices = (question?: Pick<AssessmentQuestion, 'config'>)
       typeof item.value !== 'string' ||
       !('label' in item) ||
       typeof item.label !== 'string'
-    )
-      {return []}
+    ) {
+      return []
+    }
     return [
       {
         value: item.value,

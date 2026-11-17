@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'preact-iso'
 import { useCallback, useState } from 'preact/hooks'
 
 import type { BiologicalSex, HrZoneThresholds, UpdateSettingsInput } from '../../state/api'
@@ -7,7 +8,9 @@ import { AvatarSettings } from '../../components/AvatarSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
 import { FeatureControl } from '../../components/FeatureControl'
+import { LinkedProvidersSettings } from '../../components/LinkedProvidersSettings'
 import { MealPreferencesSettings } from '../../components/MealPreferencesSettings'
+import { NotificationSettings } from '../../components/NotificationSettings'
 import { NotificationsSettings } from '../../components/NotificationsSettings'
 import { OnboardingSettings } from '../../components/OnboardingSettings'
 import { PasskeySettings } from '../../components/PasskeySettings'
@@ -16,14 +19,22 @@ import { ProfileSettings } from '../../components/ProfileSettings'
 import { type SaveStatus, SaveStatusIndicator } from '../../components/SaveStatusIndicator'
 import { SettingsSection } from '../../components/SettingsSection'
 import { SharingSettings } from '../../components/SharingSettings'
+import { TrainingLoadSettings } from '../../components/TrainingLoadSettings'
 import { fetchUserSettings, updateUserSettings } from '../../state/api'
 import { auth } from '../../state/auth'
 import { defaultHrZoneThresholds } from '../../utils/hrZones'
-import { parseZoneValue, updateZoneThreshold, validateHrZoneThresholds } from '../../utils/settings'
+import {
+  parseZoneValue,
+  sleepNeedHours,
+  sleepNeedMinutesFromHours,
+  updateZoneThreshold,
+  validateHrZoneThresholds,
+} from '../../utils/settings'
 import './style.css'
 
 export function Settings() {
   const isLoggedIn = auth.value.token
+  const { query } = useLocation()
   const queryClient = useQueryClient()
 
   const { data: userSettings, isLoading } = useQuery({
@@ -36,11 +47,13 @@ export function Settings() {
   const [sex, setSex] = useState<BiologicalSex | null>(null)
   const [hrZones, setHrZones] = useState<HrZoneThresholds | null>(null)
   const [mafHr, setMafHr] = useState<string>('')
+  const [sleepNeed, setSleepNeed] = useState<string>('')
   const [manualApproval, setManualApproval] = useState(false)
   const [showReplies, setShowReplies] = useState(false)
 
   const [personalInfoStatus, setPersonalInfoStatus] = useState<SaveStatus>({ status: 'idle' })
   const [hrZonesStatus, setHrZonesStatus] = useState<SaveStatus>({ status: 'idle' })
+  const [sleepStatus, setSleepStatus] = useState<SaveStatus>({ status: 'idle' })
   const [followersStatus, setFollowersStatus] = useState<SaveStatus>({ status: 'idle' })
 
   const initializeForm = () => {
@@ -48,6 +61,7 @@ export function Settings() {
     setSex(userSettings?.sex ?? null)
     setHrZones(userSettings?.hr_zone_start ?? null)
     setMafHr(userSettings?.maf_hr?.toString() ?? '')
+    setSleepNeed(userSettings ? sleepNeedHours(userSettings.sleep_need_minutes) : '')
     setManualApproval(userSettings?.manually_approve_followers ?? false)
     setShowReplies(userSettings?.timeline_show_replies ?? false)
   }
@@ -143,6 +157,18 @@ export function Settings() {
     }
 
     saveSection({ maf_hr: value }, setHrZonesStatus)
+  }
+
+  const handleSleepNeedBlur = () => {
+    const minutes = sleepNeedMinutesFromHours(sleepNeed)
+    if (minutes === undefined) {
+      setSleepStatus({ error: 'Sleep need must be between 3 and 12 hours', status: 'error' })
+      return
+    }
+    if (minutes === userSettings?.sleep_need_minutes) return
+    void saveSection({ sleep_need_minutes: minutes }, setSleepStatus).then(() =>
+      queryClient.invalidateQueries({ queryKey: ['sleepDebt'] }),
+    )
   }
 
   const handleManualApprovalChange = (e: Event) => {
@@ -279,6 +305,37 @@ export function Settings() {
         </div>
       </SettingsSection>
 
+      <TrainingLoadSettings />
+
+      <SettingsSection
+        title="Sleep"
+        description="Sleep debt on the Sleep page and the dashboard is judged against this. Changes save automatically."
+        headerExtra={<SaveStatusIndicator state={sleepStatus} />}
+      >
+        <div class="form-field">
+          <label for="sleep-need">Sleep need per night</label>
+          <div class="input-with-unit">
+            <input
+              id="sleep-need"
+              type="number"
+              min="3"
+              max="12"
+              step="0.25"
+              placeholder="8"
+              value={sleepNeed}
+              onInput={(e) => setSleepNeed((e.target as HTMLInputElement).value)}
+              onBlur={handleSleepNeedBlur}
+            />
+            <span class="unit">hours</span>
+          </div>
+          <p class="field-description">
+            How much sleep you need to feel rested. Each night, debt grows by what you slept less than this
+            and shrinks by what you slept more, and 15 % of it fades every day. Leave empty for the default, 8
+            hours.
+          </p>
+        </div>
+      </SettingsSection>
+
       <SettingsSection
         title="Feed & Followers"
         description="Control who can follow your federated feed."
@@ -308,11 +365,18 @@ export function Settings() {
         </div>
       </SettingsSection>
 
+      <NotificationSettings />
+
       <SharingSettings />
 
       <MealPreferencesSettings />
 
-      <PasskeySettings />
+      <PasskeySettings recovered={query.recovered === 'passkey'} />
+
+      <LinkedProvidersSettings
+        linked={query.oidc === 'linked'}
+        linkError={typeof query.oidc_error === 'string' ? query.oidc_error : undefined}
+      />
 
       <NotificationsSettings />
 

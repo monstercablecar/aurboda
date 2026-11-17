@@ -36,19 +36,15 @@ Release `foghouse-kanban-20261112-01`, protected record `20261112T230347Z.foghou
 
 Tasks gains List/Board views, three saved workflow statuses, drag/drop and accessible Move to controls. Existing legacy task completion and Health goals are preserved; no destructive migration/APK update. Full web1,685 and backend unit4,844 passed (one skipped); real task database12 and export/restore2 passed. Desktop/mobile real-database browser tests cover drag/drop, conflicts, pagination, persistence and routes. Public status/login/private API checks passed. See [native Tasks](../native-tasks.md) and parent `verification/kanban-20261112/`.
 
-
 ## November 12, 2026 — Recurring Tasks
 
 Release `foghouse-recurring-20261112-01`, record `20261112T232817Z.foghouse-recurring-20261112-01.x4QtDf`, source manifest `f3b92ec497f664dac50c3ec3c5bf0e74f2955f0d84fa14914919dedecb8598bc`. Backup, stable build input and exact-version health succeeded; previous running Kanban image retained as `before-recurring-20261112`.
 
 Daily/weekly/monthly task repeats schedule one successor on completion, retain history and preserve month-end anchors. No new table, dependency or APK change. Full web 1,693/backend unit 4,863 passed (one skipped); PostgreSQL task suites 27 and export/restore 2 passed. Review found and fixed parent/task lock inversion with a controlled race regression. Deployed public browser assets passed recurrence desktop/mobile flows against isolated real storage; public login/private API gates remained intact. See [native Tasks](../native-tasks.md) and parent `verification/recurring-tasks-20261112/`.
 
-
-
 ## November 12, 2026 — customizable Kanban
 
 `foghouse-kanban-pro-20261112-01` deployed with custom account-wide columns/WIP warnings, rich task details, filters and local saved views, ordering, archive/restore, duplication and bulk actions. Web 1,712 tests, backend units 4,868 (one skipped), PostgreSQL 32 including export/restore passed. Typechecks, scoped lint, API generation and production build passed. Installed browser bundles passed desktop/mobile workflows against isolated storage; no live task records were used. Standard backup/stable manifest/local and public exact-version health passed. Anonymous board API returned 401. Rollback image: `localhost/foghouse-aurboda:before-kanban-pro-20261112`. Protected record: `20261113T003231Z.foghouse-kanban-pro-20261112-01.DJMEe6`. See [workflow guide](kanban-workflows.md) and installation `verification/kanban-pro-20261112/`.
-
 
 ## November 12, 2026 — Kanban usability
 

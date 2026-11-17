@@ -11,32 +11,43 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Badge
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import net.aurboda.BuildConfig
 import net.aurboda.CredentialsManager
 import net.aurboda.MoreDestination
+import net.aurboda.badgeText
 
 data class MoreItem(val label: String, val destination: MoreDestination)
 
 /**
  * The URL an embedded page loads for a [MoreDestination.Web]: site paths are
  * resolved against [serverUrl], absolute URLs are taken as-is; both get the
- * `embed=1` flag that hides the web app's chrome.
+ * `embed=1` flag that hides the web app's chrome. The Google Play build also adds
+ * `store=play`, which hides prices and the Pay link (Play's payments policy).
  */
-fun embeddedPageUrl(serverUrl: String, path: String): String {
+fun embeddedPageUrl(serverUrl: String, path: String, channel: String = BuildConfig.CHANNEL): String {
     val absolute = path.startsWith("http://") || path.startsWith("https://")
     val page = if (absolute) path else "${serverUrl.trimEnd('/')}$path"
-    val separator = if (page.contains('?')) '&' else '?'
-    return "$page${separator}embed=1"
+    val hashAt = page.indexOf('#')
+    val base = if (hashAt >= 0) page.substring(0, hashAt) else page
+    val fragment = if (hashAt >= 0) page.substring(hashAt) else ""
+    val separator = if (base.contains('?')) '&' else '?'
+    val storeFlag = if (channel == "play") "&store=play" else ""
+    return "$base${separator}embed=1$storeFlag$fragment"
 }
 
 data class MoreGroup(val header: String, val items: List<MoreItem>)
+
+private val NOTIFICATIONS_DESTINATION = MoreDestination.Web("/notifications")
 
 /**
  * The "More" hub contents: everything not on the bottom bar. Most entries open
@@ -44,16 +55,19 @@ data class MoreGroup(val header: String, val items: List<MoreItem>)
  * sync with the web navigation (see apps/web/src/components/nav-links.ts).
  */
 val moreGroups: List<MoreGroup> = listOf(
+    MoreGroup("Inbox", listOf(MoreItem("Notifications", NOTIFICATIONS_DESTINATION))),
     MoreGroup(
         "Explore",
         listOf(
             MoreItem("Timeline", MoreDestination.Web("/timeline")),
             MoreItem("Data", MoreDestination.Web("/data")),
             MoreItem("Chart", MoreDestination.Web("/chart")),
+            MoreItem("Training load", MoreDestination.Web("/training-load")),
             MoreItem("Goals", MoreDestination.Web("/goals")),
             MoreItem("Family", MoreDestination.Web("/people")),
             MoreItem("Places", MoreDestination.Web("/places")),
             MoreItem("Routes", MoreDestination.Web("/routes")),
+            MoreItem("Segments", MoreDestination.Web("/segments")),
         ),
     ),
     MoreGroup(
@@ -106,7 +120,10 @@ val moreGroups: List<MoreGroup> = listOf(
  * BackHandler, which is composed after this one so it takes precedence).
  *
  * [destination] is hoisted into `AppState` so the bottom bar can pop back to the
- * hub when More is tapped while a sub-page is showing.
+ * hub when More is tapped while a sub-page is showing. [webPageLinks] is
+ * `AppState.morePageLinks`: the [webPage] is keyed on it and the path, since it
+ * loads its URL only when built, so a deep link rebuilds it (also for the page
+ * already showing).
  */
 @Composable
 fun MoreScreen(
@@ -117,20 +134,28 @@ fun MoreScreen(
     onServerUrlChange: (String) -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenWebPage: (String) -> Unit = {},
+    unreadNotifications: Int = 0,
+    webPageLinks: Int = 0,
+    webPage: @Composable (url: String, modifier: Modifier) -> Unit = { url, pageModifier ->
+        EmbeddedWebScreen(
+            url = url,
+            baseUrl = credentials.serverUrl,
+            username = credentials.username,
+            authToken = credentials.authToken,
+            modifier = pageModifier,
+        )
+    },
 ) {
     when (val dest = destination) {
-        null -> MoreHub(onSelect = onSelect, modifier = modifier)
+        null -> MoreHub(onSelect = onSelect, unreadNotifications = unreadNotifications, modifier = modifier)
         else -> {
             BackHandler { onBack() }
             when (dest) {
                 is MoreDestination.Web ->
-                    EmbeddedWebScreen(
-                        url = embeddedPageUrl(credentials.serverUrl, dest.path),
-                        baseUrl = credentials.serverUrl,
-                        username = credentials.username,
-                        authToken = credentials.authToken,
-                        modifier = modifier,
-                    )
+                    key(dest.path, webPageLinks) {
+                        webPage(embeddedPageUrl(credentials.serverUrl, dest.path), modifier)
+                    }
 
                 MoreDestination.Live -> LiveScreen(modifier = modifier)
 
@@ -140,6 +165,7 @@ fun MoreScreen(
                         serverUrl = credentials.serverUrl,
                         onServerUrlChange = onServerUrlChange,
                         onLogout = onLogout,
+                        onChooseNotificationKinds = { onOpenWebPage("/settings#notifications") },
                         modifier = modifier,
                     )
             }
@@ -148,7 +174,11 @@ fun MoreScreen(
 }
 
 @Composable
-private fun MoreHub(onSelect: (MoreDestination) -> Unit, modifier: Modifier = Modifier) {
+private fun MoreHub(
+    onSelect: (MoreDestination) -> Unit,
+    unreadNotifications: Int,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -174,6 +204,9 @@ private fun MoreHub(onSelect: (MoreDestination) -> Unit, modifier: Modifier = Mo
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f),
                     )
+                    if (item.destination == NOTIFICATIONS_DESTINATION && unreadNotifications > 0) {
+                        Badge(modifier = Modifier.padding(end = 8.dp)) { Text(badgeText(unreadNotifications)) }
+                    }
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                 }
                 HorizontalDivider()

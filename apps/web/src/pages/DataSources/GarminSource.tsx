@@ -1,4 +1,9 @@
-import type { GarminDataType, ProviderSyncStatus } from '@aurboda/api-spec'
+import type {
+  GarminDataType,
+  GarminOAuthStatus,
+  GarminPersonalKeyStatus,
+  ProviderSyncStatus,
+} from '@aurboda/api-spec'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
@@ -13,6 +18,9 @@ import {
   verifyGarminMfa,
 } from '../../state/api'
 import { auth } from '../../state/auth'
+import { garminConnectionFlags } from './garminConnection'
+import { GarminOAuth } from './GarminOAuth'
+import { GarminPersonalKey } from './GarminPersonalKey'
 import {
   type DataTypeItem,
   DataTypesList,
@@ -28,6 +36,7 @@ interface GarminDataTypeInfo {
   label: string
   href?: string
   hc_note?: string // Health Connect overlap note (undefined = Garmin only)
+  key_note?: string
 }
 
 const GARMIN_DATA_TYPES: GarminDataTypeInfo[] = [
@@ -49,17 +58,24 @@ const GARMIN_DATA_TYPES: GarminDataTypeInfo[] = [
     label: 'Sleep (duration, stages, score)',
     href: '/sleep',
     hc_note: 'Also available via Health Connect. Garmin adds sleep score.',
+    key_note: 'Without the stage timeline',
   },
-  { type: 'stress', label: 'Stress level', href: '/metric/stress_level' },
+  { type: 'stress', label: 'Stress level', href: '/metric/stress_level', key_note: 'Needs the Garmin login' },
   { type: 'bodyBattery', label: 'Body Battery', href: '/metric/body_battery' },
   {
     type: 'activities',
     label: 'Activities (exercise with HR, VO2 max)',
     hc_note: 'Also available via Health Connect. Garmin adds VO2 max, activity type detail.',
+    key_note: 'Per-second detail and GPS from the FIT file; strength sets need the Garmin login',
   },
   { type: 'spo2', label: 'SpO2 (blood oxygen)', href: '/metric/spo2' },
   { type: 'respiration', label: 'Respiration rate', href: '/metric/respiratory_rate' },
-  { type: 'trainingReadiness', label: 'Training readiness', href: '/metric/training_readiness' },
+  {
+    type: 'trainingReadiness',
+    label: 'Training readiness',
+    href: '/metric/training_readiness',
+    key_note: 'Needs the Garmin login',
+  },
   { type: 'intensityMinutes', label: 'Intensity minutes', href: '/metric/intensity_minutes' },
 ]
 
@@ -200,9 +216,11 @@ function GarminLoginForm({ onMfaRequired, onSuccess }: { onMfaRequired: () => vo
 
 function GarminDataTypeToggles({
   disabledTypes,
+  keyOnly,
   onToggle,
 }: {
   disabledTypes: GarminDataType[]
+  keyOnly: boolean
   onToggle: (disabledTypes: GarminDataType[]) => Promise<void>
 }) {
   // Optimistic local state — updates immediately on click
@@ -256,6 +274,7 @@ function GarminDataTypeToggles({
                   <span class="garmin-data-type-label">{dt.label}</span>
                 )}
                 <span class="garmin-data-type-note">{dt.hc_note ?? 'Garmin only'}</span>
+                {keyOnly && dt.key_note && <span class="garmin-data-type-note">{dt.key_note}</span>}
               </div>
             </label>
           )
@@ -267,10 +286,12 @@ function GarminDataTypeToggles({
 
 function GarminDataTypesSection({
   isConnected,
+  keyOnly,
   disabledTypes,
   queryClient,
 }: {
   isConnected: boolean
+  keyOnly: boolean
   disabledTypes: GarminDataType[]
   queryClient: ReturnType<typeof useQueryClient>
 }) {
@@ -279,6 +300,7 @@ function GarminDataTypesSection({
   return (
     <GarminDataTypeToggles
       disabledTypes={disabledTypes}
+      keyOnly={keyOnly}
       onToggle={async (types) => {
         await updateUserSettings({ garmin_disabled_data_types: types })
         await queryClient.invalidateQueries({ queryKey: ['userSettings'] })
@@ -289,6 +311,11 @@ function GarminDataTypesSection({
 
 function GarminConnectionSection({
   isConnected,
+  canPull,
+  oauth,
+  sessionConnected,
+  personalKey,
+  onPersonalKeyChanged,
   syncStatusData,
   syncStatusLoading,
   loginStatus,
@@ -302,6 +329,11 @@ function GarminConnectionSection({
   handleFullResync,
 }: {
   isConnected: boolean
+  canPull: boolean
+  oauth: GarminOAuthStatus
+  sessionConnected: boolean
+  personalKey: GarminPersonalKeyStatus | undefined
+  onPersonalKeyChanged: () => Promise<void>
   syncStatusData: { states?: ProviderSyncStatus[] } | undefined
   syncStatusLoading: boolean
   loginStatus: LoginStatus
@@ -318,10 +350,10 @@ function GarminConnectionSection({
     <>
       <StatusBanner
         connected={isConnected}
-        label={isConnected ? 'Garmin Connect is connected' : 'Garmin Connect not connected'}
+        label={isConnected ? 'Garmin is connected' : 'Garmin not connected'}
       />
 
-      {isConnected && (
+      {canPull && (
         <SyncStatusBar
           states={syncStatusData?.states}
           isLoading={syncStatusLoading}
@@ -340,21 +372,31 @@ function GarminConnectionSection({
         </a>
       </div>
 
-      <section class="settings-section">
-        <h2>Connection</h2>
+      {canPull && (
+        <section class="settings-section">
+          <div class="garmin-button-row">
+            <button
+              type="button"
+              class="connect-button"
+              disabled={syncStatus === 'syncing'}
+              onClick={handleFullResync}
+            >
+              {syncStatus === 'syncing' ? 'Syncing...' : 'Full Re-sync'}
+            </button>
+          </div>
+          {syncMessage && <p class={`garmin-sync-message ${syncStatus}`}>{syncMessage}</p>}
+        </section>
+      )}
 
-        {isConnected ? (
+      <GarminOAuth status={oauth} onChanged={onPersonalKeyChanged} />
+
+      <section class="settings-section">
+        <h2>Garmin Connect login</h2>
+
+        {sessionConnected ? (
           <div class="garmin-connected-actions">
             <p class="connected-status">Connected</p>
             <div class="garmin-button-row">
-              <button
-                type="button"
-                class="connect-button"
-                disabled={syncStatus === 'syncing'}
-                onClick={handleFullResync}
-              >
-                {syncStatus === 'syncing' ? 'Syncing...' : 'Full Re-sync'}
-              </button>
               <button
                 type="button"
                 class="connect-button disconnect-button"
@@ -364,7 +406,6 @@ function GarminConnectionSection({
                 {disconnecting ? 'Disconnecting...' : 'Disconnect'}
               </button>
             </div>
-            {syncMessage && <p class={`garmin-sync-message ${syncStatus}`}>{syncMessage}</p>}
           </div>
         ) : loginStatus === 'mfa' ? (
           <GarminMfaForm onCancel={() => setLoginStatus('idle')} onSuccess={handleLoginSuccess} />
@@ -372,7 +413,10 @@ function GarminConnectionSection({
           <GarminLoginForm onMfaRequired={() => setLoginStatus('mfa')} onSuccess={handleLoginSuccess} />
         )}
       </section>
-      <SyncIntervalField provider="garmin" />
+
+      {personalKey && <GarminPersonalKey status={personalKey} onChanged={onPersonalKeyChanged} />}
+
+      {canPull && <SyncIntervalField provider="garmin" />}
     </>
   )
 }
@@ -387,7 +431,8 @@ export function GarminSource() {
     queryKey: ['userSettings'],
   })
 
-  const isConnected = userSettings?.garmin_connected ?? false
+  const { canPull, isConnected, keyOnly, oauth, personalKey, sessionConnected } =
+    garminConnectionFlags(userSettings)
 
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
   const [syncMessage, setSyncMessage] = useState('')
@@ -395,7 +440,7 @@ export function GarminSource() {
   const shouldPoll = syncStatus === 'syncing'
 
   const { data: syncStatusData, isLoading: syncStatusLoading } = useQuery({
-    enabled: !!isLoggedIn && isConnected,
+    enabled: !!isLoggedIn && canPull,
     queryFn: fetchGarminSyncStatus,
     queryKey: ['garminSyncStatus'],
     refetchInterval: shouldPoll ? 3000 : false,
@@ -421,6 +466,10 @@ export function GarminSource() {
 
   const handleLoginSuccess = useCallback(async () => {
     setLoginStatus('idle')
+    await queryClient.invalidateQueries({ queryKey: ['userSettings'] })
+  }, [queryClient])
+
+  const handlePersonalKeyChanged = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['userSettings'] })
   }, [queryClient])
 
@@ -466,7 +515,7 @@ export function GarminSource() {
   return (
     <div class="data-sources-page">
       <div class="page-header">
-        <h1>Garmin Connect</h1>
+        <h1>Garmin</h1>
       </div>
 
       <div class="data-source-detail">
@@ -474,13 +523,17 @@ export function GarminSource() {
           <a href="https://connect.garmin.com/" target="_blank" rel="noopener noreferrer">
             Garmin Connect
           </a>{' '}
-          provides fitness and health data from Garmin wearable devices. Aurboda syncs data by connecting to
-          your Garmin account. Your credentials are used only for the initial login and are never stored —
-          only session tokens are persisted.
+          provides fitness and health data from Garmin wearable devices. Aurboda connects to your Garmin
+          account in three ways, alone or together: Connect with Garmin, where you sign in at Garmin and
+          Garmin sends new data as your device syncs; the Garmin Connect login (your credentials are used only
+          for the initial login and are never stored — only session tokens are persisted), which fetches your
+          history and what Garmin's official APIs leave out; and a Personal API key from Garmin's official
+          Personal API.
         </p>
 
         <GarminDataTypesSection
           isConnected={isConnected}
+          keyOnly={keyOnly}
           disabledTypes={userSettings?.garmin_disabled_data_types ?? []}
           queryClient={queryClient}
         />
@@ -490,6 +543,11 @@ export function GarminSource() {
         ) : (
           <GarminConnectionSection
             isConnected={isConnected}
+            canPull={canPull}
+            oauth={oauth}
+            sessionConnected={sessionConnected}
+            personalKey={personalKey}
+            onPersonalKeyChanged={handlePersonalKeyChanged}
             syncStatusData={syncStatusData}
             syncStatusLoading={syncStatusLoading}
             loginStatus={loginStatus}

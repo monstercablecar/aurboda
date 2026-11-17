@@ -78,6 +78,18 @@ export const isSharingActive = (url: string): boolean =>
 
 export const NAV_LINKS_SECONDARY: NavigationLink[] = [
   {
+    href: '/training-load',
+    label: 'Training load',
+    icon: '💪',
+    description: 'Review training load and recovery.',
+  },
+  {
+    href: '/segments',
+    label: 'Segments',
+    icon: '⏱',
+    description: 'Compare timed stretches across activities.',
+  },
+  {
     href: '/correlations',
     label: 'Analyze',
     icon: '🔬',
@@ -128,6 +140,7 @@ export const DATA_SOURCE_LINKS: (Omit<NavigationLink, 'href'> & { path: string }
     description: 'Connect and sync Garmin activity and health data.',
   },
   { label: 'Strava', path: '/data-sources/strava', description: 'Connect and sync Strava workouts.' },
+  { label: 'Gravl', path: '/data-sources/gravl', description: 'Connect strength workouts from Gravl.' },
   {
     label: 'ActivityWatch (Desktop)',
     path: '/data-sources/activitywatch-desktop',
@@ -145,6 +158,11 @@ export const DATA_SOURCE_LINKS: (Omit<NavigationLink, 'href'> & { path: string }
   },
   { label: 'Last.fm', path: '/data-sources/lastfm', description: 'Connect Last.fm listening history.' },
   { label: 'OwnTracks', path: '/data-sources/owntracks', description: 'Set up OwnTracks location tracking.' },
+  {
+    label: 'Home Assistant',
+    path: '/data-sources/home-assistant',
+    description: 'Connect phone location from Home Assistant.',
+  },
   {
     label: 'Calendars',
     path: '/data-sources/calendars',
@@ -175,6 +193,8 @@ const OTHER_PAGE_TITLES = [
   { href: '/shared-dashboards', label: 'Dashboards' },
   { href: '/data-sources', label: 'Data Sources' },
   { href: '/settings', label: 'Settings' },
+  { href: '/notifications', label: 'Notifications' },
+  { href: '/strength', label: 'Strength session' },
   HELP_LINK,
   { href: '/admin', label: 'Admin' },
   { href: '/login', label: 'Login' },

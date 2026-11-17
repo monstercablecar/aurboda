@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
 import { signal } from '@preact/signals'
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -20,6 +21,7 @@ vi.mock('./state/auth', () => ({
   signupMode: signal('open'),
 }))
 
+const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } })
 const container = document.createElement('div')
 beforeEach(() => {
   const values = new Map<string, string>()
@@ -31,16 +33,17 @@ beforeEach(() => {
 })
 afterEach(() => {
   act(() => render(null, container))
+  client.clear()
   vi.unstubAllGlobals()
   auth.value = {}
 })
 
 function ShellIdentity() {
   return (
-    <>
+    <QueryClientProvider client={client}>
       <Header />
       <Sidebar />
-    </>
+    </QueryClientProvider>
   )
 }
 

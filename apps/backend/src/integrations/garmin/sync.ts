@@ -1,17 +1,29 @@
 import { addDays, addMinutes, isFuture, subDays } from 'date-fns'
 
 import type { SyncState } from '../../db/types.ts'
-import type { GarminClient } from './client.ts'
+import type { GarminClient, GarminSource } from './source.ts'
 
 import {
   getActivitiesNeedingDetail,
-  getOAuthToken,
+  getGarminActivitiesNeedingSets,
   getSyncState,
   markActivityDetailSynced,
   upsertSyncState,
 } from '../../db/index.ts'
-import { auditError, auditInfo } from '../../services/audit-log.ts'
-import { type GarminDataType, garminDataTypes, processActivityDetail, processGarminData } from './process.ts'
+import { auditError, auditInfo, auditWarn } from '../../services/audit-log.ts'
+import { importActivityExerciseSets } from './exercise-sets.ts'
+import { parseActivityFit } from './fit.ts'
+import {
+  type GarminDataType,
+  garminDataTypes,
+  processActivityDetail,
+  processActivityFit,
+  type ProcessActivityDetailOptions,
+  processGarminData,
+} from './process.ts'
+import { hasGarminConnection } from './source.ts'
+
+export { hasGarminConnection } from './source.ts'
 
 const DEFAULT_SYNC_HISTORY_DAYS = 90
 
@@ -49,12 +61,6 @@ export const isRateLimited = (syncState: SyncState | null): boolean => {
   return isFuture(syncState.retry_after)
 }
 
-/** Disconnecting keeps the oauth_tokens row with an empty token, so the row alone does not mean connected. */
-export const hasGarminSession = async (user: string): Promise<boolean> => {
-  const stored = await getOAuthToken(user, 'garmin')
-  return stored !== null && stored.access_token !== ''
-}
-
 const syncDateRange = async (
   user: string,
   garmin: GarminClient,
@@ -79,13 +85,13 @@ const syncDateRange = async (
   return { totalRecords, dayErrors }
 }
 
-export const syncGarminDataType = async (
+/** No connection at all is an error; a type no connection serves is skipped, leaving sync_state alone. */
+const unsourcedResult = async (
   user: string,
   garmin: GarminClient,
   dataType: GarminDataType,
-  options?: { fullResync?: boolean; startDate?: Date },
-): Promise<SyncResult> => {
-  if (!(await hasGarminSession(user))) {
+): Promise<SyncResult | null> => {
+  if (!(await hasGarminConnection(user))) {
     return {
       data_type: dataType,
       error: 'User has no Garmin session. Please connect Garmin first.',
@@ -93,6 +99,20 @@ export const syncGarminDataType = async (
       status: 'error',
     }
   }
+  if ((await garmin.sourceFor(user, dataType)) === null) {
+    return { data_type: dataType, records_processed: 0, status: 'skipped' }
+  }
+  return null
+}
+
+export const syncGarminDataType = async (
+  user: string,
+  garmin: GarminClient,
+  dataType: GarminDataType,
+  options?: { fullResync?: boolean; startDate?: Date },
+): Promise<SyncResult> => {
+  const unsourced = await unsourcedResult(user, garmin, dataType)
+  if (unsourced) return unsourced
 
   const syncState = await getSyncState(user, 'garmin', dataType)
   if (isRateLimited(syncState)) {
@@ -212,9 +232,102 @@ export type DetailSyncedCallback = (user: string, activityId: string) => void
 /** Told about an activity whose GPS track was just written. */
 export type TrackWrittenCallback = (user: string, activityId: string) => void
 
+interface DetailContext {
+  user: string
+  garmin: GarminClient
+  activityId: string
+  garminActivityId: number
+  startTime: Date
+  now: Date
+  options: ProcessActivityDetailOptions
+}
+
+const syncJsonDetail = async ({ garmin, garminActivityId, options, user }: DetailContext) => {
+  const detail = await garmin.getActivityDetail(user, garminActivityId)
+  return processActivityDetail(user, detail, options)
+}
+
+/** The FIT file's point count, or null when Garmin has no usable file for the activity. */
+const syncFitDetail = async ({ garmin, garminActivityId, options, user }: DetailContext) => {
+  const zip = await garmin.getActivityFile(user, garminActivityId)
+  const fit = zip ? parseActivityFit(zip) : null
+  return fit ? processActivityFit(user, { fit, garminActivityId }, options) : null
+}
+
+/** The written point count and where it came from; null when the key found no file and there is no session. */
+const fetchDetail = async (
+  context: DetailContext,
+  source: GarminSource,
+  hasSession: boolean,
+): Promise<{ count: number; fromFile: boolean } | null> => {
+  if (source === 'personal_key') {
+    const count = await fitDetailOrNull(context, hasSession)
+    if (count !== null) return { count, fromFile: true }
+    if (!hasSession) return null
+  }
+  return { count: await syncJsonDetail(context), fromFile: false }
+}
+
+/** With a session to fall back on, a refused or failed download counts as no file; without one it throws, so the activity is retried. */
+const fitDetailOrNull = async (context: DetailContext, hasSession: boolean): Promise<number | null> => {
+  if (!hasSession) return syncFitDetail(context)
+  try {
+    return await syncFitDetail(context)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    auditWarn(
+      context.user,
+      'sync',
+      `FIT file for Garmin activity ${context.garminActivityId} failed, using the login's detail`,
+      { error: message },
+    )
+    return null
+  }
+}
+
+/** Garmin can list an activity before it serves its file, so a fresh one without a file is asked for again. */
+const NO_FILE_GRACE_MS = 24 * 60 * 60 * 1000
+
+/** Fetch, process and mark one activity's detail. A failure is audited and leaves it for the next run. */
+const syncOneDetail = async (
+  context: DetailContext,
+  source: GarminSource,
+  hasSession: boolean,
+  hadDetail: boolean,
+  onDetailSynced?: DetailSyncedCallback,
+): Promise<void> => {
+  const { activityId, garminActivityId, now, startTime, user } = context
+  try {
+    const synced = await fetchDetail(context, source, hasSession)
+    if (synced === null && now.getTime() - startTime.getTime() < NO_FILE_GRACE_MS) return
+    await markActivityDetailSynced(user, activityId)
+    if (synced === null) {
+      auditInfo(user, 'sync', `📄 Garmin has no activity file for activity ${garminActivityId}`)
+      return
+    }
+    if (!hadDetail) onDetailSynced?.(user, activityId)
+    const from = synced.fromFile ? ' from its FIT file' : ''
+    auditInfo(
+      user,
+      'sync',
+      `📊 Synced ${synced.count} detail metrics for Garmin activity ${garminActivityId}${from}`,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const via = source === 'personal_key' ? 'FIT file' : 'detail'
+    auditError(user, 'sync', `Failed to sync ${via} for Garmin activity ${garminActivityId}`, {
+      error: message,
+    })
+  }
+}
+
 /**
- * Fetch granular per-second metrics (stress, HR, respiration, body battery)
- * from Garmin activity details for activities that haven't been processed yet.
+ * Fetch granular per-second metrics (HR, respiration, GPS, the track, …) for activities that
+ * haven't been processed yet: from the activity's FIT file through a usable Personal API key,
+ * else from the session's JSON detail. An activity Garmin has no usable file for, or whose
+ * download fails, falls back to the JSON detail when there is a session; without one a failure is
+ * retried on the next run and a missing file is asked for again while the activity
+ * is under a day old, and then marked done, so a manual activity is not asked for every run.
  * When fullResync is true, re-fetches detail for all activities (e.g. to pick up
  * newly added data extraction like GPS locations); `onDetailSynced` still fires
  * only for activities that had no detail before, so a full re-sync does not
@@ -225,47 +338,72 @@ export const syncActivityDetails = async (
   garmin: GarminClient,
   {
     fullResync = false,
+    now = new Date(),
     onDetailSynced,
     onTrackWritten,
   }: {
     fullResync?: boolean
+    now?: Date
     onDetailSynced?: DetailSyncedCallback
     onTrackWritten?: TrackWrittenCallback
   } = {},
 ): Promise<void> => {
+  const source = await garmin.sourceFor(user, 'activityDetail')
+  if (source === null) return
+  const hasSession = (await garmin.sourceFor(user, 'activitySession')) === 'session'
+  if (hasSession) await syncActivitySets(user, garmin, { fullResync })
   const activities = await getActivitiesNeedingDetail(user, { forceAll: fullResync })
-  if (activities.length === 0) return
+
+  for (const activity of activities) {
+    const garminActivityId = activity.data?.garmin_activity_id as number | undefined
+    if (!garminActivityId || !activity.id) continue
+
+    // No end_time means no usable span — a start-only one would clamp the
+    // precedence range to a few minutes around the start. Fall back to the
+    // track's own range instead.
+    const activitySpan = activity.end_time ? { end: activity.end_time, start: activity.start_time } : null
+    const context: DetailContext = {
+      activityId: activity.id,
+      garmin,
+      garminActivityId,
+      now,
+      options: { activityId: activity.id, activitySpan, activityStart: activity.start_time, onTrackWritten },
+      startTime: activity.start_time,
+      user,
+    }
+
+    await syncOneDetail(context, source, hasSession, activity.data?.detail_synced === true, onDetailSynced)
+
+    await delay(REQUEST_DELAY_MS)
+  }
+}
+
+/**
+ * Read the exercise sets of Garmin strength activities, before their detail so a share composed
+ * when the detail lands already carries them. A failed activity stays unmarked for the next run.
+ */
+export const syncActivitySets = async (
+  user: string,
+  garmin: GarminClient,
+  { fullResync = false }: { fullResync?: boolean } = {},
+): Promise<void> => {
+  const activities = await getGarminActivitiesNeedingSets(user, { forceAll: fullResync })
 
   for (const activity of activities) {
     const garminActivityId = activity.data?.garmin_activity_id as number | undefined
     if (!garminActivityId || !activity.id) continue
 
     try {
-      const detail = await garmin.getActivityDetail(user, garminActivityId)
-      // No end_time means no usable span — a start-only one would clamp the
-      // precedence range to a few minutes around the start. Fall back to the
-      // track's own range instead.
-      const activitySpan = activity.end_time ? { end: activity.end_time, start: activity.start_time } : null
-      const pointCount = await processActivityDetail(user, detail, {
-        activityId: activity.id,
-        activitySpan,
-        activityStart: activity.start_time,
-        onTrackWritten,
-      })
-      await markActivityDetailSynced(user, activity.id)
-      if (activity.data?.detail_synced !== true) onDetailSynced?.(user, activity.id)
-
-      auditInfo(
-        user,
-        'sync',
-        `📊 Synced ${pointCount} detail metrics for Garmin activity ${garminActivityId}`,
-      )
+      const response = await garmin.getActivityExerciseSets(user, garminActivityId)
+      const count = await importActivityExerciseSets(user, activity, response)
+      if (count !== null) {
+        auditInfo(user, 'sync', `🏋️ Synced ${count} sets for Garmin activity ${garminActivityId}`)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      auditError(user, 'sync', `Failed to sync detail for Garmin activity ${garminActivityId}`, {
+      auditError(user, 'sync', `Failed to sync sets for Garmin activity ${garminActivityId}`, {
         error: message,
       })
-      // Don't mark as synced on error — retry next time
     }
 
     await delay(REQUEST_DELAY_MS)
@@ -281,7 +419,9 @@ const fetchAndProcess = async (
   try {
     const data = await fetchDataType(garmin, user, dataType, date)
     if (data == null) return { records: 0 }
-    return { records: await processGarminData(user, dataType, data) }
+    return {
+      records: await processGarminData(user, dataType, data, undefined, date.toISOString().slice(0, 10)),
+    }
   } catch (error) {
     // If a single day fails, log and continue (don't abort the whole sync)
     const message = error instanceof Error ? error.message : String(error)

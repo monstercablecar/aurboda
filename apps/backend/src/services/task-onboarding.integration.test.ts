@@ -183,16 +183,13 @@ describe('optional Kanban onboarding persistence', () => {
         ...column,
         title: ['Ready queue', 'Doing things', 'Finished work'][index],
       })),
-      ...Array.from(
-        { length: 17 },
-        (_, i): TaskBoardColumn => ({
-          id: `custom-${i}`,
-          title: i === 0 ? 'Onboarding' : `Custom ${i}`,
-          status: 'todo',
-          color: '#123456',
-          wip_limit: 2,
-        }),
-      ),
+      ...Array.from({ length: 17 }, (_, i): TaskBoardColumn => ({
+        id: `custom-${i}`,
+        title: i === 0 ? 'Onboarding' : `Custom ${i}`,
+        status: 'todo',
+        color: '#123456',
+        wip_limit: 2,
+      })),
     ]
     await db.query('INSERT INTO task_board_settings (id, columns) VALUES (1,$1)', [JSON.stringify(columns)])
     await db.query('INSERT INTO task_items (payload) VALUES ($1)', [

@@ -14,6 +14,7 @@ import { locationsTables } from './schema/locations.ts'
 import { mealsTables } from './schema/meals.ts'
 import { metricsTables } from './schema/metrics.ts'
 import { nativeTaskTables } from './schema/native-tasks.ts'
+import { notificationsTables } from './schema/notifications.ts'
 import { peopleTables } from './schema/people.ts'
 import { pharmacologyTables } from './schema/pharmacology.ts'
 import { productivityTables } from './schema/productivity.ts'
@@ -33,10 +34,12 @@ export {
   hrZoneMetrics,
   isContextualHrvMetric,
   isHrZoneMetric,
+  isTimeWeightedMetric,
   isValidMetric,
   isValidMetricOrCustom,
   metricUnits,
   sumMetrics,
+  timeWeightedMetrics,
   validMetrics,
   type ActivityType,
   type CustomMetricDefinition,
@@ -60,6 +63,7 @@ export const createTableStatements: Record<string, string> = {
   ...mealsTables,
   ...metricsTables,
   ...pharmacologyTables,
+  ...notificationsTables,
   ...productivityTables,
   ...reportsTables,
   ...socialTables,
@@ -77,7 +81,7 @@ export const createTableStatements: Record<string, string> = {
  *  - meals + food_items before meal_food_items (FK)
  *  - deduction_rules before deduction_rule_runs (FK)
  *  - tag_definitions before tags (FK)
- *  - activities before activity_tracks, routes, activity_routes (FK)
+ *  - activities before activity_tracks, routes, activity_routes, segments, segment_efforts (FK)
  */
 export const tableCreationOrder = [
   ...Object.keys(journalTables),
@@ -106,9 +110,18 @@ export const tableCreationOrder = [
   'routes_indexes',
   'activity_routes',
   'activity_routes_indexes',
+  'segments',
+  'segments_indexes',
+  'segment_efforts',
+  'segment_efforts_indexes',
+  'suggested_segments',
+  'suggested_segments_indexes',
+  'activity_tracks_segments_suggested_at',
   'activity_features',
   'item_value_aliases',
   'item_value_aliases_indexes',
+  'item_value_identities',
+  'item_value_identities_indexes',
   'meals',
   'meals_indexes',
   'meal_log_completed',
@@ -148,8 +161,10 @@ export const tableCreationOrder = [
   'reports',
   'reports_indexes',
   'report_entries',
+  'report_entries_reported_value',
   'report_entries_indexes',
   'oauth_tokens',
+  'oauth_tokens_refused_at',
   'sync_state',
   'uploaded_icons',
   'custom_metrics',
@@ -216,6 +231,7 @@ export const tableCreationOrder = [
   'challenge_participations',
   'challenge_participations_indexes',
   'challenge_participations_protocol_column',
+  'challenge_participations_host_checked_column',
   'challenge_left',
   'challenge_left_token_column',
   'feed_posts',
@@ -234,6 +250,7 @@ export const tableCreationOrder = [
   'autoshare_rules_max_age_hours',
   'autoshare_rules_include_exercises',
   'autoshare_rules_tags',
+  'autoshare_rules_delay_minutes',
   'autoshare_suppressions',
   'feed_posts_indexes',
   'feed_posts_keyset_index',
@@ -279,6 +296,10 @@ export const tableCreationOrder = [
   'deduction_rule_runs_indexes',
   'webauthn_credentials',
   'webauthn_credentials_indexes',
+  'notifications',
+  'notifications_actions',
+  'notifications_indexes',
+  'notification_preferences',
 ]
 
 // Health Connect mappings are in schema-health-connect.ts — re-export for convenience
