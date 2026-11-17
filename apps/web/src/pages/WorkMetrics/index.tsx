@@ -749,8 +749,8 @@ function WorkMetricsForUser() {
             icon="🎉"
             id={celebration.id}
             kind="work"
-            message={`${celebration.hires} hires recorded today — fantastic work.`}
-            title={celebration.hires === 3 ? 'Hiring hat trick!' : 'Hiring spree!'}
+            message="Your workday is recorded — fantastic work."
+            title="Great work!"
             onDone={() => setCelebration(null)}
           />
         ) : (
