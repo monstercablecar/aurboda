@@ -110,6 +110,8 @@ it('hides empty groups and filters collapsed navigation, while Settings remains 
     '/data-sources/oura',
     '/data-sources/garmin',
     '/data-sources/strava',
+    '/data-sources/gravl',
+    '/data-sources/home-assistant',
     '/data-sources/activitywatch-desktop',
     '/data-sources/activitywatch-android',
     '/data-sources/rescue-time',

@@ -49,11 +49,9 @@ describe('pharmacology schedule evaluation', () => {
 
 describe('pharmacology event invariants', () => {
   test('only actual administration statuses count as exposure', () => {
-    expect(['taken', 'delayed', 'partially_taken'].filter((status) => isActualExposureStatus(status as never))).toEqual([
-      'taken',
-      'delayed',
-      'partially_taken',
-    ])
+    expect(
+      ['taken', 'delayed', 'partially_taken'].filter((status) => isActualExposureStatus(status as never)),
+    ).toEqual(['taken', 'delayed', 'partially_taken'])
     expect(isActualExposureStatus('skipped')).toBe(false)
     expect(isActualExposureStatus('unknown')).toBe(false)
     expect(isActualExposureStatus('entered_in_error')).toBe(false)

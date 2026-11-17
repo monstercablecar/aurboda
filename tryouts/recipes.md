@@ -75,7 +75,7 @@ What has been captured this way:
 - **Create/Update/Delete on a feed post** (#864, #869): `Update{Note}` id is
   `<noteId>#update-<updated_at epoch ms>`, unique per edit, wrapping the Note at the _same_
   canonical object id; `Delete{Tombstone}` id is `<noteId>#delete`. REST `PATCH`/`DELETE
-/api/feed/:id` and the MCP twins all fan out identically (#869 closed the #865 gap where only
+  /api/feed/:id` and the MCP twins all fan out identically (#869 closed the #865 gap where only
   REST delivered).
 - **Visibility addressing**: public → `to: as:Public, cc: followers`; unlisted →
   `to: followers, cc: as:Public`; followers-only → `to: followers`, never Public, on Create,
@@ -241,7 +241,7 @@ merged span the detail view shows, so merged shares under-report (#881).
   `POST /api/feed/followers/:id/approve`, `DELETE /api/feed/followers/:id` (404
   `{error:"No such follower"}` on an unknown id).
 - Serialized `FollowingActor`/`FollowerActor` = `{accepted, actor_uri, avatar_url, created_at,
-display_name, handle, id}` and **never** leak `inbox_uri`/`shared_inbox_uri`/
+  display_name, handle, id}` and **never** leak `inbox_uri`/`shared_inbox_uri`/
   `follow_activity_uri`, though those are cached in the DB for addressing.
 - The `following` and `followers` collections are **accepted-only** (pending excluded from
   `totalItems` and `orderedItems`). Flip `feed_following.accepted` in psql to watch `totalItems`
@@ -812,7 +812,7 @@ that row with `accepted=false` for a clean control run.
 ### Discovery and remote peers (#1091, #1101)
 
 - **Followees are seeded straight into `feed_following`** (columns `id, actor_uri, inbox_uri,
-shared_inbox_uri, handle, display_name, avatar_url, accepted, created_at, notify_on_post`). A
+  shared_inbox_uri, handle, display_name, avatar_url, accepted, created_at, notify_on_post`). A
   local followee is `http://localhost:8080/users/<u>` and matches `WEB_HOST`, so it is listed
   in-process. A followee on a host whose `/.well-known/aurboda` 404s is silently "not aurboda".
 - **A fake remote peer**: `safe-fetch` refuses RFC1918 and loopback but **not** `203.0.113.0/24`
@@ -821,7 +821,7 @@ shared_inbox_uri, handle, display_name, avatar_url, accepted, created_at, notify
   `POST …/<slug>/members` is a working peer for **discovery and joining**. It is _not_ usable for
   anything Fedify must `lookupObject`, which refuses TEST-NET-3 as reserved (#1104). The app
   container drops off an extra network on every compose re-up — `docker network connect <net>
-<app container>` again (it survives a plain `docker restart`). **(untested here: the network and
+  <app container>` again (it survives a plain `docker restart`). **(untested here: the network and
   container names differ under this project.)**
 - Sub-path bases on the sink (`/r429` answering 429 after 1.2 s, `/r403`, `/r404`) give the
   transient-vs-definite well-known variants, and followee rows are
@@ -874,7 +874,7 @@ shared_inbox_uri, handle, display_name, avatar_url, accepted, created_at, notify
   `Dec 28, 2026 – Jan 4, 2027` (en-US).
 - CSS oracles: discovery Join `button.btn-primary` and View `a.btn-secondary` are both 38px with
   `align-self: stretch` (#1097 was Join at 27px); `.challenge-create .visibility-selector
-.visibility-option` must compute `flex-direction: row` while `.challenge-create > label` is
+  .visibility-option` must compute `flex-direction: row` while `.challenge-create > label` is
   `column` (#924/#1095); dark badge `rgb(252,211,77)` on `rgb(90,58,10)`, note `rgb(156,163,175)`,
   toggle `rgb(209,213,219)`, create-form `small` `rgb(156,163,175)`.
 - `.challenge-row-actions` has no `flex-wrap`, so hosted rows still overflow a 390px phone by 32px
@@ -1202,7 +1202,7 @@ Known gap: **signup records no fingerprint**, so the first request after a signu
 - `PATCH /api/admin/settings {signup_mode}` (admin) flips `/nodeinfo/2.1` `openRegistrations`
   (#1050). `tz` is **not** a PATCH-able setting and is silently ignored.
 - `null` clears a key from the settings JSON since #1087 (`select settings ? 'key' from
-user_settings` is the oracle). Before that it was a silent no-op for every scalar setting,
+  user_settings` is the oracle). Before that it was a silent no-op for every scalar setting,
   because `validateAndUpdateSettings` mapped null→undefined and `upsertUserSettings` filtered
   undefined out (#1063/#1085).
 
@@ -1340,7 +1340,7 @@ Robolectric against the tryout server.
   generated) placed so the relative
   `../../../packages/api-spec/generated/kotlin/src/main/kotlin` srcDir resolves, plus
   `local.properties` with `sdk.dir`.
-- `./gradlew :app:testDebugUnitTest --tests '*MyTest*'` — ~15–40 s with a warm Gradle cache. Test
+- `./gradlew :app:testGithubDebugUnitTest --tests '*MyTest*'` — ~15–40 s with a warm Gradle cache. Test
   code must be warning-free (`-Werror`).
 - Gotchas, each of which cost a round trip:
   - `CredentialsManager` uses EncryptedSharedPreferences → `KeyStoreException` under Robolectric.
@@ -1487,7 +1487,7 @@ the running pick ending soonest, Advance at once for an unknown URL, Suggest(fal
 - **Before filing, read the PR's review follow-up issue.** It regularly already covers what a
   tryout is about to file.
 - **`up.sh` says `no Docker daemon after 60s`** and `/tmp/dockerd.log` ends in `containerd is
-still running … pid=N` or `failed to start daemon … process with PID N is still running`
+  still running … pid=N` or `failed to start daemon … process with PID N is still running`
   (#1151, #1227, #1240). A dead daemon left its `containerd.pid` or `docker.pid` behind and the
   pid was recycled. `up.sh` now clears both before starting dockerd; if it still happens,
   `ps -p N -o comm=` shows a real daemon in that slot, and that is a different problem.

@@ -97,7 +97,6 @@ Today flags only unrecorded items whose scheduled time has passed in the selecte
 
 Historical stack confirmation starts with a blank required actual date/time. Finishing a partially recorded stack excludes already recorded and paused items. The Treatments route scrolls as one document so its navigation tabs retain their full height even when the journal is long.
 
-
 ## Treatments correction verification — November 12, 2026
 
 Private Foghouse deployment `81e4a93-treatments-20261112` fixes per-item overdue detection, requires an explicit actual time for historical stack confirmations, and prevents the Treatments tabs from shrinking. Unscheduled items on the current day remain pending without an overdue warning. Future dates and later scheduled times are not reconciliation items.
@@ -105,7 +104,6 @@ Private Foghouse deployment `81e4a93-treatments-20261112` fixes per-item overdue
 Validation: 22 backend pharmacology unit tests; 21 focused Treatments web tests; all 1,557 web tests; web typecheck and production build. An isolated release from development HEAD plus only the Treatments changes excluded concurrent unrelated work. Browser fixtures reproduced the old 9.6px tab height and verified the corrected 53.6px height at desktop and mobile sizes. Backend-wide typecheck remains blocked by the existing extensionless import in `apps/backend/src/schema/work.ts`.
 
 Deployment used a derived image containing only the rebuilt web assets and pharmacology service, after validated database backups. Local and public status returned the release label; public JS/CSS matched the isolated build and the live service file matched its source hash. Prior image: `localhost/foghouse-aurboda:before-treatments-20261112`. The seven changed Treatments source/test/documentation files were synchronized into `source/` for future builds. No treatment records were altered by the fix.
-
 
 ## Follow-up timing and display audit — November 12, 2026
 
@@ -116,7 +114,6 @@ Daily results use an exclusive next-midnight boundary. Confirmation state counts
 Insights retains usable date controls on loading/error, rejects empty/reversed date ranges without issuing a request, and offers retry. Long metric names wrap; units remain visible on mobile. All four tabs fit narrow screens.
 
 Predeployment verification against the deployment source: 1,678 web tests passed, web typecheck passed, and all four views were exercised with isolated sample data at 1440×700 and 390×844. Browser checks covered clipping, page overflow, retained tab height, and date-range recovery. No stored treatment records were modified.
-
 
 ### Bedtime stacks after midnight
 

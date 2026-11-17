@@ -44,7 +44,6 @@ import { resolveItemIcon } from '../../utils/emojiLookup'
 import { hrZoneColors } from '../../utils/hrZones'
 import { renderMarkdown } from '../../utils/markdown'
 import { ActivityChart } from './ActivityChart'
-import { ActivityMap } from './ActivityMap'
 import { ActivityNeighborsNav } from './ActivityNeighborsNav'
 import {
   type ActivityStatRow,
@@ -53,6 +52,7 @@ import {
   buildMetricRows,
   buildTimeRows,
   garminConnectActivityUrl,
+  isSleepType,
   sourceDataEntries,
   typicalAvgHr,
 } from './activityStats'
@@ -75,6 +75,8 @@ import { RunCategories, RunFeatures } from './RunCategoryChips'
 import { SameValueSessions } from './SameValueSessions'
 import { activityRouteAfterSave } from './saveNavigation'
 import { SchemaDataFields } from './SchemaDataFields'
+import { ActivityMapWithSegmentCreator } from './SegmentCreator'
+import { SegmentEfforts } from './SegmentEfforts'
 import { ShareActivityButton } from './ShareActivityButton'
 import './style.css'
 
@@ -338,7 +340,8 @@ const ActivityDetailContent = ({
   const stages = useMemo(() => parseSleepStages(activityData), [activityData])
   const hasSleepStages = stages.length > 0
   const hrZoneSecs = activity.hr_zone_secs as Record<number, number> | undefined
-  const hasHrZones = hrZoneSecs && Object.values(hrZoneSecs).some((v) => v > 0)
+  const hasHrZones =
+    !isSleepType(activity.activity_type) && hrZoneSecs && Object.values(hrZoneSecs).some((v) => v > 0)
   const sleepMinutes =
     activity.total_sleep ?? (hasSleepStages ? computeSleepMinutesFromStages(stages) : undefined)
   const hasEndTime = Boolean(realEnd)
@@ -418,6 +421,8 @@ const ActivityDetailContent = ({
             {activity.route.activity_count} {activity.route.activity_count === 1 ? 'run' : 'runs'}
           </div>
         )}
+
+        {!isEditing && <SegmentEfforts efforts={activity.segment_efforts} />}
 
         {!isEditing &&
           (runCategories(activityData).length > 0 || isRunType(activity.activity_type, typeDefinitions)) && (
@@ -515,12 +520,13 @@ const ActivityDetailContent = ({
             onHoverTime={setHoverTime}
             onEnabledMetricsChange={onChartMetricsChange}
           />
-          <ActivityMap
+          <ActivityMapWithSegmentCreator
             activityId={activity.id}
             activityStart={activity.start_time}
             start={displayStart}
             end={displayEnd}
             hoverTime={hoverTime}
+            canCreate={!isEditing && !activity.deleted_at}
           />
         </div>
       )}
@@ -800,6 +806,15 @@ const ActivityContent = ({ entityId }: { entityId: string }) => {
     activity.data as Record<string, unknown> | undefined,
   )
   const showSiblings = !isEditing && !activity.deleted_at
+  const isStrength = activity.activity_type === 'strength_training' && !activity.deleted_at
+  const strengthInProgress = isStrength && activity.data?.in_progress === true
+  const canEditSets =
+    isStrength &&
+    !strengthInProgress &&
+    !isMerged &&
+    !isMergedActivity &&
+    activity.source === 'aurboda' &&
+    !activity.override_target_ids?.length
 
   return (
     <>
@@ -811,6 +826,14 @@ const ActivityContent = ({ entityId }: { entityId: string }) => {
           typeLabel={typeDef?.display_name ?? toDisplayName(activity.activity_type)}
           values={groupValues}
         />
+      )}
+      {strengthInProgress && (
+        <div class="strength-in-progress-banner">
+          <span>This session is in progress</span>
+          <a class="btn-primary" href={`/strength/session/${encodeURIComponent(rawEntityId)}`}>
+            Continue
+          </a>
+        </div>
       )}
       <EntityActions
         entityType="activity"
@@ -832,6 +855,13 @@ const ActivityContent = ({ entityId }: { entityId: string }) => {
         isSaving={saveMutation.isPending}
         saveDisabled={stillUploading(draft.notes)}
         onStartMerging={!activity.deleted_at && !isMergedActivity ? () => setIsMerging(true) : undefined}
+        extraActions={
+          canEditSets ? (
+            <a class="btn-secondary" href={`/strength/session/${encodeURIComponent(rawEntityId)}`}>
+              Edit sets
+            </a>
+          ) : undefined
+        }
       />
       <ResyncDetailButton
         activity={activity}

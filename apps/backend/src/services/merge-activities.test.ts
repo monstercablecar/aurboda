@@ -6,6 +6,7 @@ import type { Activity } from '../db/types.ts'
 // — keeps these unit tests off the network without expanding the deps interface.
 vi.mock('../db', () => ({
   activityTypeExists: vi.fn().mockResolvedValue(true),
+  ensureActivityType: vi.fn().mockResolvedValue(true),
   enqueueOutboundSync: vi.fn().mockResolvedValue(undefined),
   reanchorNotes: vi.fn().mockResolvedValue(undefined),
   replaceUserNotes: vi.fn().mockResolvedValue(undefined),
@@ -97,6 +98,42 @@ describe('buildMergedActivityData', () => {
         start_time: '2026-04-02T10:40:00.000Z',
       },
     ])
+  })
+
+  test.each([
+    ['logged first', '2026-04-02T10:00:00Z', '2026-04-02T10:00:04Z'],
+    ['watch first', '2026-04-02T10:00:04Z', '2026-04-02T10:00:00Z'],
+  ])('%s: keeps the sets logged in Aurboda over the watch sets (#1777)', (_, loggedStart, watchStart) => {
+    const loggedSets = [
+      { exercise: 'Bench Press', reps: 8, weight: 60 },
+      { exercise: 'Squat', reps: 5, weight: 100 },
+    ]
+    const logged = makeActivity({
+      activity_type: 'strength_training',
+      data: { in_progress: false, sets: loggedSets },
+      id: 'logged',
+      source: 'aurboda',
+      start_time: new Date(loggedStart),
+    })
+    const watch = makeActivity({
+      activity_type: 'strength_training',
+      data: {
+        average_hr: 100,
+        garmin_activity_id: 1,
+        sets: [{ exercise: 'Unknown exercise', reps: 24 }],
+        sets_source: 'garmin',
+      },
+      id: 'watch',
+      source: 'garmin',
+      start_time: new Date(watchStart),
+    })
+    const sorted = [logged, watch].toSorted((a, b) => a.start_time.getTime() - b.start_time.getTime())
+
+    const result = buildMergedActivityData(sorted)
+
+    expect(result.data.sets).toEqual(loggedSets)
+    expect(result.data).not.toHaveProperty('sets_source')
+    expect(result.data).toMatchObject({ average_hr: 100, garmin_activity_id: 1 })
   })
 
   test('handles activities without end_time', () => {

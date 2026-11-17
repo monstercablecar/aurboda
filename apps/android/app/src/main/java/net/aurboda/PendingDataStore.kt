@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
 import java.util.UUID
 
 private const val TAG = "PendingDataStore"
@@ -17,7 +18,7 @@ data class PendingActivityPayload(
     val end_time: String? = null,
     val title: String? = null,
     val notes: String? = null,
-    val data: Map<String, String>? = null,
+    val data: JsonObject? = null,
 )
 
 @Serializable
@@ -25,6 +26,7 @@ data class PendingMetricPayload(
     val metric: String,
     val value: Double,
     val time: String,
+    val unit: String? = null,
 )
 
 @Serializable
@@ -91,3 +93,21 @@ private fun savePendingEntries(context: Context, entries: List<PendingEntry>) {
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     prefs.edit().putString(ENTRIES_KEY, appJson.encodeToString(entries)).apply()
 }
+
+/** Which cached "in use" lists a flush of `sent` made stale, judged as the Add tab does when online. */
+data class CatalogAdoptions(val activityTypes: Boolean, val metrics: Boolean)
+
+fun catalogAdoptions(
+    sent: List<PendingPayload>,
+    activityTypes: List<ActivityTypeDefinition>,
+    activityTypeCatalog: List<CatalogActivityType>,
+    metricCatalog: List<CatalogMetric>,
+): CatalogAdoptions = CatalogAdoptions(
+    activityTypes = sent.filterIsInstance<PendingPayload.Activity>().any { entry ->
+        val type = entry.payload.activity_type
+        activityTypes.none { it.name == type } && activityTypeCatalog.any { it.name == type }
+    },
+    metrics = sent.filterIsInstance<PendingPayload.Metric>().any { entry ->
+        metricCatalog.find { it.name == entry.payload.metric }?.inUse == false
+    },
+)

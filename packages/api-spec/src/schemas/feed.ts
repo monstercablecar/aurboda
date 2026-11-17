@@ -28,7 +28,7 @@ import {
   iso8601DateTimeSchema,
   metricTypeSchema,
 } from './common.ts'
-import { activityImpactTypeSchema, selectorSchema } from './correlations.ts'
+import { articleImpactTypeSchema, selectorSchema } from './correlations.ts'
 import { dashboardConfigSchema, periodKeySchema } from './dashboard.ts'
 import {
   feedStructuredDashboardShareSchema,
@@ -475,7 +475,7 @@ export const articleImpactBlockSchema = z
     activity: z.string().min(1).max(200).meta({
       description: 'The activity, location or category, exactly as the Analyze context table lists it',
     }),
-    activity_type: activityImpactTypeSchema,
+    activity_type: articleImpactTypeSchema,
     caption: z.string().max(280).optional().meta({ description: 'Optional caption shown under the chart' }),
     end: iso8601DateTimeSchema
       .optional()
@@ -583,10 +583,11 @@ export const feedPostSchema = z
     autoshare_rule_id: z.string().uuid().optional().meta({
       description: 'The auto-share rule that created this post (#903), absent for manual posts',
     }),
-    // Attached by the feed LISTING only (one batched count query per page);
-    // single-post responses (share / update) leave both absent.
+    // Attached by the owner's feed listing and its single-post read (one batched count
+    // query); share, update and public single-post responses leave them absent.
     boost_count: z.number().int().optional().meta({
-      description: 'How many remote actors boosted (`Announce`d) this post; absent on single-post responses',
+      description:
+        'How many remote actors boosted (`Announce`d) this post, not counting hashtag accounts on the tag actor host; absent on share, update and public single-post responses',
     }),
     challenge: challengeShareSchema
       .optional()
@@ -630,11 +631,12 @@ export const feedPostSchema = z
       description: 'Post kind: `activity`, `article`, `challenge`, `exercise`, `dashboard` or `reply`',
     }),
     like_count: z.number().int().optional().meta({
-      description: 'How many remote actors favourited (`Like`d) this post; absent on single-post responses',
+      description:
+        'How many remote actors favourited (`Like`d) this post; absent on share, update and public single-post responses',
     }),
     quote_count: z.number().int().optional().meta({
       description:
-        'How many remote posts quote this post under an approval we granted (FEP-044f); absent on single-post responses',
+        'How many remote posts quote this post under an approval we granted (FEP-044f); absent on share, update and public single-post responses',
     }),
     message: z
       .string()
@@ -648,10 +650,10 @@ export const feedPostSchema = z
       .array(feedStructuredMetricSchema)
       .optional()
       .meta({ description: 'Resolved typed scalar values for the shared metrics (activity posts)' }),
-    // Attached by the feed LISTING only, like the reaction counts above.
+    // Attached where the reaction counts above are.
     reply_count: z.number().int().optional().meta({
       description:
-        'How many replies (comments) this instance holds for this post; absent on single-post responses',
+        'How many replies (comments) this instance holds for this post; absent on share, update and public single-post responses',
     }),
     series_metrics: z.array(z.string()).meta({ description: 'Explicitly-shared series metrics' }),
     structured: feedStructuredPostSchema.optional().meta({
@@ -1139,7 +1141,8 @@ export const followingActorSchema = z
     handle: z.string().nullable().meta({ description: "The followee's `@user@host` handle, if resolvable" }),
     id: z.string().uuid().meta({ description: 'Local id of the follow (used to unfollow)' }),
     notify_on_post: z.boolean().meta({
-      description: "Whether to notify on this actor's new posts (used by the app for push notifications)",
+      description:
+        'Whether new posts from this actor (for a followed tag: arriving through it) raise a notification',
     }),
   })
   .meta({ id: 'FollowingActor' })
@@ -1149,7 +1152,7 @@ export type FollowingActor = z.infer<typeof followingActorSchema>
 export const updateFollowingBodySchema = z
   .object({
     notify_on_post: z.boolean().meta({
-      description: "Whether to notify on this actor's new posts",
+      description: 'Whether new posts from this actor or followed tag raise a notification',
     }),
   })
   .meta({ id: 'UpdateFollowingBody' })
@@ -1410,6 +1413,99 @@ export const publicTagPostsResponseSchema = baseResponseSchema
 
 export type PublicTagPostsResponse = z.infer<typeof publicTagPostsResponseSchema>
 
+export const publicTagBlockKinds = ['actor', 'domain'] as const
+
+export const publicTagBlockKindSchema = z.enum(publicTagBlockKinds).meta({
+  description:
+    'actor: one author, by actor URI; domain: every author on a host and its subdomains (example.org also blocks social.example.org)',
+  id: 'PublicTagBlockKind',
+})
+
+export type PublicTagBlockKind = z.infer<typeof publicTagBlockKindSchema>
+
+export const publicTagBlockSchema = z
+  .object({
+    created_at: iso8601DateTimeSchema.meta({ description: 'When the block was added' }),
+    created_by: z.string().meta({ description: 'The admin who added it' }),
+    id: z.string().uuid().meta({ description: 'Block id' }),
+    kind: publicTagBlockKindSchema,
+    value: z.string().meta({ description: 'The actor URI, or the lowercased host' }),
+  })
+  .meta({
+    description: 'An author or domain kept off the public tag pages and the official feed',
+    id: 'PublicTagBlock',
+  })
+
+export type PublicTagBlock = z.infer<typeof publicTagBlockSchema>
+
+export const addPublicTagBlockBodySchema = z
+  .object({
+    kind: publicTagBlockKindSchema,
+    value: z.string().trim().min(1).max(2048).meta({
+      description:
+        'actor: the http(s) actor URI; domain: a host such as example.org (a scheme, path, port, leading @ or *. is stripped)',
+      example: 'spam.example',
+    }),
+  })
+  .meta({ id: 'AddPublicTagBlockBody' })
+
+export type AddPublicTagBlockBody = z.infer<typeof addPublicTagBlockBodySchema>
+
+export const publicTagBlocksResponseSchema = baseResponseSchema
+  .extend({
+    blocks: z.array(publicTagBlockSchema).optional().meta({ description: 'Every block, newest first' }),
+  })
+  .meta({ id: 'PublicTagBlocksResponse' })
+
+export type PublicTagBlocksResponse = z.infer<typeof publicTagBlocksResponseSchema>
+
+export const publicTagBlockResponseSchema = baseResponseSchema
+  .extend({
+    block: publicTagBlockSchema.optional().meta({ description: 'The added block; absent on error' }),
+    removed_posts: z
+      .number()
+      .int()
+      .optional()
+      .meta({ description: 'Posts the block took off the tag pages; absent on error' }),
+  })
+  .meta({ id: 'PublicTagBlockResponse' })
+
+export type PublicTagBlockResponse = z.infer<typeof publicTagBlockResponseSchema>
+
+export const publicTagHiddenPostSchema = z
+  .object({
+    actor_uri: z.string().nullable().meta({ description: "The post's author, when known" }),
+    hidden_at: iso8601DateTimeSchema.meta({ description: 'When the post was hidden' }),
+    hidden_by: z.string().meta({ description: 'The admin who hid it' }),
+    id: z.string().uuid().meta({ description: 'Id of the hide, used to unhide' }),
+    note_uri: z.string().meta({ description: "The post's ActivityPub object id" }),
+  })
+  .meta({
+    description: 'A post hidden from the public tag pages and the official feed; it is not stored again',
+    id: 'PublicTagHiddenPost',
+  })
+
+export type PublicTagHiddenPost = z.infer<typeof publicTagHiddenPostSchema>
+
+export const publicTagHiddenPostsResponseSchema = baseResponseSchema
+  .extend({
+    hidden: z
+      .array(publicTagHiddenPostSchema)
+      .optional()
+      .meta({ description: 'Hidden posts, newest first, at most 200' }),
+  })
+  .meta({ id: 'PublicTagHiddenPostsResponse' })
+
+export type PublicTagHiddenPostsResponse = z.infer<typeof publicTagHiddenPostsResponseSchema>
+
+export const publicTagHiddenPostResponseSchema = baseResponseSchema
+  .extend({
+    hidden: publicTagHiddenPostSchema.optional().meta({ description: 'The hide; absent on error' }),
+  })
+  .meta({ id: 'PublicTagHiddenPostResponse' })
+
+export type PublicTagHiddenPostResponse = z.infer<typeof publicTagHiddenPostResponseSchema>
+
 /** A post on the instance's official feed by a local user: as on its author's public profile, plus who wrote it. */
 export const officialFeedPostSchema = feedPostSchema
   .extend({
@@ -1610,7 +1706,12 @@ export type FeedPostReaction = z.infer<typeof feedPostReactionSchema>
 
 /** Who liked, boosted or quoted one of the owner's posts, newest first. */
 export const feedPostReactionsResponseSchema = baseResponseSchema
-  .extend({ reactions: z.array(feedPostReactionSchema) })
+  .extend({
+    reactions: z.array(feedPostReactionSchema).meta({
+      description:
+        'Who liked, boosted or quoted the post, newest first; boosts by hashtag accounts on the tag actor host are left out',
+    }),
+  })
   .meta({ id: 'FeedPostReactionsResponse' })
 
 export type FeedPostReactionsResponse = z.infer<typeof feedPostReactionsResponseSchema>

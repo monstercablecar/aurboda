@@ -1,6 +1,7 @@
 import type {
   ContinuousCorrelationData,
   CorrelationSelector,
+  CorrelationSelectorsData,
   EventOutcome,
   GenericCorrelationData,
   GroupComparison,
@@ -8,7 +9,7 @@ import type {
   TriggerCondition,
 } from '@aurboda/api-spec'
 
-import { signal } from '@preact/signals'
+import { batch, signal } from '@preact/signals'
 import { useQuery } from '@tanstack/react-query'
 
 import { SelectorPicker } from '../../components/SelectorPicker'
@@ -18,7 +19,8 @@ import {
   fetchGenericCorrelation,
 } from '../../state/api'
 import { CHART_PRIMARY } from '../../theme'
-import { describeSelectorAxis, fiveNumberSummary, linearRegression } from './exploreCharts'
+import { comparisonsNote, SIGNIFICANCE_LEVEL } from './effects'
+import { describeCompleteness, fiveNumberSummary, linearRegression, selectorAxisLabel } from './exploreCharts'
 import {
   describeCorrelationStrength,
   describeEffectSize,
@@ -27,24 +29,32 @@ import {
   sampleCaution,
   TOOLTIPS,
 } from './exploreGuidance'
+import {
+  DEFAULT_EXPLORE_STATE,
+  type Denominator,
+  defaultDenominator,
+  type EventOutcomeSource,
+  type ExploreMode,
+  type ExploreState,
+  isExploreRunnable,
+  type NutritionCompleteness,
+} from './urlState'
 
-type Mode = 'event' | 'continuous'
-
-const mode = signal<Mode>('event')
-const triggerSelector = signal<CorrelationSelector>({ kind: 'activity', pattern: '' })
-const outcomeSelector = signal<CorrelationSelector>({ kind: 'metric', metric: '' })
-const eventOutcomeSource = signal<'metric' | 'tag'>('metric')
-const eventOutcomeValue = signal('')
-const lagWindowsInput = signal('24h,48h,7d')
-const lagDaysInput = signal(0)
-const collapseGapDays = signal(3)
+const initial = DEFAULT_EXPLORE_STATE
+const mode = signal<ExploreMode>(initial.mode)
+const triggerSelector = signal<CorrelationSelector>(initial.trigger)
+const outcomeSelector = signal<CorrelationSelector>(initial.outcome)
+const eventOutcomeSource = signal<EventOutcomeSource>(initial.outcomeSource)
+const eventOutcomeValue = signal(initial.outcomeValue)
+const lagWindowsInput = signal(initial.lags)
+const lagDaysInput = signal(initial.lagDays)
+const collapseGapDays = signal(initial.gap)
 // Continuous mode: drop nutrition days lacking real macros (flag-only) when set.
-const nutritionCompleteness = signal<'all' | 'complete_only'>('all')
-// Defaults to 'all' since the default outcome source is a (presence-only) metric.
-const denominator = signal<'known' | 'all'>('all')
-const periodStart = signal('')
-const periodEnd = signal('')
-const periodDays = signal(365)
+const nutritionCompleteness = signal<NutritionCompleteness>(initial.nutrition)
+const denominator = signal<Denominator>(initial.denominator)
+const periodStart = signal(initial.start)
+const periodEnd = signal(initial.end)
+const periodDays = signal(initial.days)
 // Bumped on each Run to trigger the query.
 const runToken = signal(0)
 
@@ -59,11 +69,11 @@ const EVENT_TRIGGER_KINDS: CorrelationSelector['kind'][] = [
   'productivity_app',
 ]
 
-// Every selector kind (continuous mode allows a metric on either side).
-const ALL_SELECTOR_KINDS: CorrelationSelector['kind'][] = ['metric', ...EVENT_TRIGGER_KINDS]
+// Every selector kind (continuous mode allows a metric or a meal sensitivity on either side).
+const ALL_SELECTOR_KINDS: CorrelationSelector['kind'][] = ['metric', ...EVENT_TRIGGER_KINDS, 'sensitivity']
 
 /** Switch mode, clamping the trigger to a kind valid in the new mode. */
-const setMode = (next: Mode) => {
+const setMode = (next: ExploreMode) => {
   mode.value = next
   if (next === 'event' && !EVENT_TRIGGER_KINDS.includes(triggerSelector.value.kind)) {
     triggerSelector.value = { kind: 'activity', pattern: '' }
@@ -76,9 +86,45 @@ const setMode = (next: Mode) => {
  * denominator, otherwise the known-day set collapses to the onsets themselves
  * and the base-rate comparison is meaningless. Tags are fully known, so 'known'.
  */
-const setEventOutcomeSource = (next: 'metric' | 'tag') => {
+const setEventOutcomeSource = (next: EventOutcomeSource) => {
   eventOutcomeSource.value = next
-  denominator.value = next === 'metric' ? 'all' : 'known'
+  denominator.value = defaultDenominator(next)
+}
+
+export const exploreState = (): ExploreState => ({
+  days: periodDays.value,
+  denominator: denominator.value,
+  end: periodEnd.value,
+  gap: collapseGapDays.value,
+  lagDays: lagDaysInput.value,
+  lags: lagWindowsInput.value,
+  mode: mode.value,
+  nutrition: nutritionCompleteness.value,
+  outcome: outcomeSelector.value,
+  outcomeSource: eventOutcomeSource.value,
+  outcomeValue: eventOutcomeValue.value,
+  start: periodStart.value,
+  trigger: triggerSelector.value,
+})
+
+/** Sets the form from a (URL-given) state, and runs it when it is complete. */
+export const applyExploreState = (state: ExploreState) => {
+  batch(() => {
+    triggerSelector.value = state.trigger
+    setMode(state.mode)
+    outcomeSelector.value = state.outcome
+    eventOutcomeSource.value = state.outcomeSource
+    eventOutcomeValue.value = state.outcomeValue
+    lagWindowsInput.value = state.lags
+    lagDaysInput.value = state.lagDays
+    collapseGapDays.value = state.gap
+    nutritionCompleteness.value = state.nutrition
+    denominator.value = state.denominator
+    periodStart.value = state.start
+    periodEnd.value = state.end
+    periodDays.value = state.days
+    if (isExploreRunnable(exploreState())) runToken.value += 1
+  })
 }
 
 const parseLagWindows = (raw: string): string[] =>
@@ -185,7 +231,7 @@ function RrBars({ perLag }: { perLag: LagExposureResultData[] }) {
       </text>
       {items.map((l, i) => {
         const cx = pad.left + band * (i + 0.5)
-        const sig = l.p_value < 0.05
+        const sig = l.p_value_adjusted < SIGNIFICANCE_LEVEL
         return (
           <g>
             {l.ci_low !== null && l.ci_high !== null && (
@@ -206,7 +252,8 @@ function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
   const eo = data.event_outcome
   if (!eo) return <p class="explore-empty">No event-outcome result.</p>
 
-  const significant = (lag: LagExposureResultData) => lag.p_value < 0.05
+  const significant = (lag: LagExposureResultData) => lag.p_value_adjusted < SIGNIFICANCE_LEVEL
+  const note = comparisonsNote(eo.comparisons)
 
   return (
     <div class="explore-results">
@@ -223,6 +270,7 @@ function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
               <th>Base rate</th>
               <th>Rel. risk (95% CI)</th>
               <th>p</th>
+              <th title="Adjusted for the lags compared (Benjamini–Hochberg)">Adj. p</th>
               <th>Onsets exposed</th>
             </tr>
           </thead>
@@ -247,6 +295,7 @@ function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
                   {fmt(lag.p_value, 3)}
                   <span class="test-tag"> {lag.test === 'fisher' ? 'F' : 'χ²'}</span>
                 </td>
+                <td>{fmt(lag.p_value_adjusted, 3)}</td>
                 <td>
                   {lag.onsets_exposed}/{lag.onsets}
                 </td>
@@ -255,6 +304,7 @@ function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
           </tbody>
         </table>
       </div>
+      {note && <p class="comparisons-note">{note}</p>}
       <RrBars perLag={eo.per_lag} />
     </div>
   )
@@ -302,7 +352,12 @@ function AxisLabels({ x, y }: { x: string; y: string }) {
   )
 }
 
-function ScatterPlot({ data }: { data: ContinuousCorrelationData }) {
+interface ContinuousProps {
+  data: ContinuousCorrelationData
+  selectors: CorrelationSelectorsData | undefined
+}
+
+function ScatterPlot({ data, selectors }: ContinuousProps) {
   const points = data.series
   const xs = points.map((p) => p.trigger)
   const ys = points.map((p) => p.outcome)
@@ -350,12 +405,15 @@ function ScatterPlot({ data }: { data: ContinuousCorrelationData }) {
       <text x={CHART_PAD.left + 6} y={CHART_PAD.top + 10} class="plot-annot">
         r={fmt(data.pearson)} · ρ={fmt(data.spearman)} · n={data.n} · p={fmtP(data.pearson_p)}
       </text>
-      <AxisLabels x={describeSelectorAxis(data.trigger)} y={describeSelectorAxis(data.outcome)} />
+      <AxisLabels
+        x={selectorAxisLabel(data.trigger, selectors)}
+        y={selectorAxisLabel(data.outcome, selectors)}
+      />
     </svg>
   )
 }
 
-function BoxPlot({ data }: { data: ContinuousCorrelationData }) {
+function BoxPlot({ data, selectors }: ContinuousProps) {
   const withVals = data.series.filter((p) => p.trigger > 0).map((p) => p.outcome)
   const withoutVals = data.series.filter((p) => p.trigger === 0).map((p) => p.outcome)
   const absent = fiveNumberSummary(withoutVals)
@@ -419,23 +477,24 @@ function BoxPlot({ data }: { data: ContinuousCorrelationData }) {
           </text>
         </g>
       ))}
-      <AxisLabels x="trigger present?" y={describeSelectorAxis(data.outcome)} />
+      <AxisLabels x="trigger present?" y={selectorAxisLabel(data.outcome, selectors)} />
     </svg>
   )
 }
 
-function ContinuousResults({ data }: { data: ContinuousCorrelationData }) {
+function ContinuousResults({ data, selectors }: ContinuousProps) {
   const gc = data.group_comparison
   // A Pearson r on a binary/presence trigger is misleading, so when the trigger
   // is binary the group comparison is the headline rather than the correlation.
   const showGroupAsHeadline = gc !== null && gc.trigger_is_binary
   const caution = sampleCaution(data.n)
+  const completeness = describeCompleteness(data.n_complete, data.trigger, data.outcome)
 
   return (
     <div class="explore-results">
       <p class="explore-summary">
         n={data.n}
-        {data.n_complete !== null && ` (${data.n_complete} with full nutrition)`} · Pearson r=
+        {completeness && ` (${completeness})`} · Pearson r=
         {fmt(data.pearson)} · Spearman ρ={fmt(data.spearman)} · lag {data.lag_days}d
       </p>
       {!showGroupAsHeadline && (
@@ -453,7 +512,11 @@ function ContinuousResults({ data }: { data: ContinuousCorrelationData }) {
       )}
       {/* Shown in both modes: a small-n caution matters most for a present-vs-absent split. */}
       {caution && <p class="explore-verdict explore-caution">⚠ {caution}</p>}
-      {showGroupAsHeadline ? <BoxPlot data={data} /> : <ScatterPlot data={data} />}
+      {showGroupAsHeadline ? (
+        <BoxPlot data={data} selectors={selectors} />
+      ) : (
+        <ScatterPlot data={data} selectors={selectors} />
+      )}
     </div>
   )
 }
@@ -563,7 +626,7 @@ export function ExploreTab() {
               <select
                 value={eventOutcomeSource.value}
                 onChange={(e) =>
-                  setEventOutcomeSource((e.target as HTMLSelectElement).value as 'metric' | 'tag')
+                  setEventOutcomeSource((e.target as HTMLSelectElement).value as EventOutcomeSource)
                 }
               >
                 <option value="metric">metric</option>
@@ -729,7 +792,7 @@ export function ExploreTab() {
       {resultQuery.isFetching && <div class="loading">Analyzing…</div>}
       {resultQuery.isError && <div class="explore-error">Analysis failed. Check the inputs and retry.</div>}
       {result?.kind === 'event' && <EventOutcomeResults data={result.data} />}
-      {result?.kind === 'continuous' && <ContinuousResults data={result.data} />}
+      {result?.kind === 'continuous' && <ContinuousResults data={result.data} selectors={selectors} />}
     </div>
   )
 }

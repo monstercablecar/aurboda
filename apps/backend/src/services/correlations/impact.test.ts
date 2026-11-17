@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import {
   activityInterval,
+  adjustEffects,
   type BinnedSeries,
   binSeries,
   bucketsPerSide,
@@ -177,6 +178,25 @@ describe('pairedEffect', () => {
   })
 })
 
+describe('adjustEffects', () => {
+  const effect = (p_value: number | null) => ({ ...pairedEffect([null], [null]), p_value })
+
+  test('adjusts every tested effect over the family and counts only the tested ones', () => {
+    const effects = [effect(0.01), effect(null), effect(0.04), effect(0.03)]
+    const { adjust, comparisons } = adjustEffects(effects)
+    expect(comparisons).toBe(3)
+    expect(effects.map((e) => adjust(e).p_value_adjusted)).toEqual([0.03, null, 0.04, 0.04])
+    expect(adjust(effects[0]).p_value).toBe(0.01)
+  })
+
+  test('an effect listed twice is one comparison', () => {
+    const shared = effect(0.02)
+    const { adjust, comparisons } = adjustEffects([shared, shared, effect(0.5)])
+    expect(comparisons).toBe(2)
+    expect(adjust(shared).p_value_adjusted).toBe(0.04)
+  })
+})
+
 describe('summarizeImpact', () => {
   test('a neighbouring session truncates the after-window', () => {
     const sessions = mergeIntoSessions([
@@ -228,6 +248,31 @@ describe('summarizeImpact', () => {
     expect(timeline.stress.after30min.mean).toBe(4)
     expect(effects.stress.before_mean).toBe(1.5)
     expect(effects.stress.after_mean).toBe(3.5)
+  })
+
+  test('a subset is summarized alone, its windows still clipped by the sessions left out', () => {
+    const sessions = mergeIntoSessions([
+      { end: min(30), start: min(0) },
+      { end: min(80), start: min(50) },
+      { end: min(530), start: min(500) },
+    ])
+    const stress = bins([
+      [-20, 40],
+      [35, 20],
+      [55, 60],
+      [90, 10],
+      [480, 50],
+      [540, 70],
+    ])
+    const subset = summarizeImpact(sessions, only(stress), 30, [], [0])
+    const alone = summarizeImpact([sessions[0]], only(stress), 30)
+    const everything = summarizeImpact(sessions, only(stress), 30)
+
+    expect(subset.effects.stress).toMatchObject({ after_mean: 20, before_mean: 40, paired_occurrences: 1 })
+    expect(alone.effects.stress.after_mean).toBe(40)
+    expect(everything.effects.stress.paired_occurrences).toBe(3)
+    expect(subset.effects.stress).not.toEqual(alone.effects.stress)
+    expect(subset.effects.stress).not.toEqual(everything.effects.stress)
   })
 })
 
@@ -368,5 +413,34 @@ describe('summarizeImpact buckets', () => {
       timeline.stress.after15min,
       timeline.stress.after30min,
     ])
+  })
+})
+
+describe('summarizeImpact extra metrics', () => {
+  const sessions = [{ end: min(30), start: min(0) }]
+  const battery = bins([
+    [-20, 60],
+    [-5, 58],
+    [10, 50],
+    [40, 45],
+    [55, 44],
+  ])
+
+  test('an extra key gets the same effect, timeline and buckets as a fixed one', () => {
+    const extra = summarizeImpact(sessions, { ...only(empty), body_battery: battery }, 30, ['body_battery'])
+    const fixed = summarizeImpact(sessions, only(battery), 30)
+
+    expect(extra.effects.body_battery).toEqual(fixed.effects.stress)
+    expect(extra.timeline.body_battery).toEqual(fixed.timeline.stress)
+    expect(extra.buckets.map((b) => b.metrics?.body_battery)).toEqual(fixed.buckets.map((b) => b.stress))
+    expect(extra.effects.stress.paired_occurrences).toBe(0)
+  })
+
+  test('an extra key with no series is all nulls, and buckets have no metrics without extras', () => {
+    const { buckets, effects } = summarizeImpact(sessions, only(battery), 30, ['respiratory_rate'])
+    expect(effects.respiratory_rate.change).toBeNull()
+    expect(buckets.every((b) => b.metrics?.respiratory_rate.mean === null)).toBe(true)
+
+    expect(summarizeImpact(sessions, only(battery), 30).buckets.every((b) => !('metrics' in b))).toBe(true)
   })
 })

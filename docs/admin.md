@@ -1,7 +1,7 @@
 # Server administration
 
 The first user to sign up becomes an admin. Admins manage server-wide settings (signup mode,
-integration credentials, Sentry, plans and billing, support contacts, federation) from the web app's Admin Settings page. Those
+integration credentials, email (SMTP), the Garmin Connect Developer Program, Garmin Personal API keys, Sentry, plans and billing, support contacts, federation) from the web app's Admin Settings page. Those
 settings, the admin list and the records below live in the central database (`CENTRAL_DB`, default
 `aurboda`), not in any user's own database.
 
@@ -14,13 +14,102 @@ server start with no signup date and `pre_existing` set, since their signup date
 The row also holds the account's optional **email** address, given at signup or later in Settings
 (**Profile**), over REST (`GET`/`PUT /account/email`, body `{ "email": "…" }`, `null` or an empty
 string clears it) or over MCP (`get_my_email`, `set_my_email`). It is private: only the user and
-the server's admins see it, it is never shown publicly and never federated. Nothing sends email to
-it yet; it is meant for account recovery and plan reminders (#1510). Setting it never creates the
+the server's admins see it, it is never shown publicly and never federated. When the server sends
+email (see [Email (SMTP)](#email-smtp)), a new address gets a verification link and, once verified,
+lets the user reset a password or recover a passkey-only account (see
+[account-recovery.md](account-recovery.md)); `email_verified_at` on the row records when. Setting it never creates the
 row: for an account without one (its signup could not write it; the next server start does) the
 `PUT` answers `409` and `set_my_email` a tool error, and a signup's email is dropped with a logged
 error, so a missing row still gets its trial from the backfill. The optional **display name**
 given at signup is not on this row but a user setting (`display_name`), since it is part of the
 public profile.
+
+### Signup notification
+
+Every admin gets an `admin_signup` [notification](features/notifications.md) when an account is
+created, by password or passkey: "New signup: alice", linking to the account on the Users page.
+The very first account, which becomes the admin, notifies nobody. An admin can turn it off under the
+bell or as a push in Settings → **Notifications**.
+
+## Rate limits
+
+The backend limits the request rate of the endpoints anyone can reach without an account, and of
+uploads, in memory (the state starts empty after a restart). A limited request is answered `429`
+with a `Retry-After` header in seconds and the usual error body,
+`{ "error": "Too many requests. Try again in N seconds.", "success": false }`. The limits are
+constants in `apps/backend/src/services/rate-limit.ts`, set well above what a person or the Android
+app does; there is no admin setting for them.
+
+| What                                                                                                                                                                                          | Keyed by  | Limit                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------ |
+| `POST /login`, the passkey sign-in and passkey signup options (`/webauthn/auth/*`, `/webauthn/signup/options`), OAuth `/authorize`, `/token`, `/register`                                     | client IP | 30 at once, then one every 2 s       |
+| Single sign-on: `POST /auth/oidc/:provider/start`, `GET /auth/oidc/callback`, `POST /auth/oidc/exchange`, `GET /auth/oidc/signup-info`, `POST /account/oidc/link/complete` ([sso.md](sso.md)) | client IP | shared with `POST /login` above      |
+| `POST /signup`, `POST /webauthn/signup/verify`, `POST /auth/oidc/signup` (new accounts)                                                                                                       | client IP | 5 at once, then one every 10 min     |
+| Everything under `/public`, `/u` and `/oembed`: public posts, articles and their images, OG images, avatars, banners, dashboards, tag pages, the structured feed payload                      | client IP | 300 at once, then three a second     |
+| Avatar, challenge banner and feed picture uploads, REST and MCP's `add_feed_image` together                                                                                                   | account   | 30 at once, then one every 6 s       |
+| `POST /account/email/verify`, `/account/recovery/request`, `/account/recovery/complete` (the emailed links)                                                                                   | client IP | shared with `POST /login` above      |
+| Email verification links (`POST /account/email/verification`, a changed address, `send_email_verification`)                                                                                   | account   | 3 an hour, then `429`                |
+| Password reset and recovery links                                                                                                                                                             | account   | 3 an hour, the rest dropped silently |
+| Admin test mails (`POST /admin/email/test`)                                                                                                                                                   | admin     | 10 an hour                           |
+
+**Failed password logins** (`POST /login` and the OAuth sign-in form) are counted per username and
+per client IP. After 5 failures for a username (20 from an IP) each further attempt waits 1 s,
+doubling with every failure up to one minute; the counts are forgotten 15 minutes after the last
+failure, and a correct password, or a password reset by an emailed link, clears the username's. The wait never grows past a minute, so
+nobody can lock someone else out, and while it lasts even the right password is answered `429`
+(the web sign-in page shows the wait). Passkey sign-in is not slowed by failed passwords.
+
+Authenticated API traffic other than uploads (the Android app's sync and notification polling,
+MCP) is not limited, and neither are the federation inboxes, which signatures already gate.
+
+The per-IP limits need the client's real address. Behind the image's own nginx alone that works
+out of the box; behind another reverse proxy set `TRUST_PROXY` (see
+[Behind your own proxy](docker.md#behind-your-own-proxy)). Until then the backend cannot tell
+visitors apart, so it leaves the per-IP limits off rather than put everyone in one bucket, and logs
+a warning saying so once; the per-username and per-account limits still apply.
+
+## Email (SMTP)
+
+The server sends a little account mail: the link that verifies a user's email address, password
+reset and passkey recovery links, and the notice after a recovery (see
+[account-recovery.md](account-recovery.md)). It is **off by default**: until the admin sets an SMTP
+host and a From address under Admin Settings → **Email (SMTP)**, nothing is sent, addresses stay
+unverified, and no recovery link is offered anywhere (the public `/status` answers
+`email_enabled: false`).
+
+| Field     | What                                                                                                  |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| SMTP host | The provider's SMTP server. Empty turns email off.                                                    |
+| Port      | Default 587.                                                                                          |
+| Security  | `STARTTLS` (usually 587, the default), `TLS` from the start (usually 465), or `None` (a local relay). |
+| User name | The SMTP login; empty when the server needs none.                                                     |
+| Password  | Stored like the other server secrets and never returned: the settings only say that one is set.       |
+| From      | The sender, `no-reply@example.org` or `Aurboda <no-reply@example.org>`. Empty turns email off.        |
+
+Common providers:
+
+| Provider                         | Host                                | Port / security | Login                                    |
+| -------------------------------- | ----------------------------------- | --------------- | ---------------------------------------- |
+| Amazon SES                       | `email-smtp.<region>.amazonaws.com` | 587 / STARTTLS  | SES SMTP credentials                     |
+| Postmark                         | `smtp.postmarkapp.com`              | 587 / STARTTLS  | server API token as user and password    |
+| Mailgun                          | `smtp.mailgun.org`                  | 587 / STARTTLS  | the domain's SMTP user and password      |
+| Fastmail, Gmail, other mailboxes | the provider's SMTP host            | 465 / TLS       | the address and an app-specific password |
+
+The From address must be one the provider lets you send as. **Send test mail** sends a fixed test
+message to the address typed next to it, or else to the admin's own account email, and shows the
+SMTP error (connection refused, authentication failed, …) when it fails, so the settings can be
+fixed right there. Over REST that is `POST /admin/email/test` `{ to? }`; like the other server
+settings it has no MCP tool. Settings are read at every send, so a change applies at once; a
+connection gives up after a few seconds. The backend logs only "Sent <kind> mail" or the SMTP error
+class, never a recipient, a link or a token.
+
+Session tokens are stateless, so a password reset does not sign out the account's other sessions.
+
+## Single sign-on providers
+
+**Admin settings → SSO providers (OpenID Connect)** adds the providers users can log in, link and
+optionally sign up with: Google, Microsoft Entra ID, GitLab, Keycloak, Authentik or any other
+OpenID Connect issuer. Setup per provider, the redirect URI and the rules are in [sso.md](sso.md).
 
 ## Usage counters
 
@@ -85,7 +174,8 @@ Deleting an account, in order:
 
 1. Sends a `Delete` of the actor to the user's followers on other servers, so they drop the follow
    and the cached profile.
-2. Revokes the Oura, Strava and Gravl grants upstream and removes the Oura and Strava user mappings.
+2. Revokes the Oura, Strava and Gravl grants upstream, deregisters Connect with Garmin, and removes
+   the Oura, Strava and Garmin user mappings.
 3. Reserves the username in the central `deleted_usernames` table (with who deleted it and when).
    Signup refuses a reserved name as taken, for good: other ActivityPub servers cache an actor and
    its key by URL, so a new account under the old name would inherit its followers and trust. Until
@@ -93,7 +183,7 @@ Deleting an account, in order:
 4. Drops the user's database and Postgres role: every metric, activity, location, setting,
    integration token, passkey, feed post, follower and key pair.
 5. Removes every central row that names the user (admin entry, OAuth codes and tokens, passkey user
-   handle, Oura and Strava mappings, the `user_accounts` row and the usage counters) and clears their
+   handle, single sign-on links, flows and codes, Oura and Strava mappings, the `user_accounts` row and the usage counters) and clears their
    name from the shared import jobs they started.
 
 Steps 1 and 2 are best effort: a server or provider that cannot be reached is logged and skipped.
@@ -173,7 +263,7 @@ their account. No new data is stored until the plan is renewed:
 - Authenticated REST writes (`POST`, `PUT`, `PATCH`, `DELETE`) answer `402` with
   `{ "success": false, "error": "This account is read-only until the plan is renewed", "payment_url": … }`
   (the `AccountReadOnlyResponse` schema in the OpenAPI document).
-  Allowed anyway: `/export/*`, `DELETE /account`, `PUT /account/email`, passkey management (`/webauthn/*`) and the
+  Allowed anyway: `/export/*`, `DELETE /account`, `PUT /account/email`, passkey management (`/webauthn/*`), linked sign-in providers (`/account/oidc/*`) and the
   previews that store nothing (`POST /autoshare-rules/preview`, `/deduction-rules/preview`,
   `/feed/activities/:id/preview` and `/feed/exercises/preview`).
 - MCP tools that change data (the same verbs the usage counters treat as writes) return a tool error
@@ -202,6 +292,37 @@ end, or leave a note. The Users table has a **Plan** column (exempt, trial until
 grace, read-only) to sort by end date. REST: `PATCH /admin/users/:username/plan` with any of `plan`,
 `paid_until`, `trial_ends_at` and `plan_note` (`null` clears a date or the note); MCP: the admin-only
 `set_user_plan`.
+
+## Garmin Connect Developer Program
+
+Users can connect Garmin by signing in at Garmin ("Connect with Garmin", see
+[Garmin](./garmin.md#connect-with-garmin)) when the server has an app in the
+[Garmin Connect Developer Program](https://developerportal.garmin.com). Register the redirect URL
+shown under **Garmin Connect Developer Program** on the Admin Settings page
+(`<API_BASE_URL>/auth/garmincb`, also `garmin_redirect_uri` in `GET /admin/settings`) with the app,
+and enter its client ID and secret there (`garmin_client_id` / `garmin_client_secret` in `PATCH
+/admin/settings`, `null` clears; `GET` answers only `garmin_client_id_set` and
+`garmin_client_secret_set`). Without both, the Garmin page does not offer Connect with Garmin; the Garmin
+Connect login and Personal API keys work either way.
+
+Garmin then pushes each user's data to the server, so the app also needs the **push URL**: copy it from
+the same block (**Copy**; `garmin_push_url` in `GET /admin/settings`,
+`<API_BASE_URL>/webhooks/garmin/<token>`) into every endpoint at
+[apis.garmin.com/tools/endpoints](https://apis.garmin.com/tools/endpoints) and choose "push". The token is
+derived from `SESSION_SECRET`, so the URL changes with it and must be pasted again. It is a secret: only
+this admin response carries it, and the bundled nginx does not log the path. The endpoint answers `404`
+until a client ID is set, and accepts bodies up to 50 MB. What arrives is described under
+[Data pushed by Garmin](./garmin.md#data-pushed-by-garmin).
+
+## Garmin Personal API keys
+
+Users can connect Garmin with a key from Garmin's official Personal API next to, or instead of, the
+Garmin Connect login (see [Garmin](./garmin.md#the-two-pull-connections)). **Garmin Personal API keys**
+under **Integrations** on the Admin Settings page (`garmin_personal_key_enabled`, REST `GET`/`PATCH
+/admin/settings`) turns that on or off; it is on until an admin turns it off. Garmin's terms restrict
+a Personal API key to tools its owner operates for their own use, so a server run for other people
+may want it off. When off, connecting a key answers `403` and the Garmin page hides the key form;
+keys already connected keep syncing until their users disconnect them.
 
 ## Support contacts
 
@@ -245,8 +366,10 @@ pair in the central `instance_actor` table. Two styles:
   for an added relay's actor.
 
 A relay starts **Pending** and becomes **Accepted** (or **Rejected**) when it answers. A Follow that
-could not be delivered keeps the relay pending with the error shown on its badge; remove it and
-add it again to retry. Removing a relay sends it an `Undo` of the Follow. Only https URLs that
+could not be delivered keeps the relay pending with the error shown on its badge. Every startup
+sends the Follow again, once, to each relay that is pending with an error, whether it was added by
+default or by hand (bounded by a 30 s timeout per relay): a delivery clears the error, a failure
+stores the new one. Removing it and adding it again retries at once. Removing a relay sends it an `Undo` of the Follow. Only https URLs that
 resolve to public addresses are taken (`400`); an already added relay is `409`; a LitePub actor
 that cannot be resolved is `422`.
 
@@ -261,7 +384,7 @@ Every server subscribes to it **by default**, once: on the first startup on a pu
 (`WEB_HOST` not http, `localhost`, `*.localhost` or a loopback address), upgrades included, the
 server adds it as if an admin had, and records that in the internal `default_relays_seeded` server
 setting. A server that already has it counts as done; a failed add is tried again on the next
-startup. To opt out, remove it under Relays: a removed relay stays removed.
+startup, and a Follow that was added but not delivered is retried as above. To opt out, remove it under Relays: a removed relay stays removed.
 When a post stops being public, or is deleted, the relays get a `Delete` of it; deleting an
 account sends its actor `Delete` to the relays as well as to its followers. A one-way relay like
 tags.pub is cheap; a full (two-way) relay forwards its whole firehose to `/inbox`, where each
@@ -276,9 +399,22 @@ Like an edit, the `Update` reaches only the servers of the author's followers (a
 a public post): a server that cached a post without anyone there following its author, say through a
 boost or a search, keeps the old policy.
 Only `Update`s are sent, so running it again is harmless. It answers `202` with the number of posts
-(`posts`) at once and delivers them one after another in the background; a post whose delivery takes
-over a minute counts as failed and the run moves on. The server log has a line when the run starts
-(posts) and when it ends (posts, failed). A second request while one is still delivering is `409`.
+(`posts`) at once and hands them to delivery one after another in the background; with the delivery
+queue each is queued and a failed inbox retried, without it each is delivered in turn and a post whose
+delivery takes over a minute counts as failed. The server log has a line when the run starts (posts)
+and when it ends (posts, failed). A second request while one is still running is `409`.
+
+**Servers that could not be reached** (Admin Settings → **Federation**; REST
+`GET /admin/federation/delivery-failures`; MCP `list_federation_delivery_failures`, both
+admin-only). Outgoing activities are queued and retried with backoff (see
+[Delivery queue](features/feed.md#delivery-queue)); every failed attempt is recorded per inbox host
+in the central `federation_delivery_failures` table: the latest inbox, HTTP status (none when no
+answer came, e.g. a refused connection) and a short status line (status code and reason or the
+network error, never a response body), the number of failed attempts since the host last accepted a
+delivery, and when the run of failures started. The list shows hosts whose latest attempts failed,
+most recent first; a host leaves it once it accepts a delivery again. A `404` or `410` is given up on
+at once. Removing followers on dead servers is not automatic. A server without a job queue delivers
+synchronously and records nothing here.
 
 **Public tag pages** (`public_tag_pages`, `public_tag_retention_days`, Admin Settings → **Public
 tag pages**, `PATCH /admin/settings`): up to 20 hashtags, each with a public page at
@@ -289,9 +425,8 @@ removed one; the follow is pending until the tag actor accepts, and only an acce
 `Announce`s are kept. A tag whose actor cannot be resolved still stays in the setting, with no
 follow, and is tried again on the next save that lists it; a pending follow is re-sent on every
 save, and changing the tag actor host moves every follow to the new host. The section shows a
-badge per tag (`public_tag_follows`): **accepted**, **pending**, or **unresolved**. There is no
-moderation of tag pages yet beyond removing the tag; a follow-up issue tracks hiding posts and
-blocking actors and domains. Posts are kept for
+badge per tag (`public_tag_follows`): **accepted**, **pending**, or **unresolved**. Posts can be
+hidden and authors or domains blocked, see [Tag page moderation](#tag-page-moderation). Posts are kept for
 `public_tag_retention_days` (1–365, default 30) by publication time; a nightly job (`23 3 * * *`)
 re-applies the follows, then drops older ones (but the official feed's remote posts) and the ones
 that carry no followed tag any more. The instance actor also follows the
@@ -301,3 +436,39 @@ posts are added as they are published from then on: posts published before a tag
 are not backfilled. `GET /status` lists the tags (`public_tag_pages`) so the front page, `/blog`
 and the logged-out web can link the pages. See
 [Public tag pages](features/feed.md#public-tag-pages).
+
+### Tag page moderation
+
+Anyone on the fediverse can put a post on a public tag page, so an admin can take posts off it,
+and off the [official feed](features/feed.md#official-feed)'s posts from other servers, which
+come from the same store:
+
+- **Hide a post**: on `/tags/<tag>` (or `/blog`) a logged-in admin sees **Hide post**,
+  **Block &lt;author&gt;** and **Block &lt;host&gt;** under each post from the tag pages, each asking
+  for confirmation and then removing the affected posts from the page. Hiding removes the post and
+  remembers its Note id (central `public_tag_hidden`), so a later `Announce` or edit of it is not
+  stored again. REST `DELETE /admin/public-tag-posts/:id` (the post's `id` as the listing gives
+  it), MCP `hide_public_tag_post`.
+- **Block an author or a domain**: REST `POST /admin/public-tag-blocks` `{ kind, value }`, MCP
+  `add_public_tag_block` (central `public_tag_blocks`). `kind: "actor"` takes the author's
+  `http(s)` actor URI and matches it exactly; `kind: "domain"` takes a host and matches it and
+  every subdomain (`example.org` also blocks `social.example.org`), compared lowercased and
+  without port. A domain is normalised first: trimmed, lowercased, a scheme, path, port, leading
+  `@`/`*.` (or a whole `@user@host` handle) reduced to the host. Every stored post the block
+  matches is removed at once and the answer says how many (`removed_posts`); new posts by a
+  blocked author are not stored. A domain block of this server's own host, or of a parent domain
+  of it, is refused (`400`), as is an actor block that is not an `http(s)` URL; the same block
+  twice is `409`.
+- **Both are checked on ingest**, for posts arriving through the tag actors and for this server's
+  own posts alike. A hidden or blocked local post is only kept off the tag pages: the author's own
+  feed, profile and federation are untouched.
+- **Undo**: `GET /admin/public-tag-hidden` (newest first, at most 200) and
+  `DELETE /admin/public-tag-hidden/:id` (MCP `list_hidden_public_tag_posts`,
+  `unhide_public_tag_post`); `GET /admin/public-tag-blocks` and
+  `DELETE /admin/public-tag-blocks/:id` (MCP `list_public_tag_blocks`, `remove_public_tag_block`).
+  Unhiding and unblocking only stop the rule; nothing is fetched back, and a post returns when it
+  is announced or edited again.
+
+Admin Settings → **Tag page moderation** lists the blocks (kind, value, when added, **Remove**)
+with a form to add one, and the hidden posts (link to the post, author, when hidden, **Unhide**).
+Every route and tool is admin-only.

@@ -26,6 +26,15 @@ if (nativeAuth && savedAuth && savedAuth !== JSON.stringify(nativeAuth)) {
 export const auth = signal<{ user?: string; token?: string; is_admin?: boolean }>(
   nativeAuth ?? (savedAuth ? JSON.parse(savedAuth) : {}),
 )
+export const acceptSessionResponse = (
+  data: { token?: string; username?: string; is_admin?: boolean },
+  generation: number,
+): boolean => {
+  if (generation !== currentSessionGeneration() || !data.token || !data.username) return false
+  auth.value = { is_admin: data.is_admin, token: data.token, user: data.username }
+  return true
+}
+
 installSessionResponseFence(axios)
 let sessionIdentity = JSON.stringify([auth.value.user, auth.value.token])
 auth.subscribe((value) => {
@@ -70,6 +79,10 @@ export const publicTagPages = signal<string[]>([])
 export const contactFediverse = signal<string | null>(null)
 /** The server admin's Reddit username, or null when not set. */
 export const contactReddit = signal<string | null>(null)
+/** What the server reports as its version: `1.0.<n>` for a release, else a commit sha or `dev`. */
+export const serverVersion = signal<string | null>(null)
+/** Whether the server sends email: the login page offers account recovery only then. */
+export const emailEnabled = signal(false)
 /** The last /status request failed: the signup mode is unknown, so say nothing about signing up. */
 export const statusFailed = signal(false)
 
@@ -86,12 +99,14 @@ export const fetchStatus = async () => {
         billing_enabled,
         contact_fediverse,
         contact_reddit,
+        email_enabled,
         official_feed,
         price_text,
         public_tag_pages,
         signup_allowed,
         signup_mode,
         trial_days,
+        version,
       } = response.data
       signupAllowed.value = signup_allowed
       signupMode.value = signup_mode
@@ -99,7 +114,9 @@ export const fetchStatus = async () => {
       publicTagPages.value = public_tag_pages ?? []
       contactFediverse.value = contact_fediverse || null
       contactReddit.value = contact_reddit || null
+      emailEnabled.value = email_enabled === true
       serverBilling.value = { billing_enabled, price_text, trial_days }
+      serverVersion.value = version || null
       statusFailed.value = false
     } catch {
       console.error('Status fetch error')

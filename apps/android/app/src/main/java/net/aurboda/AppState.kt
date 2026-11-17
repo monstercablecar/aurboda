@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import io.ktor.client.HttpClient
 
 enum class AppScreen {
     Login,
@@ -74,11 +75,22 @@ class AppState(
     var tabReselections by mutableIntStateOf(0)
         private set
 
+    /**
+     * Bumped by every deep link that names a More page; the embedded page keys on it,
+     * so a link reloads a page already showing.
+     */
+    var morePageLinks by mutableIntStateOf(0)
+        private set
+
     var pendingServerUrl by mutableStateOf<String?>(null)
         private set
 
     /** Shown on the login screen to say why the user was logged out, e.g. [SESSION_REFUSED_MESSAGE]. */
     var loginNotice by mutableStateOf<String?>(null)
+        private set
+
+    /** Unread in-app notifications, shown as a badge on More and on its Notifications row. */
+    var unreadNotifications by mutableIntStateOf(0)
         private set
 
     val credentials: CredentialsManager.Credentials?
@@ -123,11 +135,24 @@ class AppState(
         // reselection, which would reload it and drop e.g. an unsaved article draft.
         if (link.tab == MainTab.More) moreDestination = null
         currentTab = link.tab
-        link.morePath?.let { moreDestination = MoreDestination.Web(it) }
+        link.morePath?.let {
+            moreDestination = MoreDestination.Web(it)
+            morePageLinks++
+        }
     }
 
     fun closeMoreDestination() {
         moreDestination = null
+    }
+
+    /** A null [count] (the server could not say) leaves the badge as it is. */
+    fun setUnreadNotificationCount(count: Int?) {
+        if (count != null) unreadNotifications = count
+    }
+
+    suspend fun refreshUnreadNotifications(httpClient: HttpClient) {
+        val creds = credentials ?: return
+        setUnreadNotificationCount(fetchUnreadNotificationCount(httpClient, creds.apiUrl, creds.authToken))
     }
 }
 

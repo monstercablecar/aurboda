@@ -30,6 +30,8 @@ import {
 } from '../../db/index.ts'
 import {
   combineMeasures,
+  fieldValue,
+  type FieldValue,
   groupItemsByKey,
   type ItemGroup,
   listFieldOf,
@@ -42,8 +44,10 @@ import {
 } from '../activity-measures.ts'
 import { getEffectiveHrZones } from '../settings.ts'
 import { mergeHistograms, summarizeHistogram, type ValueDistributionRow } from './value-histogram.ts'
+import { placesOfWindows } from './window-places.ts'
 
-type FieldValue = string | number | boolean
+/** The reserved group-by value that groups sessions by their named place rather than a data field. */
+export const PLACE_GROUP = 'place'
 
 export interface ItemPath {
   field: string
@@ -88,14 +92,6 @@ const median = (values: number[]): number | undefined => {
 const numberFromData = (data: Record<string, unknown> | undefined, key: string): number | undefined => {
   const v = data?.[key]
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
-}
-
-/** A usable field value: a non-empty (trimmed) string, a finite number or a boolean. */
-export const fieldValue = (v: unknown): FieldValue | undefined => {
-  if (typeof v === 'string') return v.trim() === '' ? undefined : v.trim()
-  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined
-  if (typeof v === 'boolean') return v
-  return undefined
 }
 
 export const toValueDistribution = (row: ValueDistributionRow): ValueDistribution => ({
@@ -344,7 +340,9 @@ const sessionFieldNames = (
 ): { fieldNames: string[]; listField?: string } => {
   const fields = definitions.filter((d) => types.includes(d.name)).flatMap((d) => d.data_schema?.fields ?? [])
   const fieldNames = [...new Set(fields.filter((f) => f.type !== 'list').map((f) => f.name))]
-  if (groupBy && !groupBy.includes('.') && !fieldNames.includes(groupBy)) fieldNames.push(groupBy)
+  if (groupBy && groupBy !== PLACE_GROUP && !groupBy.includes('.') && !fieldNames.includes(groupBy)) {
+    fieldNames.push(groupBy)
+  }
   return { fieldNames, listField: itemField ?? listFieldOf(definitions, types) }
 }
 
@@ -365,6 +363,48 @@ const selectSessions = (
     activities: start ? matching.filter((a) => a.start_time.getTime() >= start.getTime()) : matching,
     filterExtras: filter.value === null ? undefined : itemFilterExtras(matching, path, filter.value),
   }
+}
+
+/** Each session's named place (see `placesOfWindows`); one without an end is placed at its start. */
+const sessionPlaces = async (
+  user: string,
+  activities: MergedActivity[],
+): Promise<Map<MergedActivity, string | null>> => {
+  const places = await placesOfWindows(
+    user,
+    activities.map((a) => ({ end: a.end_time ?? a.start_time, start: a.start_time })),
+  )
+  return new Map(activities.map((a, i) => [a, places[i] ?? null]))
+}
+
+/** The session's fields with `place` set to its named place, replacing any data field of that name. */
+export const withPlace = (
+  fields: ActivitySession['fields'],
+  place: string | null | undefined,
+): ActivitySession['fields'] => {
+  const { [PLACE_GROUP]: _dataField, ...rest } = fields
+  return place ? { ...rest, [PLACE_GROUP]: place } : rest
+}
+
+const withPlaces = (
+  sessions: ActivitySession[],
+  places: Map<MergedActivity, string | null> | undefined,
+): ActivitySession[] => {
+  if (!places) return sessions
+  const byId = new Map([...places].map(([a, place]) => [sessionId(a), place]))
+  return sessions.map((s) => ({ ...s, fields: withPlace(s.fields, byId.get(s.id)) }))
+}
+
+/** The group keys each activity is pooled under for its group's HR distribution. */
+const groupMembership = (
+  groupBy: string | undefined,
+  itemGroups: Map<MergedActivity, ItemGroup[]> | undefined,
+  places: Map<MergedActivity, string | null> | undefined,
+): ((a: MergedActivity) => string[]) | undefined => {
+  if (itemGroups) return (a) => itemGroupKeys(itemGroups.get(a) ?? [])
+  if (places) return (a) => [groupKey(places.get(a) ?? null)]
+  if (groupBy) return (a) => [groupKey(fieldValue(a.data?.[groupBy]) ?? null)]
+  return undefined
 }
 
 /** Each activity's item groups by the group-by item path. */
@@ -407,29 +447,27 @@ export const queryActivitySessions = async (
   const windows = timed.map((a) => ({ end: a.end_time!, start: a.start_time }))
 
   const itemGroups = groupItem ? itemGroupsFor(activities, groupItem) : undefined
-  const membership = itemGroups
-    ? (a: MergedActivity) => itemGroupKeys(itemGroups.get(a) ?? [])
-    : groupBy
-      ? (a: MergedActivity) => [groupKey(fieldValue(a.data?.[groupBy]) ?? null)]
-      : undefined
-
-  const [zoneSecs, histograms] = await Promise.all([
+  const [zoneSecs, histograms, places] = await Promise.all([
     timed.length === 0
       ? Promise.resolve([])
       : getEffectiveHrZones(user).then(({ zones }) => getHrZoneSecsForWindows(user, windows, zones)),
     getValueHistogramsForWindows(user, 'heart_rate', windows),
+    groupBy === PLACE_GROUP ? sessionPlaces(user, activities) : undefined,
   ])
-  const hrDistributions = distributionsByKey(timed, histograms, membership)
+  const hrDistributions = distributionsByKey(timed, histograms, groupMembership(groupBy, itemGroups, places))
 
-  const sessions = buildSessions(
-    activities,
-    fieldNames,
-    new Map(timed.map((a, i) => [a, zoneSecs[i]])),
-    hrDistributions,
-    (a) =>
-      filterExtras?.get(a) ?? {
-        measures: listField ? nonEmpty(measureItems(listItems(a.data, listField))) : undefined,
-      },
+  const sessions = withPlaces(
+    buildSessions(
+      activities,
+      fieldNames,
+      new Map(timed.map((a, i) => [a, zoneSecs[i]])),
+      hrDistributions,
+      (a) =>
+        filterExtras?.get(a) ?? {
+          measures: listField ? nonEmpty(measureItems(listItems(a.data, listField))) : undefined,
+        },
+    ),
+    places,
   )
 
   const groups = itemGroups

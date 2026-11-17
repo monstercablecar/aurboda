@@ -19,6 +19,7 @@ const day = (offset: number) => new Date(NOW.getTime() + offset * 86_400_000)
 const account = (username: string, trialEndsAt: Date): UserAccount => ({
   created_at: day(-200),
   email: null,
+  email_verified_at: null,
   inserted_at: day(-200),
   paid_until: null,
   plan: 'trial',
@@ -155,6 +156,8 @@ describe('isAllowedWhenReadOnly', () => {
     ['POST', '/feed/activities/{id}/preview'],
     ['POST', '/feed/exercises/preview'],
     ['POST', '/feed/dashboards/preview'],
+    ['POST', '/notifications/read-all'],
+    ['POST', '/notifications/0b6c1f0e-3f7e-4a43-9a51-3c1d7d1f2a10/read'],
   ])('allows %s %s', (method, path) => {
     expect(isAllowedWhenReadOnly(method, path)).toBe(true)
   })
@@ -174,6 +177,10 @@ describe('isAllowedWhenReadOnly', () => {
     ['POST', '/feed/activities/abc/share'],
     ['POST', '/feed/activities/abc/def/preview'],
     ['POST', '/feed/abc/preview'],
+    ['PUT', '/notifications/types/admin_signup'],
+    ['POST', '/notifications/abc/def/read'],
+    ['POST', '/notifications/0b6c1f0e-3f7e-4a43-9a51-3c1d7d1f2a10/actions/skip'],
+    ['POST', '/autoshare-rules/skips'],
   ])('refuses %s %s', (method, path) => {
     expect(isAllowedWhenReadOnly(method, path)).toBe(false)
   })
@@ -184,6 +191,7 @@ describe('gateSyncProvider', () => {
     syncCalendarsIfNeeded: vi.fn(async () => {}),
     syncGarminIfNeeded: vi.fn(async () => {}),
     syncGravlIfNeeded: vi.fn(async () => {}),
+    syncHomeAssistantIfNeeded: vi.fn(async () => {}),
     syncLastFmIfNeeded: vi.fn(async () => {}),
     syncOuraIfNeeded: vi.fn(async () => {}),
     syncRescueTimeIfNeeded: vi.fn(async () => {}),
@@ -193,6 +201,7 @@ describe('gateSyncProvider', () => {
     await sync.syncCalendarsIfNeeded(user)
     await sync.syncGarminIfNeeded(user, 'sleep')
     await sync.syncGravlIfNeeded(user)
+    await sync.syncHomeAssistantIfNeeded(user)
     await sync.syncLastFmIfNeeded(user)
     await sync.syncOuraIfNeeded(user, 'tags')
     await sync.syncRescueTimeIfNeeded(user)

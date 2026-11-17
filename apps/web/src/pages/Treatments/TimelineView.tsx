@@ -93,11 +93,21 @@ function CorrectionForm({
       <div class="form-grid compact-grid">
         <label class="field full-field">
           <span>Actually administered at</span>
-          <input required type="datetime-local" value={actualLocal} onInput={(event) => setActualLocal((event.target as HTMLInputElement).value)} />
+          <input
+            required
+            type="datetime-local"
+            value={actualLocal}
+            onInput={(event) => setActualLocal((event.target as HTMLInputElement).value)}
+          />
         </label>
         <label class="field">
           <span>Dose</span>
-          <input step="any" type="number" value={dose} onInput={(event) => setDose((event.target as HTMLInputElement).value)} />
+          <input
+            step="any"
+            type="number"
+            value={dose}
+            onInput={(event) => setDose((event.target as HTMLInputElement).value)}
+          />
         </label>
         <label class="field">
           <span>Unit</span>
@@ -109,12 +119,18 @@ function CorrectionForm({
         </label>
         <label class="field full-field">
           <span>Correction reason</span>
-          <textarea required value={reason} onInput={(event) => setReason((event.target as HTMLTextAreaElement).value)} />
+          <textarea
+            required
+            value={reason}
+            onInput={(event) => setReason((event.target as HTMLTextAreaElement).value)}
+          />
         </label>
       </div>
       {error && <p class="form-error">{error}</p>}
       <div class="form-actions">
-        <button class="btn-secondary" type="button" onClick={onCancel}>Cancel</button>
+        <button class="btn-secondary" type="button" onClick={onCancel}>
+          Cancel
+        </button>
         <button class="btn-primary" type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? 'Saving…' : 'Save correction'}
         </button>
@@ -198,7 +214,10 @@ export function TimelineView({
               <h3>{day}</h3>
               <div class="timeline-list">
                 {dayEntries.map((entry) => (
-                  <article class={`timeline-entry timeline-${entry.type}`} key={`${entry.type}:${entry.data.id}`}>
+                  <article
+                    class={`timeline-entry timeline-${entry.type}`}
+                    key={`${entry.type}:${entry.data.id}`}
+                  >
                     <time dateTime={entry.at}>
                       {new Date(entry.at).toLocaleTimeString([], { timeStyle: 'short' })}
                     </time>
@@ -217,15 +236,22 @@ export function TimelineView({
                       {entry.type === 'treatment' && entry.data.planned_at && (
                         <p>
                           Planned {new Date(entry.data.planned_at).toLocaleString()}
-                          {entry.data.actual_start && ` · started ${new Date(entry.data.actual_start).toLocaleString()}`}
+                          {entry.data.actual_start &&
+                            ` · started ${new Date(entry.data.actual_start).toLocaleString()}`}
                         </p>
                       )}
-                      {(entry.type === 'administration' || entry.type === 'assessment' || entry.type === 'context') && (
+                      {(entry.type === 'administration' ||
+                        entry.type === 'assessment' ||
+                        entry.type === 'context') && (
                         <div class="row-actions">
                           {entry.type === 'administration' && (
-                            <button type="button" onClick={() => setCorrecting(entry.data)}>Correct</button>
+                            <button type="button" onClick={() => setCorrecting(entry.data)}>
+                              Correct
+                            </button>
                           )}
-                          <button class="danger-link" type="button" onClick={() => void voidEntry(entry)}>Void</button>
+                          <button class="danger-link" type="button" onClick={() => void voidEntry(entry)}>
+                            Void
+                          </button>
                         </div>
                       )}
                     </div>

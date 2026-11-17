@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS work_profiles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_work_profiles_key ON work_profiles (work_id, date_bin_val, granularite_level) WITH (fillfactor = 90);
-`;
+`
 
 /** WorkMetricDefinitions schema: stores the mapped schema for /work API endpoints. */
 export const workMetricDefinitionsSchema = `
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS work_metric_definitions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_work_metric_unique ON work_metric_definitions (metric_id, unique_id) WITH (fillfactor = 90);
-`;
+`
 
 /** LegacyAggregate schema: stores pre-migration aggregate entries. */
 export const legacyAggregateSchema = `
@@ -39,23 +39,23 @@ CREATE TABLE IF NOT EXISTS legacy_aggregates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_legacy_aggregate_key ON legacy_aggregates (timestamp_val, model_type, time_bin_val) WITH (fillfactor = 90);
-`;
+`
 
 // Integration order: API schema tables first, then legacy aggregate backup.
 tableCreationOrder.push({
   name: 'work_profiles',
   sourcePath: () => './apps/configurable-work-engine/src/schema/work.ts',
-  dependencies: []
-});
+  dependencies: [],
+})
 
 tableCreationOrder.push({
   name: 'work_metric_definitions',
   sourcePath: () => './apps/configurable-work-engine/src/schema/work.ts',
-  dependencies: ['work_profiles']
-});
+  dependencies: ['work_profiles'],
+})
 
 tableCreationOrder.push({
   name: 'legacy_aggregates',
   sourcePath: () => './apps/configurable-work-engine/src/schema/work.ts',
-  dependencies: []
-});
+  dependencies: [],
+})

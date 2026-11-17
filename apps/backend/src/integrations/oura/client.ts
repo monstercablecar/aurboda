@@ -10,6 +10,7 @@ import {
   schemaInitialized,
   upsertOAuthToken,
 } from '../../db/index.ts'
+import { signOAuthState, verifyOAuthState } from '../../services/signed-oauth-state.ts'
 import { redactSecret } from '../garmin/client.ts'
 
 /** Oura tag record used during sync processing (mapped to activities). */
@@ -18,6 +19,8 @@ export interface OuraTagWithComment {
   external_id: string
   tag: string
   tag_key?: string
+  /** The name is the bare `tag_key`: no mapping of the user's own and no custom name. */
+  tag_from_code?: boolean
   start_time: Date
   end_time?: Date
   comment?: string
@@ -61,6 +64,7 @@ export type OuraSleepPeriodRaw = {
 
 export interface OuraClientOptions {
   onUserAuthenticated?: (ouraUserId: string, username: string) => Promise<void>
+  now?: () => Date
 }
 
 export type OuraCredentialGetter = () => Promise<{ clientId: string; clientSecret: string }>
@@ -71,6 +75,7 @@ export const ouraClient = (
   options?: OuraClientOptions,
 ) => {
   const redirectUri = `${apiBaseUrl}/auth/ouracb`
+  const now = options?.now ?? (() => new Date())
 
   const getGeneric = async (type: string, start: Date, end: Date, token: string) => {
     const response = await axios.get(
@@ -101,6 +106,10 @@ export const ouraClient = (
         return res.end('{"success":false}')
       }
 
+      if (!code || !state) {
+        return res.status(400).json({ error: 'invalid_request', success: false })
+      }
+
       let clientId: string
       let clientSecret: string
       try {
@@ -110,7 +119,10 @@ export const ouraClient = (
         return res.end('{"success":false,"error":"Oura not configured"}')
       }
 
-      const user = state as string
+      const user = verifyOAuthState(state, { provider: 'oura' }, clientSecret, now())
+      if (!user) {
+        return res.status(400).json({ error: 'invalid_state', success: false })
+      }
 
       if (!(await schemaInitialized(user))) {
         await initializeSchema(user)
@@ -120,7 +132,7 @@ export const ouraClient = (
       tokenUrl.searchParams.append('grant_type', 'authorization_code')
       tokenUrl.searchParams.append('client_id', clientId)
       tokenUrl.searchParams.append('client_secret', clientSecret)
-      tokenUrl.searchParams.append('code', code as string)
+      tokenUrl.searchParams.append('code', code)
       tokenUrl.searchParams.append('redirect_uri', redirectUri)
 
       const response = await axios.post(tokenUrl.toString())
@@ -260,20 +272,22 @@ export const ouraClient = (
     ): Promise<OuraTagWithComment[]> {
       const data: OuraTag[] = await getGeneric('enhanced_tag', start, end, token)
       const tags = data
-        .map(
-          (tag): OuraTagWithComment => ({
+        .map((tag): OuraTagWithComment => {
+          const code = tag.tag_type_code || undefined
+          const mapped =
+            code !== undefined && tagMappings && code in tagMappings ? tagMappings[code] : undefined
+          const fromCode = mapped === undefined && !tag.custom_name && code !== undefined
+          return {
             comment: tag.comment ?? undefined,
             end_time: tag.end_time ? new Date(tag.end_time) : undefined,
             external_id: tag.id,
             source: 'oura',
             start_time: new Date(tag.start_time),
-            tag:
-              tag.tag_type_code && tagMappings && tag.tag_type_code in tagMappings
-                ? tagMappings[tag.tag_type_code]
-                : tag.custom_name || tag.tag_type_code || 'unknown',
+            tag: mapped ?? (tag.custom_name || code || 'unknown'),
             tag_key: tag.tag_type_code ?? undefined,
-          }),
-        )
+            ...(fromCode ? { tag_from_code: true } : {}),
+          }
+        })
         .filter(
           ({ start_time, end_time }) => isBefore(start_time, end) && (!end_time || isAfter(end_time, start)),
         )
@@ -287,8 +301,9 @@ export const ouraClient = (
       }
 
       let clientId: string
+      let clientSecret: string
       try {
-        ;({ clientId } = await getCredentials())
+        ;({ clientId, clientSecret } = await getCredentials())
       } catch {
         res
           .status(400)
@@ -300,7 +315,7 @@ export const ouraClient = (
       location.searchParams.append('response_type', 'code')
       location.searchParams.append('client_id', clientId)
       location.searchParams.append('redirect_uri', redirectUri)
-      location.searchParams.append('state', user)
+      location.searchParams.append('state', signOAuthState({ provider: 'oura', user }, clientSecret, now()))
       res.json({ success: true, url: location.toString() })
     },
   }

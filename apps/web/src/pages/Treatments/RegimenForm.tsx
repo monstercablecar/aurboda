@@ -96,13 +96,22 @@ const buildSchedule = (draft: ScheduleDraft): ScheduleRule => {
   }
 }
 
-function ScheduleEditor({ draft, onChange }: { draft: ScheduleDraft; onChange: (draft: ScheduleDraft) => void }) {
+function ScheduleEditor({
+  draft,
+  onChange,
+}: {
+  draft: ScheduleDraft
+  onChange: (draft: ScheduleDraft) => void
+}) {
   const patch = (updates: Partial<ScheduleDraft>) => onChange({ ...draft, ...updates })
   return (
     <div class="schedule-editor">
       <label class="field full-field">
         <span>Rule</span>
-        <select value={draft.type} onChange={(event) => patch({ type: (event.target as HTMLSelectElement).value as RuleType })}>
+        <select
+          value={draft.type}
+          onChange={(event) => patch({ type: (event.target as HTMLSelectElement).value as RuleType })}
+        >
           <option value="daily">Daily</option>
           <option value="weekdays">Selected weekdays</option>
           <option value="every_n_days">Every N days</option>
@@ -115,15 +124,139 @@ function ScheduleEditor({ draft, onChange }: { draft: ScheduleDraft; onChange: (
         </select>
       </label>
       {draft.type === 'weekdays' && (
-        <fieldset class="chip-fieldset full-field"><legend>Weekdays</legend><div class="choice-chips weekday-chips">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label, index) => { const day = index + 1; const active = draft.weekdays.includes(day); return <button class={active ? 'choice-chip selected' : 'choice-chip'} key={label} type="button" aria-pressed={active} onClick={() => patch({ weekdays: active ? draft.weekdays.filter((value) => value !== day) : [...draft.weekdays, day].sort() })}>{label}</button> })}</div></fieldset>
+        <fieldset class="chip-fieldset full-field">
+          <legend>Weekdays</legend>
+          <div class="choice-chips weekday-chips">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label, index) => {
+              const day = index + 1
+              const active = draft.weekdays.includes(day)
+              return (
+                <button
+                  class={active ? 'choice-chip selected' : 'choice-chip'}
+                  key={label}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    patch({
+                      weekdays: active
+                        ? draft.weekdays.filter((value) => value !== day)
+                        : [...draft.weekdays, day].sort(),
+                    })
+                  }
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
       )}
-      {draft.type === 'every_n_days' && <><label class="field"><span>Every (days)</span><input min="1" max="365" required type="number" value={draft.intervalDays} onInput={(event) => patch({ intervalDays: (event.target as HTMLInputElement).value })} /></label><label class="field"><span>Anchor date</span><input required type="date" value={draft.anchorDate} onInput={(event) => patch({ anchorDate: (event.target as HTMLInputElement).value })} /></label></>}
-      {draft.type === 'weekly' && <label class="field full-field"><span>Weekday</span><select value={draft.weekday} onChange={(event) => patch({ weekday: (event.target as HTMLSelectElement).value })}>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => <option value={index + 1}>{day}</option>)}</select></label>}
-      {draft.type === 'monthly' && <label class="field full-field"><span>Day of month</span><input min="1" max="31" required type="number" value={draft.dayOfMonth} onInput={(event) => patch({ dayOfMonth: (event.target as HTMLInputElement).value })} /></label>}
-      {draft.type === 'specific_date' && <label class="field full-field"><span>Date</span><input required type="date" value={draft.date} onInput={(event) => patch({ date: (event.target as HTMLInputElement).value })} /></label>}
-      {draft.type === 'interval' && <><label class="field"><span>Every (hours)</span><input min="0.1" step="any" required type="number" value={draft.intervalHours} onInput={(event) => patch({ intervalHours: (event.target as HTMLInputElement).value })} /></label><label class="field"><span>Anchor time</span><input required type="datetime-local" value={draft.anchorAt} onInput={(event) => patch({ anchorAt: (event.target as HTMLInputElement).value })} /></label></>}
+      {draft.type === 'every_n_days' && (
+        <>
+          <label class="field">
+            <span>Every (days)</span>
+            <input
+              min="1"
+              max="365"
+              required
+              type="number"
+              value={draft.intervalDays}
+              onInput={(event) => patch({ intervalDays: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+          <label class="field">
+            <span>Anchor date</span>
+            <input
+              required
+              type="date"
+              value={draft.anchorDate}
+              onInput={(event) => patch({ anchorDate: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+        </>
+      )}
+      {draft.type === 'weekly' && (
+        <label class="field full-field">
+          <span>Weekday</span>
+          <select
+            value={draft.weekday}
+            onChange={(event) => patch({ weekday: (event.target as HTMLSelectElement).value })}
+          >
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(
+              (day, index) => (
+                <option value={index + 1}>{day}</option>
+              ),
+            )}
+          </select>
+        </label>
+      )}
+      {draft.type === 'monthly' && (
+        <label class="field full-field">
+          <span>Day of month</span>
+          <input
+            min="1"
+            max="31"
+            required
+            type="number"
+            value={draft.dayOfMonth}
+            onInput={(event) => patch({ dayOfMonth: (event.target as HTMLInputElement).value })}
+          />
+        </label>
+      )}
+      {draft.type === 'specific_date' && (
+        <label class="field full-field">
+          <span>Date</span>
+          <input
+            required
+            type="date"
+            value={draft.date}
+            onInput={(event) => patch({ date: (event.target as HTMLInputElement).value })}
+          />
+        </label>
+      )}
+      {draft.type === 'interval' && (
+        <>
+          <label class="field">
+            <span>Every (hours)</span>
+            <input
+              min="0.1"
+              step="any"
+              required
+              type="number"
+              value={draft.intervalHours}
+              onInput={(event) => patch({ intervalHours: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+          <label class="field">
+            <span>Anchor time</span>
+            <input
+              required
+              type="datetime-local"
+              value={draft.anchorAt}
+              onInput={(event) => patch({ anchorAt: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+        </>
+      )}
       {draft.type !== 'specific_date' && (
-        <><label class="field"><span>Starts (optional)</span><input type="date" value={draft.startDate} onInput={(event) => patch({ startDate: (event.target as HTMLInputElement).value })} /></label><label class="field"><span>Ends (optional)</span><input type="date" value={draft.endDate} onInput={(event) => patch({ endDate: (event.target as HTMLInputElement).value })} /></label></>
+        <>
+          <label class="field">
+            <span>Starts (optional)</span>
+            <input
+              type="date"
+              value={draft.startDate}
+              onInput={(event) => patch({ startDate: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+          <label class="field">
+            <span>Ends (optional)</span>
+            <input
+              type="date"
+              value={draft.endDate}
+              onInput={(event) => patch({ endDate: (event.target as HTMLInputElement).value })}
+            />
+          </label>
+        </>
       )}
     </div>
   )
@@ -165,7 +298,10 @@ export function RegimenForm({
   regimen?: Regimen
   substances: Substance[]
 }) {
-  const activeSubstances = substances.filter((substance) => substance.status === 'active' || regimen?.items.some((item) => item.substance_id === substance.id))
+  const activeSubstances = substances.filter(
+    (substance) =>
+      substance.status === 'active' || regimen?.items.some((item) => item.substance_id === substance.id),
+  )
   const [name, setName] = useState(regimen?.name ?? '')
   const [description, setDescription] = useState(regimen?.description ?? '')
   const [status, setStatus] = useState(regimen?.status ?? 'active')
@@ -174,7 +310,10 @@ export function RegimenForm({
   const [remindersEnabled, setRemindersEnabled] = useState(regimen?.reminder.enabled ?? false)
   const [reminderMinutes, setReminderMinutes] = useState(regimen?.reminder.minutes_before.join(', ') ?? '')
   const [error, setError] = useState('')
-  const updateItem = (index: number, updates: Partial<ItemDraft>) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...updates } : item))
+  const updateItem = (index: number, updates: Partial<ItemDraft>) =>
+    setItems((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...updates } : item)),
+    )
   const mutation = useMutation({
     mutationFn: () => {
       const bodyItems: RegimenItemInput[] = items.map((item, index) => {
@@ -197,7 +336,10 @@ export function RegimenForm({
         name: name.trim(),
         reminder: {
           enabled: remindersEnabled,
-          minutes_before: reminderMinutes.split(',').map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value >= 0),
+          minutes_before: reminderMinutes
+            .split(',')
+            .map((value) => Number(value.trim()))
+            .filter((value) => Number.isFinite(value) && value >= 0),
         },
         schedule: buildSchedule(schedule),
         sort_order: regimen?.sort_order ?? 0,
@@ -211,31 +353,208 @@ export function RegimenForm({
   })
 
   return (
-    <form class="treatments-form wide-form" onSubmit={(event) => { event.preventDefault(); if (!mutation.isPending) mutation.mutate() }}>
-      <div class="form-heading"><div><p class="treatments-kicker">Stack builder</p><h2>{regimen ? 'Edit regimen' : 'New regimen'}</h2></div><button class="icon-button" type="button" onClick={onCancel} aria-label="Close regimen form">×</button></div>
-      <div class="form-grid">
-        <label class="field"><span>Name</span><input required value={name} onInput={(event) => setName((event.target as HTMLInputElement).value)} /></label>
-        <label class="field"><span>Status</span><select value={status} onChange={(event) => setStatus((event.target as HTMLSelectElement).value as Regimen['status'])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
-        <label class="field full-field"><span>Description</span><textarea value={description} onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)} /></label>
-      </div>
-      <fieldset class="form-panel"><legend>Schedule</legend><ScheduleEditor draft={schedule} onChange={setSchedule} /></fieldset>
-      <fieldset class="form-panel"><legend>Items</legend><div class="builder-items">{items.map((item, index) => (
-        <div class="builder-item" key={item.id ?? index}>
-          <div class="builder-item-heading"><strong>Item {index + 1}</strong><button class="danger-link" disabled={items.length === 1} type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>
-          <div class="form-grid">
-            <label class="field full-field"><span>Substance</span><select required value={item.substanceId} onChange={(event) => { const id = (event.target as HTMLSelectElement).value; const substance = activeSubstances.find((candidate) => candidate.id === id); updateItem(index, { dose: String(substance?.default_dose ?? item.dose), doseUnit: substance?.dose_unit ?? item.doseUnit, route: substance?.route ?? item.route, substanceId: id }) }}><option value="">Choose…</option>{activeSubstances.map((substance) => <option value={substance.id}>{substance.display_name}</option>)}</select></label>
-            <label class="field"><span>Dose</span><input min="0" required step="any" type="number" value={item.dose} onInput={(event) => updateItem(index, { dose: (event.target as HTMLInputElement).value })} /></label>
-            <label class="field"><span>Unit</span><input required value={item.doseUnit} onInput={(event) => updateItem(index, { doseUnit: (event.target as HTMLInputElement).value })} /></label>
-            <label class="field"><span>Route</span><input value={item.route} onInput={(event) => updateItem(index, { route: (event.target as HTMLInputElement).value })} /></label>
-            <label class="field"><span>Local time</span><input type="time" value={item.scheduledLocalTime} onInput={(event) => updateItem(index, { scheduledLocalTime: (event.target as HTMLInputElement).value })} /></label>
-          </div>
-          <div class="inline-toggles"><label class="check-label"><input type="checkbox" checked={item.paused} onChange={(event) => updateItem(index, { paused: (event.target as HTMLInputElement).checked })} />Paused</label><label class="check-label"><input type="checkbox" checked={item.overrideEnabled} onChange={(event) => updateItem(index, { overrideEnabled: (event.target as HTMLInputElement).checked })} />Override regimen schedule</label></div>
-          {item.overrideEnabled && <ScheduleEditor draft={item.override} onChange={(override) => updateItem(index, { override })} />}
+    <form
+      class="treatments-form wide-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!mutation.isPending) mutation.mutate()
+      }}
+    >
+      <div class="form-heading">
+        <div>
+          <p class="treatments-kicker">Stack builder</p>
+          <h2>{regimen ? 'Edit regimen' : 'New regimen'}</h2>
         </div>
-      ))}</div><button class="btn-secondary" type="button" onClick={() => setItems((current) => [...current, itemDraft()])}>Add item</button></fieldset>
-      <fieldset class="form-panel"><legend>Reminder metadata</legend><p class="form-hint">Saved for a future notification delivery layer; no notification is scheduled yet.</p><label class="check-label"><input type="checkbox" checked={remindersEnabled} onChange={(event) => setRemindersEnabled((event.target as HTMLInputElement).checked)} />Reminders enabled</label><label class="field full-field"><span>Minutes before (comma-separated)</span><input disabled={!remindersEnabled} value={reminderMinutes} onInput={(event) => setReminderMinutes((event.target as HTMLInputElement).value)} /></label></fieldset>
-      {error && <p class="form-error" role="alert">{error}</p>}
-      <div class="form-actions"><button class="btn-secondary" type="button" onClick={onCancel}>Cancel</button><button class="btn-primary" type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save regimen'}</button></div>
+        <button class="icon-button" type="button" onClick={onCancel} aria-label="Close regimen form">
+          ×
+        </button>
+      </div>
+      <div class="form-grid">
+        <label class="field">
+          <span>Name</span>
+          <input
+            required
+            value={name}
+            onInput={(event) => setName((event.target as HTMLInputElement).value)}
+          />
+        </label>
+        <label class="field">
+          <span>Status</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus((event.target as HTMLSelectElement).value as Regimen['status'])}
+          >
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="archived">Archived</option>
+          </select>
+        </label>
+        <label class="field full-field">
+          <span>Description</span>
+          <textarea
+            value={description}
+            onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
+          />
+        </label>
+      </div>
+      <fieldset class="form-panel">
+        <legend>Schedule</legend>
+        <ScheduleEditor draft={schedule} onChange={setSchedule} />
+      </fieldset>
+      <fieldset class="form-panel">
+        <legend>Items</legend>
+        <div class="builder-items">
+          {items.map((item, index) => (
+            <div class="builder-item" key={item.id ?? index}>
+              <div class="builder-item-heading">
+                <strong>Item {index + 1}</strong>
+                <button
+                  class="danger-link"
+                  disabled={items.length === 1}
+                  type="button"
+                  onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  Remove
+                </button>
+              </div>
+              <div class="form-grid">
+                <label class="field full-field">
+                  <span>Substance</span>
+                  <select
+                    required
+                    value={item.substanceId}
+                    onChange={(event) => {
+                      const id = (event.target as HTMLSelectElement).value
+                      const substance = activeSubstances.find((candidate) => candidate.id === id)
+                      updateItem(index, {
+                        dose: String(substance?.default_dose ?? item.dose),
+                        doseUnit: substance?.dose_unit ?? item.doseUnit,
+                        route: substance?.route ?? item.route,
+                        substanceId: id,
+                      })
+                    }}
+                  >
+                    <option value="">Choose…</option>
+                    {activeSubstances.map((substance) => (
+                      <option value={substance.id}>{substance.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Dose</span>
+                  <input
+                    min="0"
+                    required
+                    step="any"
+                    type="number"
+                    value={item.dose}
+                    onInput={(event) => updateItem(index, { dose: (event.target as HTMLInputElement).value })}
+                  />
+                </label>
+                <label class="field">
+                  <span>Unit</span>
+                  <input
+                    required
+                    value={item.doseUnit}
+                    onInput={(event) =>
+                      updateItem(index, { doseUnit: (event.target as HTMLInputElement).value })
+                    }
+                  />
+                </label>
+                <label class="field">
+                  <span>Route</span>
+                  <input
+                    value={item.route}
+                    onInput={(event) =>
+                      updateItem(index, { route: (event.target as HTMLInputElement).value })
+                    }
+                  />
+                </label>
+                <label class="field">
+                  <span>Local time</span>
+                  <input
+                    type="time"
+                    value={item.scheduledLocalTime}
+                    onInput={(event) =>
+                      updateItem(index, { scheduledLocalTime: (event.target as HTMLInputElement).value })
+                    }
+                  />
+                </label>
+              </div>
+              <div class="inline-toggles">
+                <label class="check-label">
+                  <input
+                    type="checkbox"
+                    checked={item.paused}
+                    onChange={(event) =>
+                      updateItem(index, { paused: (event.target as HTMLInputElement).checked })
+                    }
+                  />
+                  Paused
+                </label>
+                <label class="check-label">
+                  <input
+                    type="checkbox"
+                    checked={item.overrideEnabled}
+                    onChange={(event) =>
+                      updateItem(index, { overrideEnabled: (event.target as HTMLInputElement).checked })
+                    }
+                  />
+                  Override regimen schedule
+                </label>
+              </div>
+              {item.overrideEnabled && (
+                <ScheduleEditor
+                  draft={item.override}
+                  onChange={(override) => updateItem(index, { override })}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <button
+          class="btn-secondary"
+          type="button"
+          onClick={() => setItems((current) => [...current, itemDraft()])}
+        >
+          Add item
+        </button>
+      </fieldset>
+      <fieldset class="form-panel">
+        <legend>Reminder metadata</legend>
+        <p class="form-hint">
+          Saved for a future notification delivery layer; no notification is scheduled yet.
+        </p>
+        <label class="check-label">
+          <input
+            type="checkbox"
+            checked={remindersEnabled}
+            onChange={(event) => setRemindersEnabled((event.target as HTMLInputElement).checked)}
+          />
+          Reminders enabled
+        </label>
+        <label class="field full-field">
+          <span>Minutes before (comma-separated)</span>
+          <input
+            disabled={!remindersEnabled}
+            value={reminderMinutes}
+            onInput={(event) => setReminderMinutes((event.target as HTMLInputElement).value)}
+          />
+        </label>
+      </fieldset>
+      {error && (
+        <p class="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div class="form-actions">
+        <button class="btn-secondary" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button class="btn-primary" type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? 'Saving…' : 'Save regimen'}
+        </button>
+      </div>
     </form>
   )
 }

@@ -50,7 +50,11 @@ interface ManagedTemplateDefinition {
   stable_key: string
 }
 
-const option = (value: string, label: string, detail?: string): ChoiceOption => ({ value, label, ...(detail ? { detail } : {}) })
+const option = (value: string, label: string, detail?: string): ChoiceOption => ({
+  value,
+  label,
+  ...(detail ? { detail } : {}),
+})
 
 const helperConfig = (
   options: ChoiceOption[],
@@ -268,7 +272,8 @@ export const reapsDefinition: ManagedTemplateDefinition = {
     }),
     reapQuestion({
       stable_key: 'whole_grains_high_fiber',
-      prompt: 'In an average week, how often do you eat 2 or more servings of whole grain products or high-fiber starches a day?',
+      prompt:
+        'In an average week, how often do you eat 2 or more servings of whole grain products or high-fiber starches a day?',
       helper:
         'Examples: 1 slice 100% whole-grain bread or crackers; 1 cup whole-grain cereal such as oatmeal; ½ cup brown rice, whole-wheat pasta, baked potato, yucca, yams, or plantain.',
       sort_order: 70,
@@ -348,7 +353,8 @@ export const reapsDefinition: ManagedTemplateDefinition = {
     }),
     reapQuestion({
       stable_key: 'packaged_snacks',
-      prompt: 'In an average week, how often do you eat packaged snack foods such as chips, salted pretzels, pizza bites, and similar items?',
+      prompt:
+        'In an average week, how often do you eat packaged snack foods such as chips, salted pretzels, pizza bites, and similar items?',
       sort_order: 160,
       section: 'Low nutrient density foods',
       options: reapFrequencyOptionsHigh,
@@ -393,7 +399,8 @@ export const reapsDefinition: ManagedTemplateDefinition = {
     }),
     reapQuestion({
       stable_key: 'readiness_to_change',
-      prompt: 'How interested are you in making changes to your eating or physical activity habits in order to be healthier?',
+      prompt:
+        'How interested are you in making changes to your eating or physical activity habits in order to be healthier?',
       sort_order: 210,
       section: 'Readiness to change',
       options: [
@@ -504,7 +511,13 @@ export const intakeDefinition: ManagedTemplateDefinition = {
       ],
       20,
     ),
-    intakeText('food_allergies_or_intolerances', 'Food allergies or intolerances', 'Dietary background', 30, true),
+    intakeText(
+      'food_allergies_or_intolerances',
+      'Food allergies or intolerances',
+      'Dietary background',
+      30,
+      true,
+    ),
     intakeChoice(
       'meal_schedule',
       'Typical meal schedule',
@@ -565,11 +578,7 @@ export const intakeDefinition: ManagedTemplateDefinition = {
       'symptoms_affect_sleep_or_eating',
       'Do symptoms interfere with eating or sleep?',
       'Digestive health',
-      [
-        option('no', 'No'),
-        option('sometimes', 'Sometimes'),
-        option('often', 'Often'),
-      ],
+      [option('no', 'No'), option('sometimes', 'Sometimes'), option('often', 'Often')],
       100,
     ),
     intakeChoice(
@@ -707,23 +716,21 @@ export const intakeDefinition: ManagedTemplateDefinition = {
   ],
 }
 
-export const managedSimpleFoodTemplates = [
-  dailyQuestionnaireDefinition,
-  reapsDefinition,
-  intakeDefinition,
-]
+export const managedSimpleFoodTemplates = [dailyQuestionnaireDefinition, reapsDefinition, intakeDefinition]
 
 export const managedContextTypes: CreateContextEventTypeBody[] = [
   {
     key: SIMPLE_FOOD_FULLNESS_KEY,
     display_name: 'Simple Food · Fullness',
-    description: 'Simple Food Tracker fullness check-ins. Intensity 0–4 maps to the simple_food_fullness metric.',
+    description:
+      'Simple Food Tracker fullness check-ins. Intensity 0–4 maps to the simple_food_fullness metric.',
     active: true,
   },
   {
     key: SIMPLE_FOOD_BLOATING_KEY,
     display_name: 'Simple Food · Bloating',
-    description: 'Simple Food Tracker bloating check-ins. Intensity 0–3 maps to the simple_food_bloating metric.',
+    description:
+      'Simple Food Tracker bloating check-ins. Intensity 0–3 maps to the simple_food_bloating metric.',
     active: true,
   },
   {
@@ -738,7 +745,8 @@ export const pad = (value: number): string => value.toString().padStart(2, '0')
 
 export const localDateKey = (date = new Date()): string => format(date, 'yyyy-MM-dd')
 
-export const shiftDate = (date: string, days: number): string => format(addDays(new Date(`${date}T12:00:00`), days), 'yyyy-MM-dd')
+export const shiftDate = (date: string, days: number): string =>
+  format(addDays(new Date(`${date}T12:00:00`), days), 'yyyy-MM-dd')
 
 export const localDateToNoonIso = (date: string): string => {
   const parsed = new Date(`${date}T12:00:00`)
@@ -831,10 +839,14 @@ export const latestAssessmentForTemplate = (
     .filter(
       (assessment) =>
         !assessment.deleted_at &&
-        (!!templateId && assessment.template_id === templateId) &&
+        !!templateId &&
+        assessment.template_id === templateId &&
         (stage === undefined || (assessment.stage ?? 'completed') === stage),
     )
-    .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.assessed_at.localeCompare(left.assessed_at))[0]
+    .sort(
+      (left, right) =>
+        right.updated_at.localeCompare(left.updated_at) || right.assessed_at.localeCompare(left.assessed_at),
+    )[0]
 
 export const assessmentForLocalDate = (
   assessments: Assessment[],
@@ -849,7 +861,10 @@ export const assessmentForLocalDate = (
         assessment.template_id === templateId &&
         dateKeyInZone(assessment.assessed_at, assessment.timezone) === localDate,
     )
-    .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.assessed_at.localeCompare(left.assessed_at))[0]
+    .sort(
+      (left, right) =>
+        right.updated_at.localeCompare(left.updated_at) || right.assessed_at.localeCompare(left.assessed_at),
+    )[0]
 
 export const completedAssessments = (
   assessments: Assessment[],
@@ -863,7 +878,10 @@ export const completedAssessments = (
         assessment.template_id === templateId &&
         (assessment.stage ?? 'completed') !== 'draft',
     )
-    .sort((left, right) => right.assessed_at.localeCompare(left.assessed_at) || right.updated_at.localeCompare(left.updated_at))
+    .sort(
+      (left, right) =>
+        right.assessed_at.localeCompare(left.assessed_at) || right.updated_at.localeCompare(left.updated_at),
+    )
 
 export const latestDraftAssessment = (
   assessments: Assessment[],
@@ -886,7 +904,9 @@ export const optionsForQuestion = (question: QuestionnaireTemplate['questions'][
 export const questionSection = (question: QuestionnaireTemplate['questions'][number]): string =>
   typeof question.config.section === 'string' ? question.config.section : 'Questions'
 
-export const questionDescription = (question: QuestionnaireTemplate['questions'][number]): string | undefined =>
+export const questionDescription = (
+  question: QuestionnaireTemplate['questions'][number],
+): string | undefined =>
   typeof question.config.description === 'string'
     ? question.config.description
     : typeof question.config.helper === 'string'
@@ -980,12 +1000,22 @@ export const scoreReapsAssessment = (
     low_nutrient_density: 0,
   }
   for (const [section, keys] of Object.entries(reapsSectionKeys) as [keyof typeof sections, string[]][]) {
-    sections[section] = keys.reduce((sum, key) => sum + (scoreFromQuestion(questions.get(key), values[key]) ?? 0), 0)
+    sections[section] = keys.reduce(
+      (sum, key) => sum + (scoreFromQuestion(questions.get(key), values[key]) ?? 0),
+      0,
+    )
   }
   return {
     sections,
-    readiness: typeof values.readiness_to_change === 'string' ? choiceLabel(questions.get('readiness_to_change'), values.readiness_to_change) : null,
-    total: sections.exercise + sections.food_sufficiency + sections.healthy_pattern + sections.low_nutrient_density,
+    readiness:
+      typeof values.readiness_to_change === 'string'
+        ? choiceLabel(questions.get('readiness_to_change'), values.readiness_to_change)
+        : null,
+    total:
+      sections.exercise +
+      sections.food_sufficiency +
+      sections.healthy_pattern +
+      sections.low_nutrient_density,
   }
 }
 
@@ -1008,10 +1038,7 @@ export const symptomMetricKey = (event: ContextEvent): keyof typeof simpleFoodMe
 export const simpleFoodEvents = (events: ContextEvent[]): ContextEvent[] =>
   events.filter((event) => symptomMetricKey(event) !== null && !event.deleted_at)
 
-export const latestEventByType = (
-  events: ContextEvent[],
-  key: string,
-): ContextEvent | undefined =>
+export const latestEventByType = (events: ContextEvent[], key: string): ContextEvent | undefined =>
   simpleFoodEvents(events)
     .filter((event) => event.event_type.key === key)
     .sort((left, right) => right.started_at.localeCompare(left.started_at))[0]
@@ -1035,7 +1062,9 @@ export const simpleFoodUrl = (
       : typeof currentSearch === 'string'
         ? new URLSearchParams(currentSearch.replace(/^\?/, ''))
         : new URLSearchParams(
-            Object.entries(currentSearch).filter((entry): entry is [string, string] => entry[1] !== undefined),
+            Object.entries(currentSearch).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
           )
   for (const [key, value] of Object.entries(changes)) {
     if (value === undefined) params.delete(key)

@@ -1,4 +1,8 @@
 import type {
+  AuthActionResponse,
+  ConnectGarminPersonalKeyBody,
+  GarminLoginResponse,
+  OAuthConnectUrlResponse,
   GarminSyncResponse,
   GarminSyncStatusResponse,
   OuraSyncResponse,
@@ -7,6 +11,9 @@ import type {
   StravaSyncStatusResponse,
   GravlSyncResponse,
   GravlSyncStatusResponse,
+  HomeAssistantEntitiesResponse,
+  HomeAssistantSyncResponse,
+  HomeAssistantSyncStatusResponse,
 } from '@aurboda/api-spec'
 
 import axios from 'axios'
@@ -33,9 +40,9 @@ export const getOuraConnectUrl = async (): Promise<string> => {
   return response.data.url
 }
 
-export const disconnectOura = async (): Promise<{ success: boolean }> => {
+export const disconnectOura = async (): Promise<AuthActionResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<AuthActionResponse>(
     `${API_URL}/auth/oura/disconnect`,
     {},
     { headers: { Authorization: `Bearer ${token}` } },
@@ -61,12 +68,9 @@ export const fetchOuraSyncStatus = async (): Promise<OuraSyncStatusResponse> => 
   return response.data
 }
 
-export const connectGarmin = async (
-  email: string,
-  password: string,
-): Promise<{ success: boolean; mfa_required?: boolean; error?: string }> => {
+export const connectGarmin = async (email: string, password: string): Promise<GarminLoginResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<GarminLoginResponse>(
     `${API_URL}/auth/garmin/login`,
     { email, password },
     { headers: { Authorization: `Bearer ${token}` } },
@@ -74,9 +78,9 @@ export const connectGarmin = async (
   return response.data
 }
 
-export const verifyGarminMfa = async (mfaCode: string): Promise<{ success: boolean; error?: string }> => {
+export const verifyGarminMfa = async (mfaCode: string): Promise<AuthActionResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<AuthActionResponse>(
     `${API_URL}/auth/garmin/mfa`,
     { mfa_code: mfaCode },
     { headers: { Authorization: `Bearer ${token}` } },
@@ -84,10 +88,52 @@ export const verifyGarminMfa = async (mfaCode: string): Promise<{ success: boole
   return response.data
 }
 
-export const disconnectGarmin = async (): Promise<{ success: boolean }> => {
+export const disconnectGarmin = async (): Promise<AuthActionResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<AuthActionResponse>(
     `${API_URL}/auth/garmin/disconnect`,
+    {},
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return response.data
+}
+
+export const connectGarminPersonalKey = async (
+  apiKey: string,
+  expiresAt: string,
+): Promise<AuthActionResponse> => {
+  const { token } = auth.value
+  const body: ConnectGarminPersonalKeyBody = { api_key: apiKey, expires_at: expiresAt }
+  const response = await axios.post<AuthActionResponse>(`${API_URL}/auth/garmin/personal-key`, body, {
+    headers: { Authorization: `Bearer ${token}` },
+    validateStatus: () => true,
+  })
+  return response.data
+}
+
+export const disconnectGarminPersonalKey = async (): Promise<AuthActionResponse> => {
+  const { token } = auth.value
+  const response = await axios.post<AuthActionResponse>(
+    `${API_URL}/auth/garmin/personal-key/disconnect`,
+    {},
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return response.data
+}
+
+export const getGarminOAuthConnectUrl = async (): Promise<string> => {
+  const { token } = auth.value
+  const response = await axios.get<OAuthConnectUrlResponse>(`${API_URL}/auth/garmin/oauth/connect`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.data.url) throw new Error(response.data.error ?? 'Garmin sign-in is not available')
+  return response.data.url
+}
+
+export const disconnectGarminOAuth = async (): Promise<AuthActionResponse> => {
+  const { token } = auth.value
+  const response = await axios.post<AuthActionResponse>(
+    `${API_URL}/auth/garmin/oauth/disconnect`,
     {},
     { headers: { Authorization: `Bearer ${token}` } },
   )
@@ -120,9 +166,9 @@ export const getStravaConnectUrl = async (): Promise<string> => {
   return response.data.url
 }
 
-export const disconnectStrava = async (): Promise<{ success: boolean }> => {
+export const disconnectStrava = async (): Promise<AuthActionResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<AuthActionResponse>(
     `${API_URL}/auth/strava/disconnect`,
     {},
     { headers: { Authorization: `Bearer ${token}` } },
@@ -156,9 +202,9 @@ export const getGravlConnectUrl = async (): Promise<string> => {
   return response.data.url
 }
 
-export const disconnectGravl = async (): Promise<{ success: boolean }> => {
+export const disconnectGravl = async (): Promise<AuthActionResponse> => {
   const { token } = auth.value
-  const response = await axios.post(
+  const response = await axios.post<AuthActionResponse>(
     `${API_URL}/auth/gravl/disconnect`,
     {},
     { headers: { Authorization: `Bearer ${token}` } },
@@ -179,6 +225,32 @@ export const syncGravl = async (fullResync?: boolean): Promise<GravlSyncResponse
 export const fetchGravlSyncStatus = async (): Promise<GravlSyncStatusResponse> => {
   const { token } = auth.value
   const response = await axios.get<GravlSyncStatusResponse>(`${API_URL}/sync/gravl/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}
+
+export const syncHomeAssistant = async (fullResync?: boolean): Promise<HomeAssistantSyncResponse> => {
+  const { token } = auth.value
+  const response = await axios.post<HomeAssistantSyncResponse>(
+    `${API_URL}/sync/home-assistant`,
+    { full_resync: fullResync },
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return response.data
+}
+
+export const fetchHomeAssistantSyncStatus = async (): Promise<HomeAssistantSyncStatusResponse> => {
+  const { token } = auth.value
+  const response = await axios.get<HomeAssistantSyncStatusResponse>(`${API_URL}/sync/home-assistant/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return response.data
+}
+
+export const fetchHomeAssistantEntities = async (): Promise<HomeAssistantEntitiesResponse> => {
+  const { token } = auth.value
+  const response = await axios.get<HomeAssistantEntitiesResponse>(`${API_URL}/home-assistant/entities`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   return response.data

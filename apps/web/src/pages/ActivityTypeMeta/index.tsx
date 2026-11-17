@@ -21,9 +21,12 @@ import {
   type FetchTrendParams,
 } from '../../state/api'
 import { CHART_PRIMARY } from '../../theme'
+import { displayCategoryOptions } from '../../utils/displayCategories'
 import { toDisplayName } from '../../utils/displayName'
 import { suggestEmoji } from '../../utils/emojiLookup'
+import { BuiltInMatchSection } from './BuiltInMatchSection'
 import { ItemGroupsSection } from './ItemGroupsSection'
+import { MuscleGroupSection } from './MuscleGroupSection'
 import {
   addItemField,
   removeItemField,
@@ -32,6 +35,7 @@ import {
   validSchemaFields,
 } from './schemaFields'
 import { SessionsSection } from './SessionsSection'
+import { UnmappedItemValuesSection } from './UnmappedItemValuesSection'
 import './style.css'
 
 const LOOKBACK_OPTIONS = [
@@ -41,16 +45,6 @@ const LOOKBACK_OPTIONS = [
   { label: '1 year', value: 365 },
   { label: '2 years', value: 730 },
   { label: 'All time', value: 3650 },
-]
-
-const CATEGORY_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: 'Sleep & Rest', value: 'sleep_rest' },
-  { label: 'Exercise', value: 'exercise' },
-  { label: 'Meditation', value: 'meditation' },
-  { label: 'Wellness', value: 'wellness' },
-  { label: 'Productivity', value: 'productivity' },
-  { label: 'Travel', value: 'travel' },
-  { label: 'Other', value: 'other' },
 ]
 
 const DURATION_CATEGORIES = new Set(['exercise', 'sleep_rest'])
@@ -200,7 +194,7 @@ function SettingsSection({
             value={categoryValue ?? currentCategory}
             onChange={(e) => setCategoryValue((e.target as HTMLSelectElement).value)}
           >
-            {CATEGORY_OPTIONS.map((opt) => (
+            {displayCategoryOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -772,6 +766,12 @@ export function ActivityTypeMeta() {
         category={category}
       />
 
+      {name === 'strength_training' && (
+        <a href="/strength" class="btn-primary activity-type-meta-log-session">
+          Log a session
+        </a>
+      )}
+
       <section class="activity-type-meta-section">
         <div class="activity-type-meta-section-header">
           <h2>Trend</h2>
@@ -792,13 +792,15 @@ export function ActivityTypeMeta() {
       <SessionsSection name={name} fields={categoricalFields(typeDef?.data_schema)} />
 
       {categoricalItemFields(typeDef?.data_schema).map(({ list, item }) => (
-        <ItemGroupsSection
-          key={itemPath(list, item)}
-          name={name}
-          path={itemPath(list, item)}
-          list={list}
-          item={item}
-        />
+        <Fragment key={itemPath(list, item)}>
+          <ItemGroupsSection name={name} path={itemPath(list, item)} list={list} item={item} />
+          {item.catalog === 'exercises' && (
+            <>
+              <MuscleGroupSection name={name} path={itemPath(list, item)} />
+              <UnmappedItemValuesSection name={name} path={itemPath(list, item)} />
+            </>
+          )}
+        </Fragment>
       ))}
 
       <SettingsSection
@@ -808,6 +810,8 @@ export function ActivityTypeMeta() {
         currentCategory={category}
         showOnTimeline={showOnTimeline}
       />
+
+      {typeDef && <BuiltInMatchSection typeDef={typeDef} />}
 
       <DataSchemaSection name={name} dataSchema={typeDef?.data_schema} />
 

@@ -9,28 +9,57 @@ import { nativeTaskPaths } from './native-tasks-paths.ts'
 import { peoplePaths } from './people-paths.ts'
 import { isAllowedWhenReadOnly } from './read-only.ts'
 import { resourcesPaths } from './resources-paths.ts'
+import {
+  recoveryCompleteBodySchema,
+  recoveryCompleteResponseSchema,
+  recoveryRequestBodySchema,
+  recoveryRequestResponseSchema,
+  verifyEmailBodySchema,
+} from './schemas/account-recovery.ts'
 import { activitiesResponseSchema } from './schemas/activities.ts'
 import {
+  activityTypeCatalogQuerySchema,
+  activityTypeCatalogResponseSchema,
+} from './schemas/activity-type-catalog.ts'
+import {
   addRelayBodySchema,
+  adminTestEmailBodySchema,
+  adminTestEmailResponseSchema,
   deleteAccountBodySchema,
+  federationDeliveryFailuresResponseSchema,
   loginBodySchema,
   loginResponseSchema,
   relayResponseSchema,
   relaysResponseSchema,
   resendPostUpdatesResponseSchema,
+  serverStatusResponseSchema,
 } from './schemas/admin.ts'
+import { skipAutoshareBodySchema, skipAutoshareResponseSchema } from './schemas/autoshare-rules.ts'
 import {
   challengeParticipationsResponseSchema,
   challengePreviewQuerySchema,
   challengePreviewResponseSchema,
+  challengeResponseSchema,
   challengesResponseSchema,
   discoverChallengesResponseSchema,
   challengeStandingsResponseSchema,
+  updateChallengeBodySchema,
   wellKnownAurbodaSchema,
   wellKnownQuantpubSchema,
 } from './schemas/challenges.ts'
-import { iso8601DateTimeSchema, metricTypeSchema } from './schemas/common.ts'
+import {
+  baseResponseSchemaMeta,
+  iso8601DateTimeSchema,
+  metricTypeSchema,
+  timeWeightedAveragesNote,
+} from './schemas/common.ts'
 import { dailySummaryQuerySchema, dailySummaryResponseSchema } from './schemas/daily-summary.ts'
+import {
+  exerciseCatalogEntryResponseSchema,
+  exerciseCatalogQuerySchema,
+  exerciseCatalogSearchResponseSchema,
+  exerciseMuscleGroupSchema,
+} from './schemas/exercise-catalog.ts'
 import { exportDumpLinkResponseSchema, exportDumpQuerySchema } from './schemas/export.ts'
 import {
   FEED_IMAGE_MAX_EDGE,
@@ -39,12 +68,28 @@ import {
   MAX_FEED_IMAGE_BYTES,
   MAX_FEED_IMAGES_PER_ACCOUNT,
 } from './schemas/feed-images.ts'
-import { publicTagPostsQuerySchema, publicTagPostsResponseSchema } from './schemas/feed.ts'
+import {
+  addPublicTagBlockBodySchema,
+  publicTagBlockResponseSchema,
+  publicTagBlocksResponseSchema,
+  publicTagHiddenPostResponseSchema,
+  publicTagHiddenPostsResponseSchema,
+  publicTagPostsQuerySchema,
+  publicTagPostsResponseSchema,
+} from './schemas/feed.ts'
 import {
   goalHistoryQuerySchema,
   goalHistoryResponseSchema,
   goalsProgressResponseSchema,
 } from './schemas/goals.ts'
+import { homeAssistantEntitiesResponseSchema } from './schemas/home-assistant.ts'
+import {
+  itemValueIdentityQuerySchema,
+  itemValueIdentityResponseSchema,
+  setItemValueIdentityBodySchema,
+  unmappedItemValuesQuerySchema,
+  unmappedItemValuesResponseSchema,
+} from './schemas/item-value-identities.ts'
 import {
   addNamedLocationBodySchema,
   addNamedLocationResponseSchema,
@@ -64,11 +109,46 @@ import {
   topMediaQuerySchema,
   topMediaResponseSchema,
 } from './schemas/media.ts'
+import { metricCatalogQuerySchema, metricCatalogResponseSchema } from './schemas/metric-catalog.ts'
 import {
   addMetricBodySchema,
   addMetricResponseSchema,
   queryMetricsResponseSchema,
 } from './schemas/metrics.ts'
+import {
+  muscleGroupHistoryQuerySchema,
+  muscleGroupHistoryResponseSchema,
+  muscleGroupsQuerySchema,
+  muscleGroupsResponseSchema,
+} from './schemas/muscle-groups.ts'
+import {
+  markAllNotificationsReadResponseSchema,
+  notificationResponseSchema,
+  notificationsQuerySchema,
+  notificationsResponseSchema,
+  notificationTypesResponseSchema,
+  setNotificationPreferenceBodySchema,
+  setNotificationPreferenceResponseSchema,
+} from './schemas/notifications.ts'
+import {
+  addOidcProviderBodySchema,
+  deleteOidcProviderQuerySchema,
+  deleteOidcProviderResponseSchema,
+  oidcCallbackQuerySchema,
+  oidcExchangeBodySchema,
+  oidcLinkCompleteBodySchema,
+  oidcLinksResponseSchema,
+  oidcLoginResponseSchema,
+  oidcProviderResponseSchema,
+  oidcProvidersResponseSchema,
+  oidcPublicProvidersResponseSchema,
+  oidcSignupBodySchema,
+  oidcSignupInfoQuerySchema,
+  oidcSignupInfoResponseSchema,
+  oidcStartBodySchema,
+  oidcStartResponseSchema,
+  updateOidcProviderBodySchema,
+} from './schemas/oidc.ts'
 import {
   outboundSyncAckBodySchema,
   outboundSyncAckResponseSchema,
@@ -135,7 +215,11 @@ import {
   topAppsQuerySchema,
   topAppsResponseSchema,
 } from './schemas/productivity.ts'
-import { accountEmailResponseSchema, updateAccountEmailBodySchema } from './schemas/profile.ts'
+import {
+  accountEmailResponseSchema,
+  sendEmailVerificationResponseSchema,
+  updateAccountEmailBodySchema,
+} from './schemas/profile.ts'
 import {
   mergeRoutesBodySchema,
   mergeRoutesResponseSchema,
@@ -146,16 +230,31 @@ import {
   routesResponseSchema,
   updateRouteBodySchema,
 } from './schemas/routes.ts'
+import {
+  createSegmentBodySchema,
+  promoteSuggestedSegmentBodySchema,
+  segmentDetailResponseSchema,
+  segmentMatchResponseSchema,
+  segmentResponseSchema,
+  segmentsQuerySchema,
+  segmentsResponseSchema,
+  suggestedSegmentScanResponseSchema,
+  suggestedSegmentsResponseSchema,
+  updateSegmentBodySchema,
+} from './schemas/segments.ts'
 import { updateSettingsInputSchema, userSettingsResponseSchema } from './schemas/settings.ts'
-import { latestSleepResponseSchema } from './schemas/sleep.ts'
+import { latestSleepResponseSchema, sleepDebtQuerySchema, sleepDebtResponseSchema } from './schemas/sleep.ts'
 import {
   dailyAggregatesBodySchema,
   healthConnectDeletionsBodySchema,
   healthConnectSyncBodySchema,
   syncOuraBodySchema,
   syncGravlBodySchema,
+  syncHomeAssistantBodySchema,
   gravlSyncResponseSchema,
   gravlSyncStatusResponseSchema,
+  homeAssistantSyncResponseSchema,
+  homeAssistantSyncStatusResponseSchema,
   mediaSyncResponseSchema,
   syncMediaBodySchema,
   syncRescueTimeBodySchema,
@@ -205,6 +304,10 @@ const pharmacologyResponses = (schema: z.ZodType, created = false) => ({
   400: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Bad request' },
   404: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Not found' },
   409: { content: { 'application/json': { schema: errorResponseSchema } }, description: 'Conflict' },
+})
+
+const activityTypeNamePathSchema = z.object({
+  name: z.string().meta({ description: 'Activity type name, e.g. strength_training' }),
 })
 
 const openApiDocument = createDocument({
@@ -275,6 +378,31 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: 'List my challenges',
+        tags: ['Challenges'],
+      },
+    },
+    '/challenges/{id}': {
+      put: {
+        description:
+          'Update a challenge the authenticated user hosts; fields left out stay as they are. Once someone from another instance has joined, the scoring, dates and timezone are locked; the name and visibility can still change.',
+        requestBody: { content: { 'application/json': { schema: updateChallengeBodySchema } } },
+        requestParams: { path: z.object({ id: z.string().meta({ description: 'Challenge ID' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: challengeResponseSchema } },
+            description: 'The updated challenge',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Challenge not found',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The scoring, dates or timezone are locked',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Update a hosted challenge',
         tags: ['Challenges'],
       },
     },
@@ -372,6 +500,30 @@ const openApiDocument = createDocument({
           404: { description: 'The tag has no public page' },
         },
         summary: 'Atom feed of a public tag page',
+        tags: ['Feed'],
+      },
+    },
+    '/autoshare-rules/skips': {
+      post: {
+        description:
+          'Stop one activity (and the rest of its merge group) from being auto-shared. It can still be shared by hand.',
+        requestBody: { content: { 'application/json': { schema: skipAutoshareBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: skipAutoshareResponseSchema } },
+            description: 'The activities that will not be auto-shared',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Activity not found',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The activity is already shared',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Skip auto-sharing an activity',
         tags: ['Feed'],
       },
     },
@@ -497,7 +649,8 @@ const openApiDocument = createDocument({
     },
     '/activities': {
       get: {
-        description: 'Get activities (sleep, exercise, meditation, nap) for a time range.',
+        description:
+          'Get activities of any type (sleep, exercise and its subtypes, meditation, custom types, ...) for a time range.',
         requestParams: {
           query: z.object({
             end: iso8601DateTimeSchema.meta({ description: 'End date/time' }),
@@ -546,6 +699,215 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: 'Get activity track',
+        tags: ['Activities'],
+      },
+    },
+    '/activity-type-catalog': {
+      get: {
+        description:
+          "List Aurboda's built-in catalogue of activity types for things logged by hand (intake, meals and diet, health, symptoms, recovery, context), each with its fields. `in_use` says whether the user already has a type of that name, `missing_fields` which catalogue fields that type lacks (`POST /activity-types/{name}/catalog-fields` adds them), and `variants` the names that are the type with a field value set (`beer` is `alcohol` with kind beer). A type not in use becomes one of the user's types the first time an activity uses its name, or when `POST /activity-types` is given only its name. `q` matches word prefixes of the name, display name and aliases.",
+        requestParams: { query: activityTypeCatalogQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: activityTypeCatalogResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Invalid query',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List built-in activity type catalogue',
+        tags: ['Activities'],
+      },
+    },
+    '/exercise-catalog': {
+      get: {
+        description:
+          'Search the built-in catalogue of strength, stretching and plyometric exercises by name (word prefixes of names, aliases and search terms, best matches first), equipment, muscle or category. `name` is an exact name-or-alias lookup (case and punctuation ignored) that returns that exercise or none and ignores `q`.',
+        requestParams: { query: exerciseCatalogQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: exerciseCatalogSearchResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Invalid query, e.g. an unknown equipment, muscle or category',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Search exercise catalogue',
+        tags: ['Activities'],
+      },
+    },
+    '/exercise-catalog/{key}': {
+      get: {
+        description:
+          'One exercise of the built-in catalogue by its stable key: name, aliases, category, equipment, muscles with recruitment weights, and the same exercise in other datasets.',
+        requestParams: {
+          path: z.object({
+            key: z.string().meta({ description: 'Catalogue key, e.g. dumbbell_bench_press' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: exerciseCatalogEntryResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Exercise not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get exercise catalogue entry',
+        tags: ['Activities'],
+      },
+    },
+    '/activity-types/{name}/item-values/identity': {
+      delete: {
+        description:
+          "Remove the user's decision for a logged name of a catalogue-backed item path, so it resolves automatically again.",
+        requestParams: { path: activityTypeNamePathSchema, query: itemValueIdentityQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Decision removed',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The field is not a catalogue-backed item field of the activity type',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type, or no decision stored for the name',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Clear item value identity',
+        tags: ['Activities'],
+      },
+      get: {
+        description:
+          "What catalogue entry a logged name of a catalogue-backed item path (e.g. sets.exercise) stands for: the user's own mapping or dismissal, else an exact match of a catalogue name or alias, else unmapped. Also lists the user's other logged values that resolve to the same entry. The name need not be logged yet.",
+        requestParams: { path: activityTypeNamePathSchema, query: itemValueIdentityQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: itemValueIdentityResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The field is not a catalogue-backed item field of the activity type',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get item value identity',
+        tags: ['Activities'],
+      },
+      put: {
+        description:
+          'Map a logged name of a catalogue-backed item path to a catalogue entry, or dismiss it as not in the catalogue (key null). No activity is rewritten: the identity sits on the name.',
+        requestBody: { content: { 'application/json': { schema: setItemValueIdentityBodySchema } } },
+        requestParams: { path: activityTypeNamePathSchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: itemValueIdentityResponseSchema } },
+            description: 'The name as it now resolves',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not a catalogue-backed item field, or an unknown catalogue key',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Set item value identity',
+        tags: ['Activities'],
+      },
+    },
+    '/activity-types/{name}/item-values/unmapped': {
+      get: {
+        description:
+          'The logged names of a catalogue-backed item path that match no catalogue entry and that the user has neither mapped nor dismissed, most used first, each with up to three suggested entries.',
+        requestParams: { path: activityTypeNamePathSchema, query: unmappedItemValuesQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: unmappedItemValuesResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The field is not a catalogue-backed item field of the activity type',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List unmapped item values',
+        tags: ['Activities'],
+      },
+    },
+    '/activity-types/{name}/muscle-groups': {
+      get: {
+        description:
+          "Every muscle group of the exercise catalogue with when it was last trained: the start of the latest session of the type (or its subtypes) in which an exercise of the catalogue-backed item path trained it. For a group's sets over time, chart data takes filter_field=sets.exercise.muscle_group with the group as filter_value.",
+        requestParams: { path: activityTypeNamePathSchema, query: muscleGroupsQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: muscleGroupsResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The field is not a catalogue-backed item field of the activity type',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List muscle groups',
+        tags: ['Activities'],
+      },
+    },
+    '/activity-types/{name}/muscle-groups/{group}': {
+      get: {
+        description:
+          "One muscle group's history over a period (default the last 90 days): its totals, every exercise logged for the type that trains it, and the sessions that did, newest first. Each set counts by the exercise's recruitment weight for the group (a bench press is 1 set for the chest, 0.5 for the shoulders).",
+        requestParams: {
+          path: activityTypeNamePathSchema.extend({ group: exerciseMuscleGroupSchema }),
+          query: muscleGroupHistoryQuerySchema,
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: muscleGroupHistoryResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description:
+              'Unknown muscle group, start not before end, or the field is not a catalogue-backed item field of the activity type',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown activity type',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get muscle group history',
         tags: ['Activities'],
       },
     },
@@ -676,6 +1038,219 @@ const openApiDocument = createDocument({
         tags: ['Routes'],
       },
     },
+    '/segments': {
+      get: {
+        description:
+          'List segments with their effort count, best time and latest effort. Optionally only one activity type (and its descendant types); ordered by latest effort (default), effort count, length or name.',
+        requestParams: { query: segmentsQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentsResponseSchema } },
+            description: 'Successful response',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List segments',
+        tags: ['Segments'],
+      },
+      post: {
+        description:
+          'Create a segment from part of an activity track (seconds since its start) or of a route (km), then time every tracked activity of its type on it. Refused when shorter than 100 m, outside the track or route, for an activity without a track or a deleted route.',
+        requestBody: {
+          content: { 'application/json': { schema: createSegmentBodySchema } },
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentDetailResponseSchema } },
+            description: 'The new segment with its efforts',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The segment cannot be cut as asked',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Create segment',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/suggested': {
+      get: {
+        description:
+          'Pending suggested segments: stretches at least three activities of one type pass in the same direction on different routes. Most activities first, then longest.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: suggestedSegmentsResponseSchema } },
+            description: 'Successful response',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List suggested segments',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/suggested/scan': {
+      post: {
+        description:
+          'Look through tracked activities not yet looked at for stretches passed often, for up to about 20 seconds. Run again while remaining > 0.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: suggestedSegmentScanResponseSchema } },
+            description: 'Successful response',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Scan for suggested segments',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/suggested/{id}/promote': {
+      post: {
+        description:
+          'Add a pending suggestion as a segment, optionally trimmed to start_km–end_km and named; every tracked activity of its type is timed on it. Refused like creating a segment (under 100 m, ends under 50 m apart, outside the line).',
+        requestBody: {
+          content: { 'application/json': { schema: promoteSuggestedSegmentBodySchema } },
+        },
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Suggested segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentDetailResponseSchema } },
+            description: 'The new segment with its efforts',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The segment cannot be cut as asked',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No pending suggestion with this ID',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Add suggested segment',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/suggested/{id}/dismiss': {
+      post: {
+        description: 'Dismiss a pending suggestion. The stretch is not suggested again.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Suggested segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No pending suggestion with this ID',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Dismiss suggested segment',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/{id}': {
+      delete: {
+        description: 'Delete a segment and its efforts.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Segment not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Delete segment',
+        tags: ['Segments'],
+      },
+      get: {
+        description:
+          'A segment with its line, the named locations near its ends, and its efforts, newest first, the best one marked.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentDetailResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Segment not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get segment',
+        tags: ['Segments'],
+      },
+      patch: {
+        description: 'Rename a segment.',
+        requestBody: {
+          content: { 'application/json': { schema: updateSegmentBodySchema } },
+        },
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Segment not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Update segment',
+        tags: ['Segments'],
+      },
+    },
+    '/segments/{id}/match': {
+      post: {
+        description:
+          'Time every tracked activity of the segment type on it again, replacing its efforts. New tracks are timed automatically.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Segment ID' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: segmentMatchResponseSchema } },
+            description: 'Successful response',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Segment not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Match segment',
+        tags: ['Segments'],
+      },
+    },
     '/tracks/backfill': {
       post: {
         description:
@@ -695,7 +1270,7 @@ const openApiDocument = createDocument({
     '/daily-summary': {
       get: {
         description:
-          'Get a comprehensive summary of health data for a specific day including heart rate, steps, sleep, exercise, tags, productivity, and visited places.',
+          'Get a comprehensive summary of health data for a specific day including heart rate (avg time-weighted per 5-minute bin), steps, sleep, exercise, tags, productivity, and visited places.',
         requestParams: { query: dailySummaryQuerySchema },
         responses: {
           200: {
@@ -771,6 +1346,27 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: "Get last night's sleep",
+        tags: ['Summary'],
+      },
+    },
+
+    '/sleep-debt': {
+      get: {
+        description:
+          'Get sleep debt per night over a date range, against the sleep need you set (sleep_need_minutes, default 480). Each night debt = max(0, debt × 0.85 + need − slept), where slept is the total sleep of the nights ending on that date plus half of each nap over 20 minutes; a date with no night recorded only decays the debt. Severity is none, mild, moderate or severe by the ratio of debt to need.',
+        requestParams: { query: sleepDebtQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: sleepDebtResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Bad request',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get sleep debt',
         tags: ['Summary'],
       },
     },
@@ -980,6 +1576,20 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/status': {
+      get: {
+        description:
+          'Public facts about this server the login and signup pages read: the signup mode, billing, contacts, whether it has an official feed and public tag pages, and whether it sends email (`email_enabled`: the login page offers a password reset or passkey recovery link only then).',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: serverStatusResponseSchema } },
+            description: 'Server status',
+          },
+        },
+        summary: 'Server status',
+        tags: ['Auth'],
+      },
+    },
     '/login': {
       post: {
         description: 'Authenticate with username and password to receive access and refresh tokens.',
@@ -1000,9 +1610,30 @@ const openApiDocument = createDocument({
         tags: ['Auth'],
       },
     },
+    '/metric-catalog': {
+      get: {
+        description:
+          "List Aurboda's built-in metrics for lab values, circumferences and body composition, each with the unit it is stored in and the other units it accepts with their conversion. `in_use` says whether the user already has a metric of that name and `in_use_unit` the unit of that metric, which wins over the catalogue's. A metric not in use becomes one of the user's custom metrics the first time `POST /metrics`, `POST /metrics/bulk` or a report entry uses its name or an alias. `q` matches word prefixes of the name, display name and aliases.",
+        requestParams: { query: metricCatalogQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: metricCatalogResponseSchema } },
+            description: 'Successful response',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Invalid query',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List built-in metric catalogue',
+        tags: ['Metrics'],
+      },
+    },
     '/metrics': {
       post: {
-        description: 'Add a manual health metric measurement.',
+        description:
+          'Add a manual health metric measurement. `metric` may be a name or alias from the built-in metric catalogue (`GET /metric-catalog`), which is added on first use; `unit` converts the value to the unit the metric is stored in, and a unit that cannot be converted is refused.',
         requestBody: {
           content: { 'application/json': { schema: addMetricBodySchema } },
         },
@@ -1060,8 +1691,7 @@ const openApiDocument = createDocument({
 
     '/period-summary': {
       get: {
-        description:
-          'Get aggregated statistics for a time period. Returns min/max/avg/stddev for each metric, trend compared to previous period, and data completeness.',
+        description: `Get aggregated statistics for a time period. Returns min/max/avg/stddev for each metric, trend compared to previous period, and data completeness. ${timeWeightedAveragesNote}`,
         requestParams: {
           query: z.object({
             end: iso8601DateTimeSchema.meta({ description: 'End date/time' }),
@@ -1229,6 +1859,129 @@ const openApiDocument = createDocument({
         security: [{ bearerAuth: [] }],
         summary: 'Sync Oura data',
         tags: ['Sync'],
+      },
+    },
+
+    '/notifications': {
+      get: {
+        description:
+          'The newest notifications first, keyset-paginated. By default the in-app ones (the bell); `push_only` lists those meant for push delivery instead, which a device poller reads with `unread_only` and `after` (its high-water mark). `unread_count` always counts every unread in-app notification.',
+        requestParams: { query: notificationsQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: notificationsResponseSchema } },
+            description: 'A page of notifications',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List notifications',
+        tags: ['Notifications'],
+      },
+    },
+    '/notifications/read-all': {
+      post: {
+        description: 'Mark every unread notification read.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: markAllNotificationsReadResponseSchema } },
+            description: 'How many were marked read',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Mark all notifications read',
+        tags: ['Notifications'],
+      },
+    },
+    '/notifications/types': {
+      get: {
+        description:
+          "Every notification type this user can receive, with the user's in-app and push switches (both default on). Admin-only types are listed for admins only.",
+        responses: {
+          200: {
+            content: { 'application/json': { schema: notificationTypesResponseSchema } },
+            description: 'The notification types and their switches',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List notification types',
+        tags: ['Notifications'],
+      },
+    },
+    '/notifications/types/{type}': {
+      put: {
+        description:
+          'Turn a notification type on or off in-app and/or as a push. Applies to notifications raised from now on. With both off, the type is not stored at all.',
+        requestBody: { content: { 'application/json': { schema: setNotificationPreferenceBodySchema } } },
+        requestParams: {
+          path: z.object({ type: z.string().meta({ description: 'The notification type' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: setNotificationPreferenceResponseSchema } },
+            description: 'The type and its switches after the change',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Neither switch given',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such notification type for this user',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Set a notification preference',
+        tags: ['Notifications'],
+      },
+    },
+    '/notifications/{id}/actions/{key}': {
+      post: {
+        description:
+          'Run one of the actions a notification offers (its `actions` list). The server decides what the action does; running one marks the notification read and clears its actions, so an action runs at most once.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'Notification ID' }),
+            key: z.string().meta({ description: 'The action key, from the notification’s `actions`' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: notificationResponseSchema } },
+            description: 'The revised notification',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such notification, or it offers no such action (any more)',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The action could not be done (e.g. the activity was already shared)',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Run a notification action',
+        tags: ['Notifications'],
+      },
+    },
+    '/notifications/{id}/read': {
+      post: {
+        description: 'Mark one notification read. Marking an already read one keeps its first `read_at`.',
+        requestParams: {
+          path: z.object({ id: z.string().uuid().meta({ description: 'Notification ID' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: notificationResponseSchema } },
+            description: 'The notification',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Notification not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Mark a notification read',
+        tags: ['Notifications'],
       },
     },
 
@@ -1411,6 +2164,66 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: 'Get Gravl sync status',
+        tags: ['Sync'],
+      },
+    },
+
+    '/sync/home-assistant': {
+      post: {
+        description:
+          "Pull the phone's positions from Home Assistant's history API (the configured device_tracker.* or person.* entity) and store them as locations with source home_assistant; the zone the state names becomes the location's region. A first sync or full_resync covers the last 10 days (or from start_date); later syncs continue from the last sync with a 5-minute overlap. Points inside an activity that has its own GPS track are soft-deleted. Requires home_assistant_url, home_assistant_token and home_assistant_entity_id in user settings.",
+        requestBody: {
+          content: { 'application/json': { schema: syncHomeAssistantBodySchema } },
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: homeAssistantSyncResponseSchema } },
+            description: 'Sync result',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Home Assistant integration unavailable',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Sync Home Assistant locations',
+        tags: ['Sync'],
+      },
+    },
+    '/sync/home-assistant/status': {
+      get: {
+        description: 'Current Home Assistant sync state: last sync time, status and error.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: homeAssistantSyncStatusResponseSchema } },
+            description: 'Successful response',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Get Home Assistant sync status',
+        tags: ['Sync'],
+      },
+    },
+    '/home-assistant/entities': {
+      get: {
+        description:
+          'List the person.* and device_tracker.* entities of the configured Home Assistant server that currently carry coordinates, to pick the one to pull locations from. Needs home_assistant_url and home_assistant_token in user settings; doubles as a connection test.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: homeAssistantEntitiesResponseSchema } },
+            description: 'Trackable entities, person.* first',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Home Assistant URL or token not set',
+          },
+          502: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Home Assistant could not be reached or rejected the request',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List Home Assistant tracker entities',
         tags: ['Sync'],
       },
     },
@@ -1612,6 +2425,289 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/auth/oidc/providers': {
+      get: {
+        description:
+          'The enabled single sign-on (OpenID Connect) providers, for the login and signup pages. Public.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcPublicProvidersResponseSchema } },
+            description: 'Enabled providers',
+          },
+        },
+        summary: 'List sign-in providers',
+        tags: ['Auth'],
+      },
+    },
+    '/auth/oidc/{provider}/start': {
+      post: {
+        description:
+          "Begin a login (or a signup, when the provider allows it) through a provider: returns the provider's authorization URL to send the browser to. Authorization Code with PKCE; the state, nonce and verifier stay on the server.",
+        requestBody: { content: { 'application/json': { schema: oidcStartBodySchema } } },
+        requestParams: { path: z.object({ provider: z.string().meta({ description: 'Provider id' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcStartResponseSchema } },
+            description: 'Where to send the browser',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such enabled provider',
+          },
+          502: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The provider could not be reached',
+          },
+        },
+        summary: 'Start a provider sign-in',
+        tags: ['Auth'],
+      },
+    },
+    '/auth/oidc/callback': {
+      get: {
+        description:
+          'The one redirect URI registered with every provider. Always answers with a 302 to the web: /login/oidc#code=… after a login, /signup/oidc#code=… for a new account, /settings/oidc-link#code=… for a link, or /login?oidc_error=<code> (/settings?oidc_error=<code> for a link) when it fails. Nothing is signed in or linked here: the browser that started the flow trades the code together with the verifier its start answered with, and the session token never travels in a URL.',
+        requestParams: { query: oidcCallbackQuerySchema },
+        responses: { 302: { description: 'Redirect to the web' } },
+        summary: 'Provider redirect target',
+        tags: ['Auth'],
+      },
+    },
+    '/auth/oidc/exchange': {
+      post: {
+        description:
+          'Trade the one-time login code (valid 60 seconds) and the verifier of the start for a session token.',
+        requestBody: { content: { 'application/json': { schema: oidcExchangeBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcLoginResponseSchema } },
+            description: 'Signed in',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown, used or expired code, or a verifier that does not match it',
+          },
+        },
+        summary: 'Finish a provider login',
+        tags: ['Auth'],
+      },
+    },
+    '/auth/oidc/signup-info': {
+      get: {
+        description:
+          'What the provider said about a new user, for the signup form: the provider, the email and a suggested username. Does not use up the code (valid 5 minutes).',
+        requestParams: { query: oidcSignupInfoQuerySchema },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcSignupInfoResponseSchema } },
+            description: 'The signup details',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown, used or expired code',
+          },
+        },
+        summary: 'Provider signup details',
+        tags: ['Auth'],
+      },
+    },
+    '/auth/oidc/signup': {
+      post: {
+        description:
+          'Create an account for a provider identity with the chosen username, link the identity and sign in. Needs the verifier of the start. Goes through the same checks as a password signup; the account has no password its user knows.',
+        requestBody: { content: { 'application/json': { schema: oidcSignupBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcLoginResponseSchema } },
+            description: 'Signed up and in',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Invalid username, or an expired code or a verifier that does not match it',
+          },
+          403: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Signup closed or invitation invalid',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Username taken, or the identity is linked already',
+          },
+        },
+        summary: 'Sign up through a provider',
+        tags: ['Auth'],
+      },
+    },
+    '/account/oidc/{provider}/link/start': {
+      post: {
+        description:
+          "Begin linking a provider identity to the signed-in account: returns the provider's authorization URL. Web only, like the rest of linking.",
+        requestParams: { path: z.object({ provider: z.string().meta({ description: 'Provider id' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcStartResponseSchema } },
+            description: 'Where to send the browser',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such enabled provider',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Start linking a provider',
+        tags: ['Auth'],
+      },
+    },
+    '/account/oidc/link/complete': {
+      post: {
+        description:
+          "Finish linking: the code the provider's redirect put on /settings/oidc-link (valid 5 minutes) and the verifier of the link start, from the account that started it.",
+        requestBody: { content: { 'application/json': { schema: oidcLinkCompleteBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: baseResponseSchemaMeta } },
+            description: 'Linked (or linked to this account already)',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Unknown, used or expired code, another account, or a verifier that does not match',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The identity is linked to another account',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Complete linking a provider',
+        tags: ['Auth'],
+      },
+    },
+    '/account/oidc/links': {
+      get: {
+        description:
+          'The provider identities linked to the signed-in account, and how many ways it has to log in.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcLinksResponseSchema } },
+            description: 'Linked providers',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List linked providers',
+        tags: ['Auth'],
+      },
+    },
+    '/account/oidc/links/{id}': {
+      delete: {
+        description: 'Unlink a provider identity. Refused when it is the last way the account can log in.',
+        requestParams: { path: z.object({ id: z.uuid().meta({ description: 'Link id' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Unlinked',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such link',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The last login method',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Unlink a provider',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/oidc-providers': {
+      get: {
+        description:
+          'The single sign-on providers, with the redirect URI to register with each. The client secret is never returned. Admin-only.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcProvidersResponseSchema } },
+            description: 'Every provider',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List sign-in providers (admin)',
+        tags: ['Auth'],
+      },
+      post: {
+        description:
+          'Add a single sign-on provider. The issuer must be https and answer with an OpenID Connect discovery document. Admin-only.',
+        requestBody: { content: { 'application/json': { schema: addOidcProviderBodySchema } } },
+        responses: {
+          201: {
+            content: { 'application/json': { schema: oidcProviderResponseSchema } },
+            description: 'The added provider',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not an https issuer, or not an OpenID Connect issuer',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The id is taken',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Add a sign-in provider',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/oidc-providers/{id}': {
+      delete: {
+        description:
+          'Delete a provider and its links. Refused with the count when a linked user would be left with no way to log in, unless force=true. Admin-only.',
+        requestParams: {
+          path: z.object({ id: z.string().meta({ description: 'Provider id' }) }),
+          query: deleteOidcProviderQuerySchema,
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteOidcProviderResponseSchema } },
+            description: 'Deleted',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such provider',
+          },
+          409: {
+            content: { 'application/json': { schema: deleteOidcProviderResponseSchema } },
+            description: 'Users would be left without a login method',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Delete a sign-in provider',
+        tags: ['Auth'],
+      },
+      put: {
+        description:
+          'Change a provider; an omitted field, the client secret included, keeps its value. Admin-only.',
+        requestBody: { content: { 'application/json': { schema: updateOidcProviderBodySchema } } },
+        requestParams: { path: z.object({ id: z.string().meta({ description: 'Provider id' }) }) },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: oidcProviderResponseSchema } },
+            description: 'The changed provider',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not an https issuer, or not an OpenID Connect issuer',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such provider',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Change a sign-in provider',
+        tags: ['Auth'],
+      },
+    },
+
     '/export/dump-link': {
       post: {
         description:
@@ -1697,7 +2793,7 @@ const openApiDocument = createDocument({
     '/account/email': {
       get: {
         description:
-          "The authenticated user's email address. It is private: only the user and the server's admins see it, and it is never public or federated.",
+          "The authenticated user's email address, whether it is verified, and whether this server sends email. It is private: only the user and the server's admins see it, and it is never public or federated.",
         responses: {
           200: {
             content: { 'application/json': { schema: accountEmailResponseSchema } },
@@ -1710,7 +2806,7 @@ const openApiDocument = createDocument({
       },
       put: {
         description:
-          "Set or clear the authenticated user's email address (null or an empty string clears it). Private: only the user and the server's admins see it. Nothing sends email to it yet. Allowed for a read-only account.",
+          "Set or clear the authenticated user's email address (null or an empty string clears it). Private: only the user and the server's admins see it. A changed address is unverified; when the server sends email, a verification link goes to it (at most 3 a hour). Allowed for a read-only account.",
         requestBody: { content: { 'application/json': { schema: updateAccountEmailBodySchema } } },
         responses: {
           200: {
@@ -1732,6 +2828,90 @@ const openApiDocument = createDocument({
         tags: ['Settings'],
       },
     },
+    '/account/email/verification': {
+      post: {
+        description:
+          "Send a new verification link to the authenticated user's email address (valid 24 hours; it replaces any earlier link). At most 3 verification mails per account per hour. Allowed for a read-only account.",
+        responses: {
+          200: {
+            content: { 'application/json': { schema: sendEmailVerificationResponseSchema } },
+            description: 'Sent, or already verified',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No email address is set',
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'This server does not send email',
+          },
+          429: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Too many verification mails for this account in the last hour',
+          },
+          502: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The mail server refused or could not be reached',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Resend my email verification link',
+        tags: ['Settings'],
+      },
+    },
+    '/account/email/verify': {
+      post: {
+        description:
+          'Confirm an account email address with the token from its emailed link (the web page `/verify-email?token=…` posts it). Public: the token is the credential. It verifies only while the account still has the address the link was sent to. Unknown, used and expired tokens get the same answer. No MCP twin, like `/login`.',
+        requestBody: { content: { 'application/json': { schema: verifyEmailBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: baseResponseSchemaMeta } },
+            description: 'The address is verified',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The link is invalid, used or expired',
+          },
+        },
+        summary: 'Verify an email address',
+        tags: ['Auth'],
+      },
+    },
+    '/account/recovery/request': {
+      post: {
+        description:
+          "Ask for a password reset or passkey recovery link by username or email address. Always the same answer, whatever matched: the lookup and the mail happen afterwards. A username gets a link at that account's verified email; an email address gets one per account with that verified address (at most 5). Unverified addresses never get mail, and an account gets at most 3 links an hour. The link (`/recover?token=…`) is valid 30 minutes, once. Public and rate-limited per client IP. No MCP twin, like `/login`.",
+        requestBody: { content: { 'application/json': { schema: recoveryRequestBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: recoveryRequestResponseSchema } },
+            description: 'Accepted (says nothing about whether an account matched)',
+          },
+        },
+        summary: 'Request an account recovery link',
+        tags: ['Auth'],
+      },
+    },
+    '/account/recovery/complete': {
+      post: {
+        description:
+          "Use a recovery link: with `new_password`, sets the account's password; without it, changes nothing about the password. Either way the answer is a session token like `/login`'s, with the username, so the user can then add a new passkey. The link works once, within 30 minutes, and only while the address it went to is still the account's verified email. Works for a read-only account. Public and rate-limited per client IP. No MCP twin, like `/login`.",
+        requestBody: { content: { 'application/json': { schema: recoveryCompleteBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: recoveryCompleteResponseSchema } },
+            description: 'Signed in',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'The link is invalid, used or expired',
+          },
+        },
+        summary: 'Complete account recovery',
+        tags: ['Auth'],
+      },
+    },
     '/account/plan': {
       get: {
         description:
@@ -1747,14 +2927,57 @@ const openApiDocument = createDocument({
         tags: ['Settings'],
       },
     },
+    '/admin/email/test': {
+      post: {
+        description:
+          "Send a fixed test mail with the server's SMTP settings, to `to` or else the admin's own account email (verified or not). The answer carries the SMTP error on failure, to fix the settings by. At most 10 an hour per admin. Admin-only; REST only, like the other server settings.",
+        requestBody: { content: { 'application/json': { schema: adminTestEmailBodySchema } } },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: adminTestEmailResponseSchema } },
+            description: 'Sent',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No address given and the admin has no account email, or email is not configured',
+          },
+          429: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Too many test mails',
+          },
+          502: {
+            content: { 'application/json': { schema: adminTestEmailResponseSchema } },
+            description: 'The mail server refused or could not be reached; `error` says why',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Send a test mail',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/federation/delivery-failures': {
+      get: {
+        description:
+          'The remote servers whose inboxes the outbound delivery queue could not reach, with the status of the latest failure. A server leaves the list when it accepts a delivery again. Recorded only while deliveries are queued (the server has a job queue). Admin-only.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: federationDeliveryFailuresResponseSchema } },
+            description: 'Servers whose latest deliveries failed, most recent failure first',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List failing delivery servers',
+        tags: ['Auth'],
+      },
+    },
     '/admin/federation/resend-post-updates': {
       post: {
         description:
-          "Re-send the Update of every public and unlisted post of every user on this server, so remote servers refresh their copy (such as the quote policy Mastodon cached as 'nobody' for posts federated before it was declared). Only Updates are sent, so repeating it is harmless. The posts are listed at once and delivered one after another in the background. Admin-only.",
+          "Re-send the Update of every public and unlisted post of every user on this server, so remote servers refresh their copy (such as the quote policy Mastodon cached as 'nobody' for posts federated before it was declared). Only Updates are sent, so repeating it is harmless. The posts are listed at once and handed to delivery one after another in the background, where a failed inbox is retried. Admin-only.",
         responses: {
           202: {
             content: { 'application/json': { schema: resendPostUpdatesResponseSchema } },
-            description: 'The number of posts whose Update is being re-sent',
+            description: 'The number of posts whose Update is being queued for re-sending',
           },
           409: {
             content: { 'application/json': { schema: errorResponseSchema } },
@@ -1826,6 +3049,124 @@ const openApiDocument = createDocument({
         },
         security: [{ bearerAuth: [] }],
         summary: 'Remove a relay',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/public-tag-posts/{id}': {
+      delete: {
+        description:
+          'Hide one post from the public tag pages and the official feed: the post is removed and its object id is remembered, so a later Announce or edit does not bring it back. Admin-only.',
+        requestParams: {
+          path: z.object({
+            id: z.string().uuid().meta({ description: 'The post id, as the tag page lists it' }),
+          }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: publicTagHiddenPostResponseSchema } },
+            description: 'The post is hidden',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'No such post on the tag pages',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Hide a tag page post',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/public-tag-hidden': {
+      get: {
+        description: 'The posts hidden from the public tag pages, newest first, at most 200. Admin-only.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: publicTagHiddenPostsResponseSchema } },
+            description: 'Hidden posts',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List hidden tag page posts',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/public-tag-hidden/{id}': {
+      delete: {
+        description:
+          'Stop hiding a post. Nothing is fetched back: the post returns when it is announced or edited again. Admin-only.',
+        requestParams: {
+          path: z.object({ id: z.string().uuid().meta({ description: 'Id of the hide' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'No longer hidden',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Not hidden',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Unhide a tag page post',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/public-tag-blocks': {
+      get: {
+        description: 'The authors and domains kept off the public tag pages, newest first. Admin-only.',
+        responses: {
+          200: {
+            content: { 'application/json': { schema: publicTagBlocksResponseSchema } },
+            description: 'Every block',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'List tag page blocks',
+        tags: ['Auth'],
+      },
+      post: {
+        description:
+          "Keep an author (kind actor, by actor URI) or a domain and its subdomains (kind domain) off the public tag pages and the official feed. The posts it matches are removed at once and new ones are not stored. This server's own host cannot be blocked. Admin-only.",
+        requestBody: { content: { 'application/json': { schema: addPublicTagBlockBodySchema } } },
+        responses: {
+          201: {
+            content: { 'application/json': { schema: publicTagBlockResponseSchema } },
+            description: 'The block, and how many posts it removed',
+          },
+          400: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: "Not an http(s) actor URI, not a domain, or this server's own host",
+          },
+          409: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Already blocked',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Block an author or domain from the tag pages',
+        tags: ['Auth'],
+      },
+    },
+    '/admin/public-tag-blocks/{id}': {
+      delete: {
+        description:
+          'Remove a block. Nothing is fetched back: posts return as they are announced or edited again. Admin-only.',
+        requestParams: {
+          path: z.object({ id: z.string().uuid().meta({ description: 'Block id' }) }),
+        },
+        responses: {
+          200: {
+            content: { 'application/json': { schema: deleteResponseSchema } },
+            description: 'Block removed',
+          },
+          404: {
+            content: { 'application/json': { schema: errorResponseSchema } },
+            description: 'Block not found',
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        summary: 'Remove a tag page block',
         tags: ['Auth'],
       },
     },
@@ -2301,6 +3642,7 @@ const openApiDocument = createDocument({
     { description: 'Federated challenges: hosted, joined, and public standings', name: 'Challenges' },
     { description: 'Social feed: posts, timeline and public tag pages', name: 'Feed' },
     { description: 'Named and detected locations', name: 'Locations' },
+    { description: 'Notifications: the bell, read state and per-type switches', name: 'Notifications' },
     { description: 'RescueTime productivity data', name: 'Productivity' },
     { description: 'User settings and preferences', name: 'Settings' },
     {

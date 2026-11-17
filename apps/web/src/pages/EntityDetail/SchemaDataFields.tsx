@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'preact/hooks'
 
 import { KnownValuesInput } from '../../components/KnownValuesInput'
 import { ListFieldEditor } from '../../components/ListFieldEditor'
-import { fieldLabel, listFields, scalarFields } from '../../components/sessions/sessionView'
+import { enumValueLabel, fieldLabel, listFields, scalarFields } from '../../components/sessions/sessionView'
 
 const offersKnownValues = (field: DataFieldDefinition) =>
   field.type === 'string' && Boolean(field.is_categorical) && !field.enum_values
@@ -49,7 +49,7 @@ const FieldInput = ({
         <option value="">-- Select --</option>
         {field.enum_values.map((v) => (
           <option key={v} value={v}>
-            {v}
+            {enumValueLabel(v)}
           </option>
         ))}
       </select>
@@ -63,6 +63,8 @@ const FieldInput = ({
           ref={ref}
           type="number"
           class="edit-datetime-input"
+          min={field.min}
+          max={field.max}
           value={value != null ? String(value) : ''}
           onInput={(e) => {
             const raw = (e.target as HTMLInputElement).value
@@ -149,6 +151,7 @@ export const SchemaDataFields = ({
         <ListFieldEditor
           field={field}
           idPrefix={`edit-${field.name}`}
+          activityType={activityType}
           rows={asRows(data[field.name])}
           onChange={(rows) => onDataChange({ ...data, [field.name]: rows })}
         />

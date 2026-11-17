@@ -3,23 +3,35 @@
  * (#903): merge-group resolution via the same `getOverlappingActivities` +
  * `expandFeedActivityWindow` a manual share of a merged activity uses, the
  * shared-scalar distance source, and post creation through the ordinary
- * `createFeedPost` (stamped with the rule id — the "via rule" marker and the
+ * `createFeedPostUnlessSuppressed` (stamped with the rule id — the "via rule" marker and the
  * dedupe record). Delivery is injected from `api.ts` (the same `FeedDeliver.
  * created` fan-out a manual share fires).
  */
 import type { Activity, AutoshareCandidate, AutoshareRuleRecord, FeedPostRecord } from '../db/index.ts'
+import type { SkipAutoshareDeps } from './autoshare-skip.ts'
 import type { AutoshareDeps } from './autoshare.ts'
+import type { Notifier } from './notifications.ts'
 
 import {
-  createFeedPost,
+  createFeedPostUnlessSuppressed,
   getActivityById,
   getActivityIngestTimes,
   getEnabledAutoshareRules,
   getOverlappingActivities,
+  insertAutoshareSuppressions,
   listAutoshareCandidates,
   listAutoshareSuppressedIds,
   listFeedPostIdsByActivityIds,
 } from '../db/index.ts'
+import {
+  activityLabel,
+  autosharePendingDedupeKey,
+  pendingAutoshareNotification,
+  pendingAutoshareRevision,
+  sharedAutoshareRevision,
+  skippedAutoshareRevision,
+} from './autoshare-notifications.ts'
+import { getAutoshareGroupIds } from './autoshare-pending.ts'
 import { expandFeedActivityWindow } from './feed.ts'
 import { activityKindTag, autoPostTags, computePostTags, type FeedTagSettings } from './post-tags.ts'
 import { queryMetricsBucketed } from './queries/index.ts'
@@ -63,6 +75,12 @@ export const getAutoshareGroup = async (
   return members.map((member) => toMember(member, candidate, ingestTimes))
 }
 
+export const autoshareSkipDeps: SkipAutoshareDeps = {
+  getGroupIds: (user, activityId) => getAutoshareGroupIds(user, activityId),
+  insertSuppressions: (user, ids) => insertAutoshareSuppressions(user, ids),
+  postIdsForActivities: (user, ids) => listFeedPostIdsByActivityIds(user, ids),
+}
+
 /** Total distance (meters) over a window from the `distance` metric, or undefined when none. */
 const windowDistanceMeters = async (user: string, start: Date, end: Date): Promise<number | undefined> => {
   const seconds = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 1000))
@@ -90,23 +108,45 @@ export const autoshareTags = (
     texts: [rule.message],
   })
 
-/** Build the production `AutoshareDeps`; `deliverCreated` is `FeedDeliver.created` from `api.ts`. */
+export type AutoshareNotifier = Pick<Notifier, 'raise' | 'reviseBestEffort' | 'reviseOpen'>
+
+/**
+ * Build the production `AutoshareDeps`; `deliverCreated` is `FeedDeliver.created` from `api.ts`,
+ * and the notifier raises and revises the pending-share notification (the evaluation
+ * swallows a failure of either).
+ */
 export const createAutoshareDeps = (
   deliverCreated: (user: string, post: FeedPostRecord, activity: Activity) => void,
+  notifier: AutoshareNotifier,
 ): AutoshareDeps<AutoshareGroupMember> => ({
-  createPost: async (user, anchor, rule) =>
-    createFeedPost(user, {
-      activity_id: anchor.id,
-      autoshare_rule_id: rule.id,
-      include_chart: rule.include_chart,
-      include_exercises: rule.include_exercises,
-      include_map: rule.include_map,
-      included_metrics: rule.included_metrics,
-      message: rule.message,
-      series_metrics: rule.series_metrics,
-      tags: autoshareTags(await getSettings(user).catch(() => null), anchor.activity_type, rule),
-      visibility: rule.visibility,
-    }),
+  announce: async (user, anchor, rule, info, group) => {
+    const input = { anchor, rule, ...info, now: new Date() }
+    // A group whose anchor changed (an earlier-starting member arrived) keeps the announcement
+    // raised under the former anchor's key, brought up to date, instead of getting a second one.
+    const formerKeys = group
+      .filter((member) => member.id !== anchor.id)
+      .map((m) => autosharePendingDedupeKey(m.id))
+    const revised = await notifier.reviseOpen(user, formerKeys, pendingAutoshareRevision(input))
+    if (revised.length > 0) return false
+    return (await notifier.raise(user, pendingAutoshareNotification(input))) != null
+  },
+  createPost: async (user, anchor, rule, groupIds) =>
+    createFeedPostUnlessSuppressed(
+      user,
+      {
+        activity_id: anchor.id,
+        autoshare_rule_id: rule.id,
+        include_chart: rule.include_chart,
+        include_exercises: rule.include_exercises,
+        include_map: rule.include_map,
+        included_metrics: rule.included_metrics,
+        message: rule.message,
+        series_metrics: rule.series_metrics,
+        tags: autoshareTags(await getSettings(user).catch(() => null), anchor.activity_type, rule),
+        visibility: rule.visibility,
+      },
+      groupIds,
+    ),
   distanceMeters: windowDistanceMeters,
   getEnabledRules: getEnabledAutoshareRules,
   getGroup: getAutoshareGroup,
@@ -115,4 +155,31 @@ export const createAutoshareDeps = (
   onCreated: (user, post, anchor) => deliverCreated(user, post, anchor.activity),
   postIdsForActivities: listFeedPostIdsByActivityIds,
   resolveWindow: (user, anchor) => expandFeedActivityWindow(user, anchor.activity),
+  shared: async (user, post, group) => {
+    const anchor = group[0]
+    if (anchor == null) return
+    const revision = sharedAutoshareRevision({
+      activity_label: activityLabel(anchor.activity_type),
+      post_id: post.id,
+      username: user,
+    })
+    await Promise.all(
+      group.map((member) =>
+        notifier.reviseBestEffort(user, autosharePendingDedupeKey(member.id), { ...revision, actions: [] }),
+      ),
+    )
+  },
+  withdrawn: async (user, group) => {
+    const anchor = group[0]
+    if (anchor == null) return
+    await notifier.reviseOpen(
+      user,
+      group.map((member) => autosharePendingDedupeKey(member.id)),
+      {
+        ...skippedAutoshareRevision(activityLabel(anchor.activity_type)),
+        actions: [],
+        release_dedupe_key: true,
+      },
+    )
+  },
 })

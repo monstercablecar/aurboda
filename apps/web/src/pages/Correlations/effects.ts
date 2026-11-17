@@ -5,9 +5,12 @@ import type { WindowEffect } from '../../state/api'
 export const SIGNIFICANCE_LEVEL = 0.05
 const MIN_PAIRS_FOR_TEST = 3
 
-export const getDeltaClass = (value: number | null, inverted: boolean): string => {
-  if (value === null || value === 0) return ''
-  const isGood = inverted ? value < 0 : value > 0
+/** Which way is good for a metric: up (HRV), down (stress), or neutral when it is not known. */
+export type MetricDirection = 'up' | 'down' | 'neutral'
+
+export const getDeltaClass = (value: number | null, direction: MetricDirection): string => {
+  if (value === null || value === 0 || direction === 'neutral') return ''
+  const isGood = direction === 'down' ? value < 0 : value > 0
   return isGood ? 'positive' : 'negative'
 }
 
@@ -26,16 +29,41 @@ export const formatDelta = (value: number | null, decimals: number): string => {
 
 const formatMean = (value: number | null): string => (value === null ? '--' : value.toFixed(1))
 
-export const isClearChange = (effect: WindowEffect): boolean =>
-  effect.p_value !== null && effect.p_value < SIGNIFICANCE_LEVEL
+const decidingP = (effect: WindowEffect): number | null =>
+  effect.p_value_adjusted === undefined ? effect.p_value : effect.p_value_adjusted
 
-export const changeClass = (effect: WindowEffect, inverted: boolean): string => {
+export const isClearChange = (effect: WindowEffect): boolean => {
+  const p = decidingP(effect)
+  return p !== null && p < SIGNIFICANCE_LEVEL
+}
+
+export const changeClass = (effect: WindowEffect, direction: MetricDirection): string => {
   if (effect.change === null) return ''
   if (!isClearChange(effect)) return 'muted'
-  return getDeltaClass(effect.change, inverted) || 'muted'
+  if (direction === 'neutral') return ''
+  return getDeltaClass(effect.change, direction) || 'muted'
 }
 
 const formatPValue = (p: number): string => (p < 0.001 ? 'p < 0.001' : `p = ${p.toFixed(3)}`)
+
+const formatPValues = (effect: WindowEffect): string | null => {
+  if (effect.p_value === null) return null
+  const raw = formatPValue(effect.p_value)
+  return effect.p_value_adjusted === undefined || effect.p_value_adjusted === null
+    ? raw
+    : `${raw}, adjusted for the comparisons ${formatPValue(effect.p_value_adjusted)}`
+}
+
+/** The line under a table of tested changes: how many there are and what that means. */
+export const comparisonsNote = (comparisons: number): string | null => {
+  if (comparisons < 2) return null
+  const expected = Math.round(comparisons * SIGNIFICANCE_LEVEL)
+  const chance =
+    expected === 0
+      ? `fewer than one of these would be expected to pass p < ${SIGNIFICANCE_LEVEL} by chance`
+      : `about ${expected === 1 ? 'one' : expected} of these would pass p < ${SIGNIFICANCE_LEVEL} by chance`
+  return `${comparisons} comparisons: ${chance}. Results are marked from the p-value adjusted for them (Benjamini–Hochberg).`
+}
 
 export const changeTitle = (effect: WindowEffect): string => {
   if (effect.change === null || effect.paired_occurrences === 0) {
@@ -46,7 +74,8 @@ export const changeTitle = (effect: WindowEffect): string => {
     n === 1 ? 'occurrence' : 'occurrences'
   }`
   if (n < MIN_PAIRS_FOR_TEST) return `${base} (too few occurrences to tell)`
-  return effect.p_value === null ? base : `${base} (${formatPValue(effect.p_value)})`
+  const p = formatPValues(effect)
+  return p === null ? base : `${base} (${p})`
 }
 
 export const columnTitles = (windowMinutes: number) => ({

@@ -167,7 +167,7 @@ A feed post has a **`kind`**:
   only when it is a published (unlisted or public) shared dashboard and `include_link`
   (default on) is set; a private dashboard and the home dashboard are never linked.
   Federates as a `Note`, with no image, whose content is the name and period (`Month in
-data · October 2026`), the note, then **one line per figure widget** in config order —
+  data · October 2026`), the note, then **one line per figure widget** in config order —
   metric and sparkline cards as `Steps 9375 (↑ 4%)` (the arrow and whole percent against the
   previous period, `→` within half a percent), the activity summary as `Workouts 12 · 600 min`,
   `Sleep 7.3 h` and `Meditation 3`, a record card as `Best e1RM 101.3 kg`, an activity type
@@ -265,7 +265,8 @@ or an unsaved editor state, `{ article, visibility?, include_images? }` in the
 `ArticleDraftContent` shape — would federate as, and creates nothing. Only its **complete**
 blocks are previewed (a chart with a metric, a correlation with trigger and outcome, a
 challenge with a challenge URL, an impact block with an activity, and for a windowed block a
-bounded, increasing window); a blank title previews as `Untitled`. The answer
+bounded, increasing window — `isCompleteArticleBlock` in `@aurboda/api-spec`, which the web
+editor's own preview card uses too); a blank title previews as `Untitled`. The answer
 (`ArticlePreviewResponse`) has the Note `content` and `name` exactly as `renderArticleNote`
 and the hashtag linking build them, the `tags`, the numbered figure `attachments` (alt text,
 `block_index` back into the draft's blocks, `shown_in_mastodon`), `publish_error` — what
@@ -308,7 +309,9 @@ bytes sharp detects, not the claimed type (PNG, JPEG, WebP or GIF; never SVG); t
 orientation is applied and the picture turned upright; its longest edge is shrunk to at most
 1600 px (a smaller picture is not enlarged); an animated GIF keeps its first frame; and it is
 stored as WebP (quality 82) with **no metadata** — no camera, no GPS position. An upload is at
-most 10 MB.
+most 10 MB and at most 16383×16383 pixels (about 268 megapixels, sharp's own default, so a
+200-megapixel phone photo is taken), and a small file declaring more is refused before it is
+decoded (the same limit holds for avatars and challenge banners).
 
 Pictures live in the writer's own database, in `feed_image` (`id`, `content_type`, `data`
 BYTEA, `width`, `height`, `byte_size`, `created_at`), so the [data export](../data-export.md)
@@ -397,17 +400,27 @@ follow of `<tag>@<host>`: the same pending → accepted lifecycle, the same `Und
 unfollow, and its posts arrive as boost cards through the normal inbox. The `feed_following`
 row is marked with the tag, so followed tags are listed apart from followed people
 (`GET /feed/following` and `list_following` return people only) through
-`GET/POST /feed/followed-tags` and `DELETE /feed/followed-tags/:tag` (a tag is addressed by its
-name, unique per user), and over MCP `list_followed_tags`, `follow_tag` and `unfollow_tag`.
-A tag follow never raises a post notification: the Android notifier reads only the people
-list. A card boosted by a followed tag actor carries `boosted_by.tag` and
-shows a `#running` chip in place of the "🔄 X boosted" line. The host is a server setting,
+`GET/POST /feed/followed-tags`, `PATCH /feed/followed-tags/:tag` and
+`DELETE /feed/followed-tags/:tag` (a tag is addressed by its name, unique per user), and over MCP
+`list_followed_tags`, `follow_tag`, `set_followed_tag_notify` and `unfollow_tag`.
+Each followed tag has the same **`notify_on_post`** bell as a followed person (default on), set
+with `PATCH /feed/followed-tags/:tag` (`{ notify_on_post }`), the MCP `set_followed_tag_notify` or
+the bell in the Followed tags block. With it on, a new post arriving through the tag raises a
+`feed_post` notification ("Carol posted in #running", naming the post's author, linking to the
+timeline filtered to the tag), once per post however many followed tags it carries (the key is the
+announced post's id, so a followee delivering the same post directly does not raise a second one).
+A post already in the timeline from a followee gets no boost card from the tag, and so nothing
+through it. The Android fallback notifier for servers without `/notifications` still reads only the
+people list. A card boosted by a followed tag actor carries `boosted_by.tag` and
+shows a `#running` chip in place of the "🔄 X boosted" line. The tag accounts also boost each of
+the user's own public posts back to them; those are not counted as boosts (see
+[Likes and boosts](#likes-and-boosts)). The host is a server setting,
 `tag_actor_host` (Admin → **Federation**, default `tags.pub`). Only posts from servers that
 push to tags.pub arrive this way; every Aurboda server pushes its own public posts there
 through the tags.pub relay it subscribes to by default (see [Relays](../admin.md#federation)).
 
 **Web.** Feed → **People & sharing** has a **Followed tags** block (follow `#tag`, the Pending
-badge and Unfollow), and the **Following** timeline shows a chip row (`All` plus one
+badge, the 🔔/🔕 notification bell and Unfollow), and the **Following** timeline shows a chip row (`All` plus one
 `#tag` per followed tag) that filters the timeline with `?tag=`.
 
 ## ActivityPub federation
@@ -456,11 +469,29 @@ relays too. The instance actor answers only `Accept`/`Reject` of its own relay
 follows and a LitePub relay's follow-back; everything else delivered to it, including whatever a
 relay forwards, is dropped.
 
+### Delivery queue
+
+Every outgoing activity — post `Create`/`Update`/`Delete`, likes, boosts, follows, accepts,
+rejects, profile updates, an account's actor `Delete` — is handed to Fedify's outbox queue,
+kept in pg-boss (`fedify-outbox`, with `fedify-fanout` for sends to many followers), and
+`sendActivity` returns once it is queued. The backend process works the queue; during an
+overlapping deploy both processes may. A failed inbox is retried by Fedify's policy: the first
+retry after one to two minutes, each wait four times the last, capped at 12 hours, ten attempts
+in all; `404` and `410` are given up on at once, and a server failing repeatedly within minutes
+has its deliveries held by Fedify's circuit breaker (dropped after three days). pg-boss never
+retries a job itself, and a finished job is deleted after an hour, because a queued delivery
+carries the sender's signing key. Followers-only posts are
+queued like public ones; nothing of a payload is logged. Failing servers are recorded for
+admins in `federation_delivery_failures` (see [admin docs](../admin.md#federation)). Only the
+relay `Follow` is sent at once, so its error shows on the relay. Inbound activities are not
+queued. A server without a job queue delivers synchronously, without retries, as before; the
+startup log says which (`📮 Federation delivery: …`).
+
 ### Publishing & lifecycle delivery
 
 Sharing, editing, or unsharing a post federates the matching activity to the user's
-followers (best-effort, fire-and-forget; delivery is synchronous — a durable retry queue
-is a later slice):
+followers (fire-and-forget; the activity is queued and a failed inbox is retried with
+backoff for about two to three days, see [Delivery queue](#delivery-queue)):
 
 | Action  | Federated activity  | Effect on followers                       |
 | ------- | ------------------- | ----------------------------------------- |
@@ -505,7 +536,9 @@ The title headline is the shared activity's title; when that row has since been 
 (`superseded_by`, e.g. a synced Garmin row an aurboda override now stands in for), it is the
 replacing row's title, so renaming the activity — by hand or by a
 [deduction rule](deduction-rules.md#copying-a-data-field-into-the-title-output_title_field) —
-renames the post.
+renames the post. An untitled activity is headlined by its type (`Coffee activity`), and the
+web feed card, a peer's native card and the link-preview card all use the same rule
+(`activityHeadline` in `@aurboda/api-spec`), so a post reads the same everywhere.
 
 **QuantPub extension (#896).** An activity share's `Note` is dual-typed
 `["Note", "quant:Exercise"]` and carries the typed [QuantPub](../fep/quantpub.md)
@@ -573,6 +606,10 @@ window is then the override's own.
   of an existing account redirects — `public`, `unlisted`, `followers`-only, deleted or
   never-existing alike — so the redirect leaks nothing about the post; the page itself
   shows "Post not found" for anything that isn't public. An unknown account's id is a 404.
+  The one exception is the post's own author: signed in, they see any of their own posts on
+  that page, read through the authenticated `GET /api/feed/:postId` instead, so the links of
+  the notifications about a `followers` post and that post's card in their feed lead there.
+  For everyone else a `followers` post stays "Post not found" on the web.
   Machine clients are unaffected: a `followers`-only or unknown id is still a 404 and a
   deleted one the `410` Tombstone.
 
@@ -593,7 +630,7 @@ The feed also runs the **inbound** direction: a user can follow other fediverse 
 
 Following **yourself** is rejected (it would deliver a `Follow` to your own inbox and echo your
 posts into your timeline). Resolving the actor's avatar is bounded by a short timeout, so a slow
-icon host can't hang the (synchronous) follow. When a follow fails, the web panel surfaces the
+icon host can't hang the follow. When a follow fails, the web panel surfaces the
 server's specific reason (e.g. an unresolvable handle) rather than a generic message.
 
 Every remote fetch made on a user's behalf — resolving a followee, the backfill's outbox walk,
@@ -604,8 +641,9 @@ secure mode, GoToSocial) answer instead of refusing with a 401.
 When the followee's server answers with an `Accept`, the inbox marks the follow
 **accepted**; a `Reject` drops it. Unfollowing sends an `Undo{Follow}` to the cached inbox
 and removes the row. Local follows use the exact same path (delivered to the local inbox
-over loopback), so there is no special-casing. Delivery is best-effort/synchronous, matching
-the rest of the feed — a failed `Follow` POST leaves the pending row so the user can retry.
+over loopback), so there is no special-casing. The `Follow` and `Undo{Follow}` go through the
+delivery queue like the rest of the feed, so a server that is down gets them on a retry; the
+follow stays pending until the followee answers, and following again re-sends it.
 
 **Inbound `Update{Person}`** (#1057) — the mirror of the `Update{Person}` we deliver when our
 own profile changes. A remote actor renaming themselves (or changing their avatar) sends one to
@@ -620,8 +658,13 @@ reactions on the owner's own posts. Presentation only — the cached inbox URIs 
 
 Each follow carries a **`notify_on_post`** flag (default `true`), toggled per-actor with the
 bell in the web Following panel (or the `set_following_notify` MCP tool / `PATCH
-/feed/following/:id`). It controls whether the Android app raises a notification for that
-actor's new home-timeline posts; muting is preserved across a re-follow.
+/feed/following/:id`). It controls whether that actor's new home-timeline posts raise a
+notification; muting is preserved across a re-follow. Followed tags carry the same flag, set by the
+tag (see [Hashtags](#hashtags)). The server raises these into the central
+🛎 bell itself (the `feed_post` type, see [Notifications](notifications.md)), alongside
+`feed_reply`, `feed_mention`, `feed_like`, `feed_boost` and the follow types, by the same rule as
+the Android notifier below. Until #1632 the Android app still polls the timeline and raises its
+own post notifications as well.
 
 **Replies and mentions** (#1060): ingest stores a received Note's `inReplyTo` id as
 `timeline_entry.in_reply_to_uri` and whether it carries a `Mention` of the timeline owner as
@@ -692,7 +735,7 @@ With manual approval on, an inbound `Follow`:
 **Approving** flips the row to accepted and sends the deferred `Accept` — echoing the
 original `Follow` id so the follower's server matches it to its pending request.
 **Rejecting** (or later **removing** an accepted follower) sends a `Reject` and drops the
-row. Both are best-effort/synchronous like the rest of the feed. A re-delivered `Follow`
+row. Both go through the delivery queue like the rest of the feed. A re-delivered `Follow`
 from an already-accepted follower never demotes them back to pending.
 
 Only **accepted** followers appear in the followers collection + count and receive
@@ -799,6 +842,14 @@ the sender's actor id** (see the rule below), so an unresolvable actor leaves a 
 anonymous reaction rather than an unverified byline. An `Undo` retracts it, scoped to the
 undoing actor; when the `Undo`'s inner object doesn't resolve, the remote activity's own id is
 matched instead.
+
+A boost by an account on the **tag actor host** (`tag_actor_host`, default `tags.pub`, compared
+by host and port) is stored like any other, but it is the hashtag feed listing the post, not a
+person boosting it: it is left out of `boost_count` and of the reactions list
+(`GET /feed/:postId/reactions`, MCP `list_feed_post_reactions`) and raises no `feed_boost`
+notification. Its likes are kept. A like or boost somebody makes from a tag feed names the post
+itself, so it arrives and shows as theirs. The filter is applied when reading, so boosts stored
+before it are hidden too.
 
 **Quotes.** A quote of one of our own posts that we approved (FEP-044f, see the
 `feed_quote_authorization` table under [Storage](#storage)) is listed with the post's likes and
@@ -947,9 +998,17 @@ id-convention path — reliable even when a typed consumer drops the in-band ext
    `FeedStructuredArticle` (the title and every block, resolved in the same order as the
    article: a prose block's raw markdown verbatim, with `images` declaring the http(s)
    pictures its markdown embeds (alt text and URL, in document order) — a receiver draws an
-   inline picture only when its URL is declared there, so an undeclared one (a tracking pixel,
-   raw `<img>` HTML) is dropped; a chart block's bucketed samples over its
-   locked window, bucketed the same way as its block image; a correlation block's computed
+   inline picture only when its URL is declared there, so raw `<img>` HTML or a picture missing
+   from the list is dropped. The list comes from the same peer as the markdown, so a hostile peer
+   can still declare a tracking pixel of its own, which exposes the reader no more than the
+   attachment images a timeline already loads from that peer; what it rules out is a stray `<img>`
+   from a peer that behaves honestly. An Aurboda receiver reads only each declared picture's
+   `url` and takes the alt text from the markdown; a chart block's bucketed samples over its
+   locked window, bucketed the same way as its block image except that the bucket is floored to
+   5s and coarsened to a round size until the window fits the block's sample budget — at most
+   2,000 samples, and an even share of what the rest of the article leaves under 90% of a
+   peer's 1 MB response limit, so a long article still renders natively rather than dropping
+   to its `Note` HTML (the payload's `bucket` says which was used) (#972); a correlation block's computed
    Pearson/Spearman/n, the present-vs-absent group comparison, and the aligned scatter points —
    the same `getContinuousCorrelation` call the block image uses; an impact block's `activity`,
    `activity_type`, `window_minutes`, window, `occurrences`, `avg_duration_min`, `timeline`
@@ -993,8 +1052,10 @@ id-convention path — reliable even when a typed consumer drops the in-band ext
    `0.1` payload to `0.2` before storing it — the same path for an activity share or an article, since both federate
    as a `Note` and the object id doesn't distinguish them. For a `followers`-only post it lifts
    the capability token from the delivered image URL (the `?token=` embedded only in the
-   follower's `Note`) and forwards it, so an accepted follower fetches the native payload while a
-   public guess still 404s. A post whose origin is **this instance itself** (a local-to-local
+   follower's `Note`), falling back to the Note's same-host `quant:structuredUrl` for a post with
+   no images — read off the received JSON-LD in the inbox listener, since Fedify's typed `Note`
+   drops the extension property (#1223) — and forwards it, so an accepted follower fetches the
+   native payload while a public guess still 404s. A post whose origin is **this instance itself** (a local-to-local
    follow) skips discovery and HTTP entirely and resolves **in-process** through the same
    `resolveStructuredPost` the endpoint serves — fetching our own public origin would hairpin
    through the reverse proxy and, from inside the container, typically resolve to a private
@@ -1151,10 +1212,12 @@ Android app) so a `1d` bucket splits on the author's calendar days like the web 
 for an author whose device timezone is unknown it falls back to UTC (the web render uses
 the live browser timezone, so the two can differ by a day only in that case). Because an
 article (unlike a shared activity) is editable **and** its locked window can later gain
-backfilled data, the render cache keys on the post's `updated_at` **and** a coarse hourly
-bucket, so an edit or new data serves a fresh image within ≤ 1h; a `null` (no-data) render
-is remembered under the same key so a sparse public block can't re-run the render engine
-on every hit. The markdown export clears that remembered miss for every block it finds
+backfilled data, block images have their own render cache, keyed on the post's `updated_at`
+with entries that expire after an hour (five minutes for a challenge block) and bounded by
+the bytes it holds, so an edit or new data serves a fresh image within ≤ 1h and the
+activity images' cache is never crowded out by them (#969); a `null` (no-data) render is
+remembered for the hour so a sparse public block can't re-run the render engine on every
+hit. The markdown export clears that remembered miss for every block it finds
 drawable, so the image link it emits works at once rather than 404ing until the hour rolls
 over. `figure.png` shares the eligibility, the negative cache and that clearing, under its
 own render-cache entry. The AS2 `Image` attachment URL (`figure.png`) also carries
@@ -1231,7 +1294,8 @@ resolves only when **all** of these hold:
 
 When it resolves, the effective range is **clamped** to the activity's window (the
 caller's bounds can never widen it), the bucket granularity is **floored** server-side
-(minimum 5s) to bound payloads, and only the requested metric's aggregated buckets are
+(minimum 5s) and coarsened to a round size until the range fits 2,000 samples, to bound
+payloads (#972), and only the requested metric's aggregated buckets are
 returned — per-measurement timestamps are dropped. Anything else — an unshared metric,
 a `followers`-only share, a window outside any shared activity — returns **404**.
 
@@ -1255,8 +1319,9 @@ resolving.
   what they shared. The listing is **keyset-paginated** (20 per page, "Load more" — the same
   cursor style as the home timeline), so the inline payload weight stays bounded per request
   however many posts exist (#1012). The **public profile** (`/u/:username`) attaches the same
-  full structured payload per activity **and article** post (through the per-post LRU the
-  structured endpoint shares), and pages the same way — 20 per page with a "Load more" driven
+  full structured payload per activity **and article** post (through the per-post cache the
+  structured endpoint shares, keyed on the post's `updated_at`, expiring after an hour and
+  bounded by the payloads' total size), and pages the same way — 20 per page with a "Load more" driven
   by `next_cursor` (#1055) — so visitors see the identical native card and can reach every
   public post. An article renders from that server-resolved payload for a visitor (the same
   `TimelineArticle` a follower's timeline uses), since its live chart/correlation blocks fetch
@@ -1438,8 +1503,11 @@ ways, into one central `public_tag_posts` table, the first through the instance 
   attributed id. The content is sanitised like a timeline post's, the images captured the same
   way, the tags are the Note's own, and the link is the Note's `url` only when it is `http(s)`
   (else its id). One row per Note, keyed on its id: a second tag actor's `Announce` of the same
-  post adds its Announce id to the row. A tag actor's `Undo{Announce}` removes its Announce id,
-  and the row goes once no Announce keeps it. An author's `Delete` of a post removes its row
+  post adds its Announce id to the row, with the actor that sent it (`announce_actors`). A tag
+  actor's `Undo{Announce}` removes its Announce id, and only when the row stored that id from the
+  same actor, so another tag actor on the same host cannot withdraw it (a row stored before the
+  actor was kept takes any followed actor on the Announce's host, as before); the row goes once
+  no Announce keeps it. An author's `Delete` of a post removes its row
   (scoped to the sender, like the timeline's), and an actor's `Delete` of itself removes all of
   theirs; but a remote author's own `Delete` rarely reaches this server (it goes to their
   followers), so a deleted remote post usually leaves the page on the tag actor's
@@ -1460,9 +1528,14 @@ ways, into one central `public_tag_posts` table, the first through the instance 
 Rows older than the retention (`public_tag_retention_days`, default 30, by publication time),
 except the [official feed](#official-feed)'s remote posts, and rows with no followed tag left (a
 public page's, or the official feed's while it lists remote authors) are pruned nightly, and the listing and the Atom feed apply the
-retention when read, so a shortened retention takes effect at once. There is no moderation of tag
-pages yet beyond removing the tag; a follow-up issue tracks hiding posts and blocking actors and
-domains. The listing is
+retention when read, so a shortened retention takes effect at once. The pages are moderated: an
+admin can hide a post (its Note id is remembered and it is not stored again) or block an author
+or a whole domain (with its subdomains); both are checked whenever a post is stored, from the
+fediverse or from this server, and the matching stored posts are removed at once. A hidden or
+blocked post of this server's own is only kept off the tag pages and the official feed's remote
+posts: the author's feed, profile and federation are untouched. Unhiding or unblocking fetches
+nothing back; a post returns when it is announced or edited again. See
+[Tag page moderation](../admin.md#tag-page-moderation). The listing is
 `GET /public/tags/:tag/posts?cursor=` (unauthenticated, `no-store`; 404 for a tag without a
 page): 20 entries newest-first by `(published_at, id)` with `next_cursor`, each in the home
 timeline's entry shape (no structured payload, reactions or replies), plus the `tag` and
@@ -1470,7 +1543,8 @@ timeline's entry shape (no structured payload, reactions or replies), plus the `
 its author, identified by the Note's id and linking to the original; a tag without a page falls
 through to the next handler). The MCP tool `list_public_tag_posts` (`tag`, `cursor`)
 returns the same page. The web page (public, like `/blog`) renders each post as a read-only card
-with its `#tag` line, linking the tags that have a page of their own; the logged-out front page
+with its `#tag` line, linking the tags that have a page of their own (for an admin, with the
+**Hide post** / **Block** buttons); the logged-out front page
 and `/blog` link every configured tag ("See what people share with #aurboda").
 
 ## API
@@ -1501,6 +1575,7 @@ Owner-facing (authenticated, scoped to the caller):
 | `DELETE /feed/following/:id`                      | Unfollow (sends `Undo{Follow}`)                                                                                                                                                                              |
 | `GET /feed/followed-tags`                         | List the [hashtags I follow](#hashtags) (accepted + pending), by tag                                                                                                                                         |
 | `POST /feed/followed-tags`                        | Follow a hashtag (`{ tag }`): follows its tag actor `<tag>@<tag_actor_host>`                                                                                                                                 |
+| `PATCH /feed/followed-tags/:tag`                  | Set a followed hashtag's notification bell (`{ notify_on_post }`)                                                                                                                                            |
 | `DELETE /feed/followed-tags/:tag`                 | Unfollow a hashtag (sends `Undo{Follow}` to its tag actor)                                                                                                                                                   |
 | `GET /feed/followers`                             | List my followers; `?status=pending\|accepted\|all` (default `all`)                                                                                                                                          |
 | `POST /feed/followers/:id/approve`                | Approve a pending follow request (sends the deferred `Accept`)                                                                                                                                               |
@@ -1510,13 +1585,20 @@ Owner-facing (authenticated, scoped to the caller):
 | `POST/DELETE /feed/timeline/:id/like`             | Favourite ⭐ / un-favourite a timeline post (`Like` / `Undo{Like}`); idempotent, returns the updated entry                                                                                                   |
 | `POST/DELETE /feed/timeline/:id/boost`            | Boost 🔄 / un-boost a timeline post (`Announce` / `Undo{Announce}`); idempotent, returns the updated entry                                                                                                   |
 | `GET /feed/timeline/:id/replies`                  | Bounded snapshot of a timeline post's thread (origin's `replies` + my own replies merged); `fetched`/`partial`                                                                                               |
-| `POST /feed/timeline/:id/reply`                   | Reply 🗨 to a timeline post — publishes a `reply` post (`Create{Note inReplyTo}` + `Mention`); `visibility` defaults to `unlisted`                                                                           |
+| `POST /feed/timeline/:id/reply`                   | Reply 🗨 to a timeline post — publishes a `reply` post (`Create{Note inReplyTo}` + `Mention`); `visibility` defaults to `unlisted`                                                                            |
+| `GET /feed/:postId`                               | One of MY posts, at any visibility (`followers` too), exactly as an entry of `GET /feed` (structured payload and counts included); 404 for an unknown or non-UUID id                                         |
 | `GET /feed/:postId/reactions`                     | Who favourited, boosted or quoted one of MY posts (newest first, max 100); a quote has kind `quote` and the quoting post in `url`                                                                            |
 | `GET /feed/:postId/replies`                       | The comments received under one of MY posts (the latest 100, oldest first), as full timeline entries — no network fetch                                                                                      |
 
 Admin-only: `GET /admin/relays`, `POST /admin/relays` (`{ url, style }`) and
 `DELETE /admin/relays/:id` manage the [relays](../admin.md#federation) public posts are pushed to
 (MCP `list_relays`, `add_relay`, `remove_relay`).
+Admin-only, the [tag page moderation](../admin.md#tag-page-moderation):
+`DELETE /admin/public-tag-posts/:id` hides a tag page post, `GET /admin/public-tag-hidden` and
+`DELETE /admin/public-tag-hidden/:id` list and unhide, `GET`/`POST /admin/public-tag-blocks`
+(`{ kind: "actor" | "domain", value }`) and `DELETE /admin/public-tag-blocks/:id` manage the blocks
+(MCP `hide_public_tag_post`, `list_hidden_public_tag_posts`, `unhide_public_tag_post`,
+`list_public_tag_blocks`, `add_public_tag_block`, `remove_public_tag_block`).
 
 Public / federation (unauthenticated):
 
@@ -1568,15 +1650,15 @@ The public profile page (`/u/:username`, from
 `GET /public/:username/dashboards`'s `display_name`) shows it above `@username`. The account's
 email is never part of the actor or any public response.
 
-The owner-facing capability is also available over MCP as `list_feed`, `share_activity`,
+The owner-facing capability is also available over MCP as `list_feed`, `get_feed_post`, `share_activity`,
 `preview_activity_share`, `share_challenge`, `share_exercise`, `preview_exercise_share`, `share_dashboard_period`, `preview_dashboard_period_share`, `create_article`, `update_article`, `preview_article`, the [article draft](#article-drafts) tools, `export_article_markdown`, `update_feed_post`,
 `delete_feed_post`, `list_following`, `follow_actor`, `unfollow_actor`, `list_followed_tags`,
-`follow_tag`, `unfollow_tag`, `list_followers`,
+`follow_tag`, `set_followed_tag_notify`, `unfollow_tag`, `list_followers`,
 `approve_follower`, `reject_follower`, `list_timeline`, `like_timeline_post`,
 `unlike_timeline_post`, `boost_timeline_post`, `unboost_timeline_post`,
 `get_timeline_replies`, `reply_to_timeline_post`, `get_feed_post_replies`, and
 `list_feed_post_reactions` — all backed by the same services as
-the REST routes (`create_article` / `update_article` ↔ `POST /feed/articles` / `PATCH
+the REST routes (`get_feed_post` ↔ `GET /feed/:postId`; `create_article` / `update_article` ↔ `POST /feed/articles` / `PATCH
 /feed/articles/:postId`; `export_article_markdown` ↔ `GET /feed/articles/:postId/export`), so an
 article can be drafted conversationally by Claude via the same tools — as a private draft
 (`create_article_draft`) the user finishes in the web editor, or published directly. Manual follower approval is

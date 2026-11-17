@@ -53,6 +53,8 @@ Built-in amount metrics are steps, distance, floors climbed, calories (active, b
 
 The **Missing days** option overrides the kind for one trend: **Auto (by metric kind)**, **Count as zero** or **Skip** (`missing_days: 'zero' | 'skip'` in the API, the `get_trend` MCP tool, chart URLs and dashboard trend widgets). The trend result echoes the value it used as `missing_days`.
 
+A metric trend leaves out the samples inside activities flagged `exclude_from_baseline` (a festival, a retreat), and a day left without samples by that is skipped rather than counted as zero; `include_flagged: true` keeps them. See [Flagged windows](../correlations.md#flagged-windows-exclude_from_baseline).
+
 Before Count was real for metrics, a metric trend saved with **Count** rendered as **Average** (and the Chart page saved Count by default). Existing metric trend goals and dashboard trend widgets saved as Count were therefore rewritten to Average by a one-off migration, so they keep showing what they showed before.
 
 ### Screentime Categories
@@ -92,6 +94,8 @@ When adding or editing a trend, you can configure:
 | **Display as**   | Per day, Per week, Per month                                     | Rate normalization. Same data, different scale.                                            |
 | **Aggregation**  | Metrics: Average, Sum, Count. Activity types: Sum (hours), Count | Whether to average, total or count daily values.                                           |
 | **Missing days** | Auto (by metric kind), Count as zero, Skip (metric trends only)  | Whether a day without samples counts as 0 or is left out. See [Metric kind](#metric-kind). |
+
+A day's average of heart rate, stress, body battery, respiration or SpO2 is [time-weighted](../data-storage.md#time-weighted-averages): the samples are averaged per 5-minute bin, then across the day's bins, so the 1 Hz samples of a recorded activity weigh no more than any other hour.
 
 ## The Trends Page
 
@@ -139,6 +143,16 @@ Trend charts can be added as widgets on the Dashboard. Configure the source type
 The Chart Explorer (`/chart`) charts any activity type or metric as a trend or as bars. For an activity type with list items (a strength session's sets), a **measure** such as an exercise's e1RM charts as bars or, with **Trend (best)**, as its decaying best: a running best of the measure that decays with a half-life between sessions and is lifted by any session that beats it. Its half-life choices are 30, 60, 120 (the default), 240 days and 1 year; display period and aggregation do not apply. The URL carries it as `chart_type=trend&measure=e1rm&half_life_days=120`, with `filter_field` and `filter_value` for one exercise.
 
 Its **Lookback** is a fixed window (1 day to 2 years, or All time) or **Since…**, which shows a date picker and charts from that date up to today. The URL carries a fixed window as `lookback_days=90` and a date as `since=2026-03-01`, so a link keeps that start; when both are present `since` wins. A date in the future is refused with an inline message and the chart keeps its previous range. Bars start at the date's local midnight; a trend asks for the number of whole days from the date to today. Adding or updating a dashboard widget keeps the date as the widget's `since` (with that day count as its `lookback_days`), so on a board the chart keeps its fixed start, and opening it in the Chart Explorer carries the date back.
+
+#### Sessions scatter
+
+For an activity type, the **Sessions** chart type plots one dot per session in the range: its length across (`Duration (min)`) and its exertion up, to answer "I have 20 minutes and want something gentle" by looking in that corner. The type is offered only for activity types; a link with `chart_type=scatter` and a metric source opens the default chart instead.
+
+- **Exertion** (`y`): **Z3+ minutes** (`y=z3_minutes`, the default) is the session's minutes in heart-rate zone 3 or higher, as in the [sessions overview](activity-types.md#sessions-overview); **Average HR** (`y=avg_hr`) is the session's average heart rate in bpm. Sessions without the chosen value (no heart-rate data) or without a duration are left out, and a line under the chart says how many.
+- **Colour** (`group_by`): the same fields the sessions overview groups by (the categorical data fields and Place). Dots take the field value's colour, with a legend of the eight most frequent values and the rest as **Other**. Clicking a legend entry highlights its sessions and dims the others; clicking it again clears that.
+- **One dot per value** (`collapse=1`, only with a field): one dot per value at the median length and median exertion of its sessions, its area growing with the number of sessions.
+
+Hovering a dot (tapping it on a touch screen) shows the session's title or value, date, length and exertion. Clicking a session's dot (tapping it again on touch) opens the session; clicking a collapsed dot shows that value's sessions highlighted among the others. The range is the usual **Lookback** or **Since…**. The scatter has no dashboard widget, so its ⋮ menu (Add to dashboard, Set a goal) and **Update Chart** are not shown. Example: `/chart?source_type=activity_type&pattern=yoga&chart_type=scatter&y=z3_minutes&group_by=session_name&collapse=1&lookback_days=365`. The sessions overview's **Plot sessions** link opens it.
 
 ### Chart menu
 

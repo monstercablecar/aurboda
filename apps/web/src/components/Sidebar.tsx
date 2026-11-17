@@ -10,6 +10,7 @@ import {
   NAV_LINKS_SECONDARY,
   SHARING_LINKS,
 } from './nav-links'
+import { NotificationBellDropdown } from './NotificationBell'
 import { usePageVisibility } from './usePageVisibility'
 import './Sidebar.css'
 
@@ -58,6 +59,7 @@ export function Sidebar() {
         <a href="/" class="sidebar-brand" aria-label="Aurboda home">
           Aurboda
         </a>
+        {isLoggedIn && <NotificationBellDropdown />}
         <button
           class="sidebar-toggle"
           onClick={toggleCollapsed}

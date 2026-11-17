@@ -144,13 +144,14 @@ const FEED_POST_REACTION_COLUMNS =
 /**
  * Record an inbound reaction on one of the user's own posts. A redelivery
  * refreshes the activity id + presentation snapshot in place; `created_at` stays
- * at first receipt so the "who reacted" list keeps a stable order.
+ * at first receipt so the "who reacted" list keeps a stable order. `inserted`
+ * tells a first receipt from a redelivery (see `upsertTimelineEntry`).
  */
 export const upsertFeedPostReaction = async (
   user: string,
   input: FeedPostReactionInput,
-): Promise<FeedPostReactionRecord> => {
-  const result = await query<FeedPostReactionRecord>(
+): Promise<FeedPostReactionRecord & { inserted: boolean }> => {
+  const result = await query<FeedPostReactionRecord & { inserted: boolean }>(
     user,
     `INSERT INTO feed_post_reaction (post_id, kind, actor_uri, activity_uri, handle, display_name, avatar_url)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -159,7 +160,7 @@ export const upsertFeedPostReaction = async (
                    handle = COALESCE(EXCLUDED.handle, feed_post_reaction.handle),
                    display_name = COALESCE(EXCLUDED.display_name, feed_post_reaction.display_name),
                    avatar_url = COALESCE(EXCLUDED.avatar_url, feed_post_reaction.avatar_url)
-     RETURNING ${FEED_POST_REACTION_COLUMNS}`,
+     RETURNING ${FEED_POST_REACTION_COLUMNS}, (xmax = 0) AS inserted`,
     [
       input.post_id,
       input.kind,
@@ -235,14 +236,17 @@ export const listFeedPostReactions = async (
   user: string,
   postId: string,
   limit: number,
+  /** Leave out boosts by actors on this host (the tag actor host, whose accounts are hashtag feeds). */
+  hideBoostsFromHost?: string,
 ): Promise<FeedPostReactionRecord[]> => {
   const result = await query<FeedPostReactionRecord>(
     user,
     `SELECT ${FEED_POST_REACTION_COLUMNS} FROM feed_post_reaction
      WHERE post_id = $1
+       AND ($3::text IS NULL OR NOT (kind = 'announce' AND lower(split_part(actor_uri, '/', 3)) = lower($3)))
      ORDER BY created_at DESC, actor_uri DESC
      LIMIT $2`,
-    [postId, limit],
+    [postId, limit, hideBoostsFromHost?.trim() ?? null],
   )
   return result.rows
 }
@@ -262,18 +266,21 @@ export interface FeedPostReactionCount {
 export const countFeedPostReactions = async (
   user: string,
   postIds: string[],
+  /** Leave boosts by actors on this host (the tag actor host) out of the tally; quotes are never filtered. */
+  hideBoostsFromHost?: string,
 ): Promise<FeedPostReactionCount[]> => {
   if (postIds.length === 0) return []
   const result = await query<FeedPostReactionCount>(
     user,
     `SELECT post_id, kind, count(*)::int AS count FROM feed_post_reaction
      WHERE post_id = ANY($1::uuid[])
+       AND ($2::text IS NULL OR NOT (kind = 'announce' AND lower(split_part(actor_uri, '/', 3)) = lower($2)))
      GROUP BY post_id, kind
      UNION ALL
      SELECT post_id, 'quote', count(*)::int FROM feed_quote_authorization
      WHERE post_id = ANY($1::uuid[])
      GROUP BY post_id`,
-    [postIds],
+    [postIds, hideBoostsFromHost?.trim() ?? null],
   )
   return result.rows
 }

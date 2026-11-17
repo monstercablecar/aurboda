@@ -106,13 +106,14 @@ export const isContextualHrvMetric = (metric: MetricType): boolean =>
   (contextualHrvMetrics as readonly string[]).includes(metric)
 
 /**
- * Built-in activity types (always available, cannot be deleted).
+ * The five core activity types. They are a few of the built-in types: the seed also adds every Health Connect
+ * exercise type and some internal ones, all marked by `is_builtin` on their definition.
  */
-export const builtinActivityTypes = ['sleep', 'exercise', 'meditation', 'nap', 'rest'] as const
-export type BuiltinActivityType = (typeof builtinActivityTypes)[number]
+export const coreActivityTypes = ['sleep', 'exercise', 'meditation', 'nap', 'rest'] as const
+export type CoreActivityType = (typeof coreActivityTypes)[number]
 
-/** @deprecated Use builtinActivityTypes. Kept for backward compatibility. */
-export const activityTypes = builtinActivityTypes
+/** @deprecated Use coreActivityTypes. Kept for backward compatibility. */
+export const activityTypes = coreActivityTypes
 
 export const dataFieldNameSchema = z.string().regex(/^[a-z][a-z0-9_]*$/)
 
@@ -136,6 +137,8 @@ export const displayCategories = [
   'exercise',
   'meditation',
   'wellness',
+  'health',
+  'intake',
   'productivity',
   'travel',
   'other',
@@ -159,6 +162,7 @@ export const dataSourceSchema = z
     'oura',
     'garmin',
     'gravl',
+    'home_assistant',
     'rescuetime',
     'owntracks',
     'strava',
@@ -269,8 +273,41 @@ export const metricAggregationSchema = z.enum(['avg', 'sum']).meta({
 
 export type MetricAggregation = z.infer<typeof metricAggregationSchema>
 
+export const metricBetterSchema = z.enum(['higher', 'lower', 'neutral']).meta({
+  description:
+    "Which change of a metric is an improvement: 'higher', 'lower', or 'neutral' (neither, so a trend is shown without better or worse).",
+  id: 'MetricBetter',
+})
+
+export type MetricBetter = z.infer<typeof metricBetterSchema>
+
+/** Built-in metrics whose change has a better direction; every other built-in metric is neutral. */
+export const metricBetterDirections: Partial<Record<MetricType, Exclude<MetricBetter, 'neutral'>>> = {
+  body_fat: 'lower',
+  hrv_activity: 'higher',
+  hrv_awake: 'higher',
+  hrv_rmssd: 'higher',
+  hrv_sleep: 'higher',
+  readiness_score: 'higher',
+  resting_heart_rate: 'lower',
+  sleep_deep_score: 'higher',
+  sleep_efficiency: 'higher',
+  sleep_latency: 'higher',
+  sleep_rem_score: 'higher',
+  sleep_restfulness: 'higher',
+  sleep_score: 'higher',
+  sleep_timing: 'higher',
+  sleep_total_score: 'higher',
+  steps: 'higher',
+  stress_level: 'lower',
+}
+
 export const customMetricDefinitionSchema = z
   .object({
+    better: metricBetterSchema.optional().meta({
+      description:
+        "Which change is an improvement, for trend indicators: 'higher', 'lower' or 'neutral' (default).",
+    }),
     aggregation: metricAggregationSchema.optional().meta({
       description:
         "'sum' for amounts (a dose, steps): a day without samples counts as 0 in trends and bar charts total the day. 'avg' (default) for levels (weight, HR): missing days are skipped.",
@@ -328,6 +365,11 @@ export const getMetricUnit = (
   if (isValidMetric(metric)) return metricUnits[metric]
   return customMetrics.find((m) => m.name === metric)?.unit
 }
+
+export const getMetricBetter = (metric: string, customMetrics: CustomMetricDefinition[] = []): MetricBetter =>
+  isValidMetric(metric)
+    ? (metricBetterDirections[metric] ?? 'neutral')
+    : (customMetrics.find((m) => m.name === metric)?.better ?? 'neutral')
 
 /**
  * Friendly display names for built-in metrics. Shared single source used by the
@@ -450,11 +492,34 @@ export const aurbodaOnlyMetrics: MetricType[] = ['calories_active', 'calories_to
  */
 export const aurbodaOnlySources: DataSource[] = ['aurboda', 'aurboda_gap_fill']
 
-export const placeSourceSchema = z.enum(['named', 'detected', 'owntracks', 'unknown']).meta({
-  description: 'Source of place identification',
-  example: 'named',
-  id: 'PlaceSource',
-})
+/**
+ * Instantaneous-sample metrics recorded at uneven rates: once a second during a recorded activity
+ * (Garmin activity detail, a BLE strap) and every few minutes otherwise. Their averages are
+ * time-weighted: samples are averaged per 5-minute bin first and then across bins, so a recorded
+ * hour weighs the same as any other hour.
+ */
+export const timeWeightedMetrics: MetricType[] = [
+  'heart_rate',
+  'stress_level',
+  'body_battery',
+  'respiratory_rate',
+  'spo2',
+]
+
+export const isTimeWeightedMetric = (metric: string): boolean =>
+  (timeWeightedMetrics as string[]).includes(metric)
+
+/** One sentence for tool and endpoint descriptions whose averages follow `timeWeightedMetrics`. */
+export const timeWeightedAveragesNote = `Averages of ${timeWeightedMetrics.join(', ')} are time-weighted: the samples are averaged per 5-minute bin, then across bins, so an hour recorded at 1 Hz weighs the same as any other hour.`
+
+export const placeSourceSchema = z
+  .enum(['named', 'detected', 'owntracks', 'home_assistant', 'unknown'])
+  .meta({
+    description:
+      'Source of place identification: a named location, a detected location, a region/zone reported by OwnTracks or Home Assistant, or unknown',
+    example: 'named',
+    id: 'PlaceSource',
+  })
 
 export type PlaceSource = z.infer<typeof placeSourceSchema>
 

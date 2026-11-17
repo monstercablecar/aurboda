@@ -168,6 +168,11 @@ export const socialTables: Record<string, string> = {
   challenge_participations_protocol_column: `
     ALTER TABLE challenge_participations ADD COLUMN IF NOT EXISTS protocol VARCHAR(10);
   `,
+  // When a remote host was last asked for the challenge's current name, so a dead host is asked
+  // at most every few hours. Additive (idempotent).
+  challenge_participations_host_checked_column: `
+    ALTER TABLE challenge_participations ADD COLUMN IF NOT EXISTS host_checked_at TIMESTAMPTZ;
+  `,
 
   // Challenges the user LEFT (#1093). Leaving hard-deletes the participation
   // row, so the "don't suggest this again" fact needs its own record to survive
@@ -295,7 +300,7 @@ export const socialTables: Record<string, string> = {
   // Activities whose feed post the user DELETED (#903): auto-share must never
   // republish them. feed_posts rows are hard-deleted, so the "at most one post
   // per activity/merge-group EVER" dedupe needs this record to survive the
-  // delete. Populated inside deleteFeedPost's delete statement for any
+  // delete. Populated inside deleteFeedPostWithQuotes's delete statement for any
   // activity-anchored post (manual or auto — a deliberately removed share
   // should not come back by rule either).
   autoshare_suppressions: `
@@ -344,6 +349,9 @@ export const socialTables: Record<string, string> = {
   // NULL uses the owner's default feed tags; an array replaces them.
   autoshare_rules_tags: `
     ALTER TABLE autoshare_rules ADD COLUMN IF NOT EXISTS tags TEXT[]
+  `,
+  autoshare_rules_delay_minutes: `
+    ALTER TABLE autoshare_rules ADD COLUMN IF NOT EXISTS delay_minutes INTEGER NOT NULL DEFAULT 10
   `,
   // `idx_feed_posts_series` is a GIN index over the shared-series set — the hot
   // path for the public series endpoint's `metric = ANY(series_metrics)` check.

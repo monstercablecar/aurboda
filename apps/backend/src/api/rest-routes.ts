@@ -8,18 +8,23 @@ import type { Express } from 'express'
 import type { Client } from 'pg'
 
 import type { Auth } from '../auth.ts'
-import type { GarminClient } from '../integrations/garmin/client.ts'
+import type { GarminClient } from '../integrations/garmin/source.ts'
 import type { DetailSyncedCallback, TrackWrittenCallback } from '../integrations/garmin/sync.ts'
+import type { HomeAssistantClient } from '../integrations/home-assistant/client.ts'
 import type { AutosharePreviewDeps } from '../mcp/autoshare-rule-tools.ts'
 import type { AccountDeleter } from '../services/account-deletion.ts'
+import type { AccountEmailDeps } from '../services/account-email.ts'
 import type { AccountPlans } from '../services/account-plan.ts'
+import type { AccountRecovery } from '../services/account-recovery.ts'
 import type { PostUpdateResender } from '../services/activitypub/post-update-resend.ts'
 import type { AdminUsers } from '../services/admin-users.ts'
 import type { ArticlePreviewer } from '../services/article-preview.ts'
+import type { SkipAutoshare } from '../services/autoshare-skip.ts'
 import type { CentralDb } from '../services/central-db.ts'
 import type { DiscoverChallenges } from '../services/challenge-discovery.ts'
 import type { DeductionEngineDeps } from '../services/deduction-engine.ts'
 import type { ActivityNotifier, DeductionQueue } from '../services/deduction-queue.ts'
+import type { Mailer } from '../services/email.ts'
 import type { DumpExporter, DumpLinkIssuer } from '../services/export-dump.ts'
 import type { ExportTokens } from '../services/export-token.ts'
 import type { ReactionActions } from '../services/feed-reactions.ts'
@@ -27,9 +32,15 @@ import type { FollowerActions } from '../services/followers.ts'
 import type { FollowActions } from '../services/following.ts'
 import type { InvitationAuth } from '../services/invitation.ts'
 import type { NamedLocationsChanged } from '../services/locations.ts'
+import type { LoginMethodCounter } from '../services/login-methods.ts'
+import type { RunNotificationAction } from '../services/notification-actions.ts'
+import type { OidcProviderAdmin } from '../services/oidc-providers.ts'
+import type { OidcService } from '../services/oidc.ts'
 import type { OuraWebhookManager } from '../services/oura-webhook-manager.ts'
+import type { PublicTagModeration } from '../services/public-tag-moderation.ts'
 import type { PublicTagActions } from '../services/public-tags.ts'
 import type { SyncProvider } from '../services/queries/index.ts'
+import type { TokenBucketLimiter } from '../services/rate-limit.ts'
 import type { RelayActions } from '../services/relays.ts'
 import type { HrSettingsChanged, ProfileChanged } from '../services/settings.ts'
 import type { TimelineHub } from '../services/timeline-hub.ts'
@@ -45,11 +56,15 @@ import {
   listUserNames,
   markActivityDetailSynced,
 } from '../db/index.ts'
+import { garminOAuthRedirectUri } from '../integrations/garmin/oauth-client.ts'
 import { processActivityDetail } from '../integrations/garmin/process.ts'
 import { gravlRedirectUri } from '../integrations/gravl/client.ts'
+import { createAccountRecoveryRouter } from '../routes/account-recovery-router.ts'
 import { createAccountRouter } from '../routes/account-router.ts'
 import { createActivitiesRouter } from '../routes/activities-router.ts'
+import { createActivityTypeCatalogRouter } from '../routes/activity-type-catalog-router.ts'
 import { createActivityTypesRouter } from '../routes/activity-types-router.ts'
+import { createAdminOidcRouter } from '../routes/admin-oidc-router.ts'
 import { createAdminRouter } from '../routes/admin-router.ts'
 import { createAgentsRouter } from '../routes/agents-router.ts'
 import { createAuditLogRouter } from '../routes/audit-log-router.ts'
@@ -62,6 +77,7 @@ import { createChartDataRouter } from '../routes/chart-data-router.ts'
 import { createCorrelationsRouter } from '../routes/correlations-router.ts'
 import { createDashboardRouter } from '../routes/dashboard-router.ts'
 import { createDeductionRulesRouter } from '../routes/deduction-rules-router.ts'
+import { createExerciseCatalogRouter } from '../routes/exercise-catalog-router.ts'
 import { createExportRouter } from '../routes/export-router.ts'
 import { createFeedFollowedTagsRouter } from '../routes/feed-followed-tags-router.ts'
 import { createFeedFollowersRouter } from '../routes/feed-followers-router.ts'
@@ -71,18 +87,22 @@ import { createFeedImagesRouter } from '../routes/feed-images-router.ts'
 import { createFeedPublicRouter } from '../routes/feed-public-router.ts'
 import { createFeedRouter, type FeedDeliver } from '../routes/feed-router.ts'
 import { createFoodItemsRouter } from '../routes/food-items-router.ts'
+import { createHomeAssistantRouter } from '../routes/home-assistant-router.ts'
 import { createIconsRouter } from '../routes/icons-router.ts'
 import { createImportsRouter } from '../routes/imports-router.ts'
 import { createJournalRouter } from '../routes/journal-router.ts'
 import { createLocationsRouter } from '../routes/locations-router.ts'
 import { createMealsRouter } from '../routes/meals-router.ts'
 import { createMediaRouter } from '../routes/media-router.ts'
+import { createMetricCatalogRouter } from '../routes/metric-catalog-router.ts'
 import { createMetricsRouter } from '../routes/metrics-router.ts'
 import { createNativeTasksRouter } from '../routes/native-tasks-router.ts'
 import { createNotesRouter } from '../routes/notes-router.ts'
+import { createNotificationsRouter } from '../routes/notifications-router.ts'
 import { createNutrientRecommendationsRouter } from '../routes/nutrient-recommendations-router.ts'
 import { createOEmbedRouter } from '../routes/oembed-router.ts'
 import { createOgImageRouter } from '../routes/og-image-router.ts'
+import { createOidcRouter } from '../routes/oidc-router.ts'
 import { createPeopleRouter } from '../routes/people-router.ts'
 import { createPharmacologyRouter } from '../routes/pharmacology-router.ts'
 import { createProductivityRouter } from '../routes/productivity-router.ts'
@@ -96,6 +116,7 @@ import { createReportsRouter } from '../routes/reports-router.ts'
 import { createResourcesRouter } from '../routes/resources-router.ts'
 import { createRoutesRouter } from '../routes/routes-router.ts'
 import { createScreentimeCategoriesRouter } from '../routes/screentime-categories-router.ts'
+import { createSegmentsRouter } from '../routes/segments-router.ts'
 import { createSensitivityFlagsRouter } from '../routes/sensitivity-flags-router.ts'
 import { createSettingsRouter } from '../routes/settings-router.ts'
 import { createShareHtmlRouter, createShareResolvers } from '../routes/share-html-router.ts'
@@ -135,7 +156,7 @@ import { resolveFeedActivity } from '../services/feed.ts'
 import { readOfficialFeedSetting } from '../services/official-feed.ts'
 import { createOgImageRenderer } from '../services/og-image.ts'
 import { loadPublicPostChartWith, type PostChartDeps } from '../services/post-chart.ts'
-import { getUserTimezone } from '../services/settings.ts'
+import { getSettings, getUserTimezone } from '../services/settings.ts'
 import { resolveDashboardView } from '../services/shared-dashboard-data.ts'
 import { resolveSharedExerciseData } from '../services/shared-exercise-data.ts'
 import { createTemplateLoader } from '../services/web-template.ts'
@@ -143,6 +164,12 @@ import { createTemplateLoader } from '../services/web-template.ts'
 interface RestRoutesDeps {
   httpd: Express
   accountDeleter: AccountDeleter
+  accountEmail: AccountEmailDeps
+  accountRecovery: AccountRecovery
+  /** The admin's "Send test mail". */
+  adminTestEmail: { mailer: Pick<Mailer, 'send'>; testLimiter: TokenBucketLimiter }
+  /** Sends the verification link to a just-signed-up account's email, in the background. */
+  startEmailVerification: (username: string) => void
   accountPlans: AccountPlans
   authMiddleware: AnyMiddleware
   adminMiddleware: AnyMiddleware
@@ -152,9 +179,13 @@ interface RestRoutesDeps {
   webHost: string
   webIndexPath: string | undefined
   apiBaseUrl: string
+  /** The secret-bearing Garmin push URL, shown to the admin only. */
+  garminPushUrl: string
   /** Open challenges from followed peers (`GET /challenges/discover`). */
   discoverChallenges: DiscoverChallenges
   garmin: GarminClient
+  /** Home Assistant client behind `GET /home-assistant/entities`. */
+  homeAssistant: HomeAssistantClient
   /** Fire-and-forget: re-federate the shares of an activity whose detail was (re)synced. */
   onActivityDetailSynced: DetailSyncedCallback
   /** Fire-and-forget: queue post-processing for an activity whose GPS track was written. */
@@ -166,6 +197,9 @@ interface RestRoutesDeps {
   ouraWebhookManager: OuraWebhookManager
   auth: Auth
   webAuthn: WebAuthnService
+  /** Sign-in through OpenID Connect providers and the admin's management of them. */
+  oidc: { service: OidcService; providers: OidcProviderAdmin }
+  loginMethods: LoginMethodCounter
   wellKnown: WellKnownConfig
   userDb: Client
   feedDeliver: FeedDeliver
@@ -173,6 +207,7 @@ interface RestRoutesDeps {
   followerActions: FollowerActions
   relayActions: RelayActions
   publicTagActions: PublicTagActions
+  publicTagModeration: PublicTagModeration
   postUpdateResender: PostUpdateResender
   /** Outbound like ⭐ / boost 🔄 toggles for the home timeline. */
   reactionActions: ReactionActions
@@ -182,12 +217,18 @@ interface RestRoutesDeps {
   onProfileChanged: ProfileChanged
   /** Merge-group/window resolution behind the auto-share rule preview (#903). */
   autosharePreviewDeps: AutosharePreviewDeps
+  /** Keeps one activity from being auto-shared (the `skip` action and `/autoshare-rules/skips`). */
+  skipAutoshare: SkipAutoshare
+  /** Runs a notification's action server-side. */
+  runNotificationAction: RunNotificationAction
   /** Fire-and-forget: recompute activity features after HR zones, birth date or maf_hr change. */
   onHrSettingsChanged: HrSettingsChanged
   onNamedLocationsChanged: NamedLocationsChanged
   dataExport: { exporter: DumpExporter; requestDumpLink: DumpLinkIssuer; tokens: ExportTokens }
   /** The article preview, shared with MCP's `preview_article`. */
   previewArticle: ArticlePreviewer
+  /** The tag actor host (`tag_actor_host` server setting): its accounts' boosts are hashtag feeds, not people. */
+  tagActorHost: () => Promise<string>
 }
 
 /** Where a post's chart data comes from, for its feed images and its link-preview card alike. */
@@ -209,6 +250,10 @@ export const postChartDeps: PostChartDeps = {
 export const mountRestRouters = ({
   httpd,
   accountDeleter,
+  accountEmail,
+  accountRecovery,
+  adminTestEmail,
+  startEmailVerification,
   accountPlans,
   authMiddleware,
   adminMiddleware,
@@ -218,8 +263,10 @@ export const mountRestRouters = ({
   webHost,
   webIndexPath,
   apiBaseUrl,
+  garminPushUrl,
   discoverChallenges,
   garmin,
+  homeAssistant,
   onActivityDetailSynced,
   onTrackWritten,
   syncProvider,
@@ -227,15 +274,19 @@ export const mountRestRouters = ({
   engineDeps,
   deductionQueue,
   autosharePreviewDeps,
+  skipAutoshare,
+  runNotificationAction,
   dataExport,
   feedDeliver,
   followActions,
   followerActions,
   relayActions,
   publicTagActions,
+  publicTagModeration,
   postUpdateResender,
   previewArticle,
   reactionActions,
+  tagActorHost,
   onProfileChanged,
   onHrSettingsChanged,
   onNamedLocationsChanged,
@@ -244,6 +295,8 @@ export const mountRestRouters = ({
   ouraWebhookManager,
   auth,
   webAuthn,
+  oidc,
+  loginMethods,
   wellKnown,
   userDb,
 }: RestRoutesDeps): void => {
@@ -256,12 +309,21 @@ export const mountRestRouters = ({
   httpd.use('/people', createPeopleRouter(authMiddleware))
   httpd.use('/tasks', createNativeTasksRouter(authMiddleware))
   httpd.use('/notes', createNotesRouter(authMiddleware))
+  httpd.use(
+    '/notifications',
+    createNotificationsRouter(authMiddleware, {
+      isAdmin: centralDb.isAdmin,
+      runAction: runNotificationAction,
+    }),
+  )
   httpd.use('/media', createMediaRouter(authMiddleware))
   httpd.use('/meals', createMealsRouter(authMiddleware))
   httpd.use('/food-items', createFoodItemsRouter(authMiddleware, centralDb))
   httpd.use('/sensitivity-flags', createSensitivityFlagsRouter(authMiddleware))
   httpd.use('/nutrient-recommendations', createNutrientRecommendationsRouter(authMiddleware))
   httpd.use('/admin/imports', createImportsRouter(authMiddleware, adminMiddleware, centralDb))
+  httpd.use('/admin/oidc-providers', createAdminOidcRouter(authMiddleware, adminMiddleware, oidc.providers))
+  httpd.use(createOidcRouter(authMiddleware, oidc.service))
   httpd.use('/reports', createReportsRouter(authMiddleware))
   httpd.use('/pharmacology', createPharmacologyRouter(authMiddleware))
   httpd.use(
@@ -289,17 +351,28 @@ export const mountRestRouters = ({
     '/deduction-rules',
     createDeductionRulesRouter(authMiddleware, engineDeps, deductionQueue ?? undefined),
   )
-  httpd.use('/autoshare-rules', createAutoshareRulesRouter(authMiddleware, autosharePreviewDeps))
+  httpd.use(
+    '/autoshare-rules',
+    createAutoshareRulesRouter(authMiddleware, autosharePreviewDeps, skipAutoshare),
+  )
   httpd.use('/locations', createLocationsRouter(authMiddleware, onNamedLocationsChanged))
   httpd.use('/notifications/web-push', createBrowserPushRouter(authMiddleware))
+  httpd.use(
+    '/home-assistant',
+    createHomeAssistantRouter(authMiddleware, { client: homeAssistant, getSettings }),
+  )
   httpd.use(createSettingsRouter(authMiddleware, onHrSettingsChanged, onProfileChanged))
   httpd.use(createAuditLogRouter(authMiddleware))
   httpd.use('/export', createExportRouter({ authMiddleware, ...dataExport }))
-  httpd.use('/account', createAccountRouter(authMiddleware, accountDeleter, accountPlans, centralDb))
+  httpd.use('/account', createAccountRouter(authMiddleware, accountDeleter, accountPlans, accountEmail))
+  httpd.use('/account', createAccountRecoveryRouter(accountRecovery))
   httpd.use(createRawRecordsRouter(authMiddleware))
   httpd.use('/dashboard', createDashboardRouter(authMiddleware))
   httpd.use('/shared-dashboards', createSharedDashboardsRouter(authMiddleware, webHost))
   httpd.use('/shared-exercises', createSharedExercisesRouter(authMiddleware, webHost))
+  httpd.use('/activity-type-catalog', createActivityTypeCatalogRouter(authMiddleware))
+  httpd.use('/exercise-catalog', createExerciseCatalogRouter(authMiddleware))
+  httpd.use('/metric-catalog', createMetricCatalogRouter(authMiddleware))
   httpd.use('/profile', createProfileRouter(authMiddleware, webHost, onProfileChanged))
   // Mount the following, followers and images routers before `/feed` so `/feed/following/*`,
   // `/feed/followers/*` and `/feed/images/*` resolve here and never touch the
@@ -319,6 +392,7 @@ export const mountRestRouters = ({
       webHost,
       reactionActions,
       previewArticle,
+      tagActorHost,
     ),
   )
   httpd.use('/challenges', createChallengesRouter(authMiddleware, webHost, apiBaseUrl, discoverChallenges))
@@ -404,6 +478,7 @@ export const mountRestRouters = ({
   httpd.use('/correlations', createCorrelationsRouter(authMiddleware, syncProvider))
   httpd.use('/tracks', createTracksRouter(authMiddleware))
   httpd.use('/routes', createRoutesRouter(authMiddleware))
+  httpd.use('/segments', createSegmentsRouter(authMiddleware))
   httpd.use('/training-load', createTrainingLoadRouter(authMiddleware))
   httpd.use('/trends', createTrendsRouter(authMiddleware))
   httpd.use('/chart-data', createChartDataRouter(authMiddleware))
@@ -417,7 +492,11 @@ export const mountRestRouters = ({
       adminUsers,
       invitationAuth,
       webHost,
-      gravlRedirectUri(apiBaseUrl),
+      {
+        garmin: garminOAuthRedirectUri(apiBaseUrl),
+        garminPush: garminPushUrl,
+        gravl: gravlRedirectUri(apiBaseUrl),
+      },
       async (username) => (await listUserNames(userDb)).includes(username),
       ouraWebhookManager,
       accountDeleter,
@@ -425,11 +504,22 @@ export const mountRestRouters = ({
       relayActions,
       publicTagActions,
       postUpdateResender,
+      publicTagModeration,
+      adminTestEmail,
     ),
   )
   httpd.use(
     '/webauthn',
-    createWebAuthnRouter({ auth, authMiddleware, centralDb, invitationAuth, userDb, webAuthn }),
+    createWebAuthnRouter({
+      auth,
+      authMiddleware,
+      centralDb,
+      invitationAuth,
+      loginMethods,
+      startEmailVerification,
+      userDb,
+      webAuthn,
+    }),
   )
   httpd.use(createWellKnownRouter(wellKnown))
 }

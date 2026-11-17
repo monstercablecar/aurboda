@@ -1,4 +1,5 @@
 export {
+  blendGroupData,
   CROSS_MERGE_SOURCES,
   findMergedGroupForActivity,
   isSupersedable,
@@ -7,6 +8,8 @@ export {
 } from './merge.ts'
 
 export { backfillSuperseded, materializeSuperseded, rematerializeSupersededOnce } from './supersession.ts'
+
+export { retireSingleLiftTypes, type RetireSingleLiftTypesResult } from './single-lift-types.ts'
 
 export {
   adoptLegacyActivity,
@@ -24,6 +27,7 @@ export {
   restoreEmptyImportTombstone,
   restoreSetlessTombstone,
   rewriteItemValue,
+  setGarminActivitySets,
   softDeleteActivityByExternalId,
   updateActivity,
   updateActivityEndTimeByExternalId,
@@ -37,6 +41,7 @@ export {
   checkActivityConflict,
   type DataFilter,
   findAdjacentActivity,
+  type ActivityFieldValueRow,
   getActivityFieldValues,
   findActivityByExternalId,
   findDeletedActivityByExternalId,
@@ -46,6 +51,7 @@ export {
   getActivitiesExcludingCategories,
   getActivitiesNeedingDetail,
   getActivityById,
+  getGarminActivitiesNeedingSets,
   getActivitySourcesByIds,
   fetchCategoryMap,
   getAllActivityTypeNames,

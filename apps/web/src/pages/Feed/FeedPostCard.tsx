@@ -14,6 +14,7 @@ import { formatDistanceToNow } from 'date-fns'
 
 import { profileTagPath } from '../../components/hashtags'
 import { API_URL } from '../../config'
+import { auth } from '../../state/auth'
 import { renderMarkdown } from '../../utils/markdown'
 import { formatEntryWindow } from './activity-stats'
 import { ActivityStatGrid } from './ActivityStatGrid'
@@ -22,6 +23,7 @@ import { ArticleContent } from './ArticleContent'
 import { ChallengeShareContent } from './ChallengeShareContent'
 import { DashboardShareContent, DashboardShareFallback } from './DashboardShareContent'
 import { ExerciseShareContent, ExerciseShareFallback } from './ExerciseShareContent'
+import { postHeadline } from './post-headline'
 import { postPermalinkPath } from './post-permalink'
 import { postTagLine } from './post-tag-line'
 import {
@@ -104,7 +106,7 @@ const mediaUrls = (
 const ActivityPostBody = ({ post }: { post: FeedPost }) => (
   <div class="feed-post-content">
     <p class="feed-post-title">
-      <strong>{post.activity_title ?? 'Shared activity'}</strong>
+      <strong>{postHeadline(post)}</strong>
     </p>
     {post.message && <p class="feed-post-message">{post.message}</p>}
     {post.activity_start_time && (
@@ -202,9 +204,13 @@ const FeedPostBody = ({ post, visitor }: { post: FeedPost; visitor: boolean }) =
   ) : post.content ? (
     <div class="feed-post-content" dangerouslySetInnerHTML={{ __html: post.content }} />
   ) : (
-    <div class="feed-post-content">{post.activity_title ?? 'Shared activity'}</div>
+    <div class="feed-post-content">{postHeadline(post)}</div>
   )
 }
+
+/** The card's permalink: the signed-in author's own feed links every visibility, a visitor's view only what is public. */
+const cardPermalink = (author: PostAuthor, post: FeedPost, visitor: boolean): string | null =>
+  postPermalinkPath(author.username, post, !visitor && auth.value.user === author.username)
 
 export const FeedPostCard = ({
   post,
@@ -225,7 +231,7 @@ export const FeedPostCard = ({
   const when = formatDistanceToNow(new Date(post.created_at), { addSuffix: true })
   const { chart, route, standings, trend } = mediaUrls(post, author.username)
   const tags = postTagLine(post, visitor)
-  const permalink = linked ? postPermalinkPath(author.username, post) : null
+  const permalink = linked ? cardPermalink(author, post, visitor) : null
   const time = <time title={new Date(post.created_at).toLocaleString()}>{when}</time>
 
   return (

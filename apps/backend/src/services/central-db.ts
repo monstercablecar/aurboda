@@ -1,4 +1,4 @@
-import { NUTRIENT_FIELD_NAMES, type OfficialFeedSetting } from '@aurboda/api-spec'
+import { NUTRIENT_FIELD_NAMES, type OfficialFeedSetting, type SmtpSecurity } from '@aurboda/api-spec'
 /**
  * Uses the shared 'aurboda' database (same as pg-boss queue) for:
  * - Server-wide configuration (signup mode, etc.)
@@ -8,11 +8,23 @@ import pg from 'pg'
 
 import { createRolePool, type Queryable, type UserDb, withTransaction } from '../db/pool.ts'
 import {
+  type AccountEmailTokensApi,
+  createAccountEmailTokensApi,
+  CREATE_ACCOUNT_EMAIL_TOKENS_INDEXES,
+  CREATE_ACCOUNT_EMAIL_TOKENS_TABLE,
+} from './central-account-email-tokens.ts'
+import {
   createDeletedUsernamesApi,
   CREATE_DELETED_USERNAMES_TABLE,
   type DeletedUsernamesApi,
 } from './central-deleted-usernames.ts'
 import {
+  createFederationDeliveryFailuresApi,
+  CREATE_FEDERATION_DELIVERY_FAILURES_TABLE,
+  type FederationDeliveryFailuresApi,
+} from './central-federation-delivery.ts'
+import {
+  ALTER_SHARED_FOOD_ITEMS_COLUMNS,
   createSharedFoodItemsApi,
   CREATE_SHARED_FOOD_ITEMS_INDEXES,
   CREATE_SHARED_FOOD_ITEMS_TABLE,
@@ -31,8 +43,21 @@ import {
   type SharedNutrientRecommendationsApi,
 } from './central-nutrient-recommendations.ts'
 import {
+  createOidcApi,
+  ALTER_OIDC_FLOWS_COLUMNS,
+  CREATE_OIDC_CODES_TABLE,
+  CREATE_OIDC_FLOWS_TABLE,
+  CREATE_OIDC_INDEXES,
+  CREATE_OIDC_LINKS_TABLE,
+  CREATE_OIDC_PROVIDERS_TABLE,
+  type OidcApi,
+} from './central-oidc.ts'
+import {
   createPublicTagsApi,
   CREATE_INSTANCE_TAG_FOLLOWS_TABLE,
+  ADD_PUBLIC_TAG_POSTS_ANNOUNCE_ACTORS,
+  CREATE_PUBLIC_TAG_BLOCKS_TABLE,
+  CREATE_PUBLIC_TAG_HIDDEN_TABLE,
   CREATE_PUBLIC_TAG_POSTS_INDEXES,
   CREATE_PUBLIC_TAG_POSTS_TABLE,
   type PublicTagsApi,
@@ -49,6 +74,7 @@ import {
   type CentralResourcesApi,
 } from './central-resources.ts'
 import {
+  ALTER_USER_ACCOUNTS_LOGIN_COLUMNS,
   ALTER_USER_ACCOUNTS_PLAN_COLUMNS,
   ALTER_USER_ACCOUNTS_PROFILE_COLUMNS,
   createUserAccountsApi,
@@ -72,6 +98,9 @@ export interface ServerSettings {
   contact_fediverse: string
   contact_reddit: string
   default_relays_seeded: boolean
+  garmin_client_id: string
+  garmin_client_secret: string
+  garmin_personal_key_enabled: boolean
   grace_days: number
   gravl_client_id: string
   gravl_client_secret: string
@@ -87,6 +116,12 @@ export interface ServerSettings {
   public_tag_retention_days: number
   sentry_dsn: string
   signup_mode: SignupMode
+  smtp_from: string
+  smtp_host: string
+  smtp_password: string
+  smtp_port: number
+  smtp_security: SmtpSecurity
+  smtp_user: string
   strava_client_id: string
   strava_client_secret: string
   tag_actor_host: string
@@ -155,9 +190,12 @@ export interface CentralDbDeps {
 export interface CentralDb
   extends
     CentralResourcesApi,
+    AccountEmailTokensApi,
     SharedFoodItemsApi,
     CentralImportJobsApi,
     DeletedUsernamesApi,
+    FederationDeliveryFailuresApi,
+    OidcApi,
     PublicTagsApi,
     RelaysApi,
     SharedNutrientRecommendationsApi,
@@ -193,6 +231,14 @@ export interface CentralDb
   getUsernameByStravaAthleteId: (stravaAthleteId: number) => Promise<string | null>
   deleteStravaAthleteMapping: (stravaAthleteId: number) => Promise<boolean>
   deleteStravaAthleteMappingByUsername: (username: string) => Promise<boolean>
+  /**
+   * Map a Garmin user id to an Aurboda user, dropping any other mapping of that user.
+   * Answers the previous owner of the Garmin user id when it was a different user.
+   */
+  upsertGarminUserMapping: (garminUserId: string, username: string) => Promise<string | null>
+  getUsernameByGarminUserId: (garminUserId: string) => Promise<string | null>
+  getGarminUserIdByUsername: (username: string) => Promise<string | null>
+  deleteGarminUserMappingByUsername: (username: string) => Promise<boolean>
   createOAuthClient: (client: Omit<OAuthClient, 'created_at'>) => Promise<void>
   getOAuthClient: (clientId: string) => Promise<OAuthClient | null>
   saveAuthorizationCode: (code: Omit<OAuthAuthorizationCode, 'used'>) => Promise<void>
@@ -298,6 +344,15 @@ const CREATE_OURA_WEBHOOK_SUBSCRIPTIONS_TABLE = `
 const CREATE_STRAVA_ATHLETE_MAPPINGS_TABLE = `
   CREATE TABLE IF NOT EXISTS strava_athlete_mappings (
     strava_athlete_id BIGINT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`
+
+const CREATE_GARMIN_USER_MAPPINGS_TABLE = `
+  CREATE TABLE IF NOT EXISTS garmin_user_mappings (
+    garmin_user_id VARCHAR(255) PRIMARY KEY,
     username VARCHAR(255) NOT NULL UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -466,6 +521,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       await client.query(CREATE_OURA_USER_MAPPINGS_TABLE)
       await client.query(CREATE_OURA_WEBHOOK_SUBSCRIPTIONS_TABLE)
       await client.query(CREATE_STRAVA_ATHLETE_MAPPINGS_TABLE)
+      await client.query(CREATE_GARMIN_USER_MAPPINGS_TABLE)
       await client.query(CREATE_OAUTH_CLIENTS_TABLE)
       await client.query(CREATE_OAUTH_AUTHORIZATION_CODES_TABLE)
       await client.query(CREATE_OAUTH_TOKENS_TABLE)
@@ -491,6 +547,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       await client.query(
         `UPDATE shared_food_items SET default_unit = 'g' WHERE default_unit IS NULL OR default_unit = ''`,
       )
+      for (const stmt of ALTER_SHARED_FOOD_ITEMS_COLUMNS) await client.query(stmt)
       for (const stmt of CREATE_SHARED_FOOD_ITEMS_INDEXES) await client.query(stmt)
       await client.query(CREATE_IMPORT_JOBS_TABLE)
       for (const stmt of CREATE_IMPORT_JOBS_INDEXES) await client.query(stmt)
@@ -498,15 +555,29 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       await client.query(CREATE_USER_ACCOUNTS_TABLE)
       for (const stmt of ALTER_USER_ACCOUNTS_PLAN_COLUMNS) await client.query(stmt)
       for (const stmt of ALTER_USER_ACCOUNTS_PROFILE_COLUMNS) await client.query(stmt)
+      for (const stmt of ALTER_USER_ACCOUNTS_LOGIN_COLUMNS) await client.query(stmt)
+      await client.query(CREATE_ACCOUNT_EMAIL_TOKENS_TABLE)
+      for (const stmt of CREATE_ACCOUNT_EMAIL_TOKENS_INDEXES) await client.query(stmt)
       await client.query(CREATE_DELETED_USERNAMES_TABLE)
       await client.query(CREATE_USER_USAGE_DAILY_TABLE)
       for (const stmt of CREATE_USER_USAGE_DAILY_INDEXES) await client.query(stmt)
 
       await client.query(CREATE_INSTANCE_ACTOR_TABLE)
       await client.query(CREATE_RELAYS_TABLE)
+      await client.query(CREATE_FEDERATION_DELIVERY_FAILURES_TABLE)
       await client.query(CREATE_INSTANCE_TAG_FOLLOWS_TABLE)
       await client.query(CREATE_PUBLIC_TAG_POSTS_TABLE)
+      await client.query(ADD_PUBLIC_TAG_POSTS_ANNOUNCE_ACTORS)
       for (const stmt of CREATE_PUBLIC_TAG_POSTS_INDEXES) await client.query(stmt)
+      await client.query(CREATE_PUBLIC_TAG_HIDDEN_TABLE)
+      await client.query(CREATE_PUBLIC_TAG_BLOCKS_TABLE)
+
+      await client.query(CREATE_OIDC_PROVIDERS_TABLE)
+      await client.query(CREATE_OIDC_LINKS_TABLE)
+      await client.query(CREATE_OIDC_FLOWS_TABLE)
+      for (const stmt of ALTER_OIDC_FLOWS_COLUMNS) await client.query(stmt)
+      await client.query(CREATE_OIDC_CODES_TABLE)
+      for (const stmt of CREATE_OIDC_INDEXES) await client.query(stmt)
 
       await client.query(CREATE_SHARED_NUTRIENT_RECOMMENDATIONS_TABLE)
       await deps.withTransaction((tx) => seedSharedNutrientRecommendations(tx))
@@ -519,9 +590,12 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
     },
 
     ...createCentralResourcesApi(deps),
+    ...createAccountEmailTokensApi(getClient, deps.withTransaction),
     ...createSharedFoodItemsApi(getClient),
     ...createCentralImportJobsApi(getClient),
     ...createDeletedUsernamesApi(getClient, deps.withTransaction),
+    ...createFederationDeliveryFailuresApi(getClient),
+    ...createOidcApi(getClient, deps.withTransaction),
     ...createPublicTagsApi(getClient),
     ...createRelaysApi(getClient),
     ...createSharedNutrientRecommendationsApi(getClient),
@@ -638,6 +712,50 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
     deleteStravaAthleteMappingByUsername: async (username: string): Promise<boolean> => {
       const client = await getClient()
       const result = await client.query('DELETE FROM strava_athlete_mappings WHERE username = $1', [username])
+      return (result.rowCount ?? 0) > 0
+    },
+
+    upsertGarminUserMapping: async (garminUserId: string, username: string): Promise<string | null> =>
+      deps.withTransaction(async (tx) => {
+        const current = await tx.query<{ username: string }>(
+          'SELECT username FROM garmin_user_mappings WHERE garmin_user_id = $1 FOR UPDATE',
+          [garminUserId],
+        )
+        const previous = current.rows[0]?.username ?? null
+        await tx.query('DELETE FROM garmin_user_mappings WHERE username = $1 AND garmin_user_id <> $2', [
+          username,
+          garminUserId,
+        ])
+        await tx.query(
+          `INSERT INTO garmin_user_mappings (garmin_user_id, username, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (garmin_user_id) DO UPDATE SET username = $2, updated_at = NOW()`,
+          [garminUserId, username],
+        )
+        return previous !== null && previous !== username ? previous : null
+      }),
+
+    getUsernameByGarminUserId: async (garminUserId: string): Promise<string | null> => {
+      const client = await getClient()
+      const result = await client.query<{ username: string }>(
+        'SELECT username FROM garmin_user_mappings WHERE garmin_user_id = $1',
+        [garminUserId],
+      )
+      return result.rows[0]?.username ?? null
+    },
+
+    getGarminUserIdByUsername: async (username: string): Promise<string | null> => {
+      const client = await getClient()
+      const result = await client.query<{ garmin_user_id: string }>(
+        'SELECT garmin_user_id FROM garmin_user_mappings WHERE username = $1',
+        [username],
+      )
+      return result.rows[0]?.garmin_user_id ?? null
+    },
+
+    deleteGarminUserMappingByUsername: async (username: string): Promise<boolean> => {
+      const client = await getClient()
+      const result = await client.query('DELETE FROM garmin_user_mappings WHERE username = $1', [username])
       return (result.rowCount ?? 0) > 0
     },
 

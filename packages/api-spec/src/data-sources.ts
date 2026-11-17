@@ -32,7 +32,7 @@ export const dataSources: DataSourceInfo[] = [
     name: 'Android Health Connect',
     doc: 'health-connect.md',
     provides:
-      'Heart rate, HRV, sleep, exercise (80+ types), mindfulness/meditation sessions, steps, weight, SpO2, VO2 max, calories, and more',
+      'Heart rate, HRV, sleep, exercise (60+ types), mindfulness/meditation sessions, steps, weight, SpO2, VO2 max, calories, and more',
     how: 'Push from Android app',
     adminSetup: 'None',
     userSetup: 'Install Android app',
@@ -59,10 +59,11 @@ export const dataSources: DataSourceInfo[] = [
     homepage: 'https://connect.garmin.com/',
     doc: 'garmin.md',
     provides:
-      'Daily summary, HR, HRV, sleep, stress, body battery, activities, SpO2, respiration, training readiness',
-    how: 'Pull (session-based)',
-    adminSetup: 'None',
-    userSetup: 'Garmin credentials',
+      'Daily summary, HR, HRV, sleep, stress, body battery, activities, strength sets, SpO2, respiration, training readiness',
+    how: 'Pull (login session and/or Personal API key); Connect with Garmin (OAuth) for push',
+    adminSetup:
+      'None; Developer Program credentials for Connect with Garmin (Personal API keys can be turned off)',
+    userSetup: 'Connect with Garmin, Garmin credentials, a Personal API key, or any combination',
   },
   {
     name: 'Strava',
@@ -90,6 +91,15 @@ export const dataSources: DataSourceInfo[] = [
     how: 'Push (HTTP mode)',
     adminSetup: 'None',
     userSetup: 'OwnTracks app config',
+  },
+  {
+    name: 'Home Assistant',
+    homepage: 'https://www.home-assistant.io/',
+    doc: 'home-assistant.md',
+    provides: 'GPS locations and zones from the Home Assistant companion app, place visits',
+    how: 'Pull (API)',
+    adminSetup: 'None',
+    userSetup: 'Home Assistant URL, long-lived token, tracker entity',
   },
   {
     name: 'RescueTime',
@@ -157,6 +167,15 @@ export const dataSources: DataSourceInfo[] = [
     how: 'One-shot bulk import (UI button)',
     adminSetup: 'None',
     userSetup: 'Click "Import from Livsmedelsverket" on /food-items',
+  },
+  {
+    name: 'Open Food Facts',
+    homepage: 'https://world.openfoodfacts.org/',
+    doc: 'openfoodfacts.md',
+    provides: 'Branded products by barcode (EAN/UPC): name, brand and nutrients per 100 g',
+    how: 'On demand per barcode, cached 90 days',
+    adminSetup: 'None',
+    userSetup: 'Type or paste a barcode on /food-items or in a meal',
   },
   {
     name: 'Manual Entry',

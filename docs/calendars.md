@@ -17,7 +17,15 @@ Parsed description, location and summary are also retained in `raw_records`. Tim
 
 ## Admin Setup
 
-No server-side configuration is needed.
+No server-side configuration is needed on a public server.
+
+The server fetches each ICS URL a user enters, so by default a URL may only lead to **public** addresses: a URL whose host resolves to a private, loopback or link-local address is refused, and so is a redirect to one. A server on a private network, whose users are trusted with that network, can lift this:
+
+| Variable                           | Description                                                                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `CALENDAR_ALLOW_PRIVATE_ADDRESSES` | `true` lets calendar URLs point at private / loopback addresses, e.g. a Nextcloud or Radicale on the same LAN (`http://nextcloud.lan/…`). |
+
+Leave it unset on a server that is open to people you would not let onto your network.
 
 ## User Setup
 
@@ -52,7 +60,7 @@ Options:
 
 ### Sync Process
 
-1. Fetch ICS data from each configured URL
+1. Fetch ICS data from each configured URL (http or https, following up to 5 redirects, each checked like the URL itself)
 2. Parse events from the ICS feed
 3. Store events as activities and raw records with the calendar source
 4. Each calendar tracks its own sync state independently
@@ -77,3 +85,12 @@ People also offers individual Google Calendar event-template links. Users review
 ## Current importer limits
 
 `parseICalEvents` reads top-level VEVENT start/end values; it does not explicitly expand RRULE recurrence or reconcile removed remote occurrences. Do not assume this importer has the same recurrence semantics as People’s deterministic date projection. See [technical debt](ai/technical-debt.md) before extending it.
+
+## Troubleshooting
+
+| Message                                         | Meaning                                                                                                                                               |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `The calendar address is private …`             | The URL, or a redirect from it, leads to a private or loopback address. Use a public URL, or ask the admin to set `CALENDAR_ALLOW_PRIVATE_ADDRESSES`. |
+| `The calendar URL must use http or https`       | `webcal://` links are https links under another name: replace `webcal://` with `https://`.                                                            |
+| `Failed to fetch ICS: 404 Not Found` (or other) | The calendar host answered with that status. Check the URL; a secret address may have been reset.                                                     |
+| `Failed to fetch ICS (ECONNREFUSED)` (or other) | The host could not be reached from the Aurboda server.                                                                                                |

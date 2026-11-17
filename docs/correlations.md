@@ -19,12 +19,27 @@ series, and the set of days where its status is _known_:
 | kind                                         | resolves from                                          | known days                                       |
 | -------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------ |
 | `tag` / `activity`                           | activities matched by `activity_type` (regex)          | every day in range (absence = no event)          |
-| `metric`                                     | `time_series` entries (avg/sum per day)                | days with ≥1 entry (incl. explicit 0s)           |
+| `metric`                                     | `time_series` entries (avg/sum per day)¹               | days with ≥1 entry (incl. explicit 0s)           |
 | `nutrition`                                  | per-day meal totals (calories/protein/carbs/fat/fiber) | days with a meal **or** marked meal-log-complete |
 | `productivity_category` / `productivity_app` | productivity minutes matched by category/app           | every day in range                               |
+| `sensitivity` (`flag`: a flag id)            | meals per day carrying the sensitivity flag            | days with a meal **or** marked meal-log-complete |
+
+¹ The daily average of an instantaneous-sample metric (heart rate, stress, body
+battery, respiration, SpO2) is time-weighted: per 5-minute bin, then across the
+day's bins (see [Time-weighted averages](data-storage.md#time-weighted-averages)).
 
 `GET /correlations/selectors` (MCP: `list_correlation_selectors`) lists the
-available metrics, tags, activity types, nutrients and productivity categories.
+available metrics, tags, activity types, nutrients, productivity categories and
+sensitivity flags (`sensitivities`: value the flag id, label its name).
+
+A `sensitivity` selector counts the meals carrying the flag, through their food
+items' flags (resolved live) or the meal's own. Its known days are exactly the
+`nutrition` rule: a day with a meal, or one marked meal log completed, is known
+and 0 when no meal carried the flag; any other day is unknown, not 0. Its
+complete days (`nutrition_completeness: "complete_only"`, `n_complete`) are the
+days marked meal log completed. The selector stores the flag id, so a renamed
+flag keeps its correlations; the axis label resolves the name ("Meals with
+gluten (count)"). See [Meal sensitivities](features/correlations.md#meal-sensitivities).
 
 `tag` and `activity` both match `activity_type` by regex and behave identically —
 tags were long ago merged into activities. The API still accepts both for
@@ -68,6 +83,10 @@ How it works:
   - **`base_rate`** — P(a known day is exposed), for comparison.
   - **`relative_risk`** with a 95% CI, **`risk_difference`**, and a **p-value**
     from Pearson's chi-squared (or Fisher's exact test when any expected cell < 5).
+  - **`p_value_adjusted`** — the p-value adjusted over the lags of the analysis
+    (Benjamini–Hochberg, see [Multiple comparisons](#multiple-comparisons));
+    `event_outcome.comparisons` is how many lags were tested. The web marks a lag
+    from the adjusted value.
 
 ### Denominator: `known` vs `all`
 
@@ -153,14 +172,56 @@ known-vs-all days for presence-only _outcomes_).
 `get_hrv_activities_correlation` / `GET /correlations/hrv-activities` summarises
 the autonomic context (mean HRV, heart rate and stress, with baseline deltas)
 around each activity, location and productivity category, and correlates the
-productivity score against an autonomic metric.
+productivity score against HRV, heart rate and stress.
 
-That metric is selectable via `context_metric` — `hrv_rmssd` (default),
-`heart_rate` or `stress_level`. Not everyone records continuous HRV throughout
-the day, so heart rate or stress (which are denser) keep the productivity
-`correlation_coefficient` meaningful. The chosen metric is echoed back as
-`context_metric`; all three means stay in the response regardless. The web
-"HRV context" tab exposes this as a **Context** dropdown.
+Productivity categories carry `correlation_coefficients`: the Pearson r of the
+productivity score with each of `hrv_rmssd`, `heart_rate` and `stress_level`
+(null when fewer than 3 paired values or no variation). Not everyone records
+continuous HRV throughout the day, so heart rate or stress (which are denser)
+often give the meaningful one. The older single `correlation_coefficient` is
+still returned, for the metric named by `context_metric` (request parameter,
+default `hrv_rmssd`, echoed back in the response). The web Context tab does not
+send `context_metric`: it shows r for each metric whose checkbox is on (HRV,
+Heart rate, Stress, and any extra metric below).
+
+## Other metrics (extras)
+
+Besides HRV, heart rate and stress, the same before/during/after analysis runs
+on up to 4 other metrics, named in `metrics` (REST: a comma list,
+`metrics=body_battery,respiratory_rate`; MCP: an array). Each is fetched, binned
+to 5 minutes and summarised exactly like the three. The three keep their own
+fields; the extras come back in maps keyed by metric name, and only when
+`metrics` is given, so a request without it gets the same response as before:
+
+- `hrv-activities`: every row has `metrics.<name>` with `mean`, `stddev`
+  (during), `delta_from_baseline` and `effect`; productivity rows also
+  `correlation_coefficient` (r of the productivity score with that metric). The
+  top-level `metric_baselines.<name>` is the period average.
+- `activity-impact`: `metric_effects.<name>` and, on each `timeline` bucket,
+  `metrics.<name>`.
+
+More than 4 names, a name that is not a metric name (`[a-z][a-z0-9_]*`, at most
+50 characters), one of the three always analysed (`hrv_rmssd`, `heart_rate`,
+`stress_level`, or their result keys `hrv`, `hr`, `stress`), or a cumulative
+metric (`steps`, `distance`, `floors_climbed`, `calories_active`,
+`calories_total`: a 5-minute mean of a running total means nothing) is a 400
+(an error from the MCP tools). An unknown or sparse metric is
+accepted and comes back with nulls.
+
+`GET /correlations/impact-metrics?period_days=30` (MCP `get_impact_metrics`)
+lists the candidates: every metric, built-in or custom, that is not cumulative
+and not one of the three, and that is recorded around the clock, so there is
+data before and after a session. The rule is coverage, not sample count: data on
+at least 3 days of the period, and on the days that have data a median of at
+least 48 covered quarter hours (15-minute slots, epoch-aligned, with at least
+one sample; 48 is half of the day), counted per UTC day over all sources. A
+metric recorded only during workouts or sleep (often respiration rate) can have
+thousands of samples a day yet leave every before/after window empty, so it
+does not qualify; nor do daily values (resting heart rate, sleep scores, most
+manual logs). Each is `{ metric, label, unit, coverage_hours_per_day,
+samples_per_day }` (medians over the days with data; coverage is the quarter
+hours divided by 4), sorted by coverage, then samples. A custom metric's label
+is its name in words, never its description.
 
 ## Context analysis (Analyze → context tab)
 
@@ -190,6 +251,10 @@ How the numbers are made:
   samples. Everything downstream reads bins, so a densely recorded stretch (1 Hz
   heart rate during a workout) weighs the same per minute as a sparse one. The
   period average (`baseline`) is the mean over the bins inside the period.
+  Activity impact bins in the database (`getBinnedTimeSeries`), so a request
+  reads about 26 000 bins per metric for 90 days rather than every raw point;
+  the overview bins in Node (`binSeries`), since its productivity correlation
+  needs the raw points. Both bin by the same rule, which a test pins.
 - **Series reach past the period.** The three series are fetched from
   `start − W` to `end + W`, so the first and last sessions of the period get
   full windows. Activities, visits and productivity are still taken from the
@@ -222,8 +287,10 @@ How the numbers are made:
   (= `after_mean − before_mean`, the mean of per-session differences),
   `change_stddev`, and `p_value` from a paired t-test
   (`t = mean_d / (sd_d / √n)` on `n − 1` df). `p_value` is null with fewer than
-  3 pairs or when every difference is the same. The web page colours a change
-  only when `p_value < 0.05`.
+  3 pairs or when every difference is the same. `p_value_adjusted` is that
+  p-value adjusted over every change in the same response (see
+  [Multiple comparisons](#multiple-comparisons)), and the web page colours a
+  change only when `p_value_adjusted < 0.05`.
 
 Caveats: occurrences close in time are not independent, so the p-value is
 optimistic; and a window that crosses a time of day picks up the daily rhythm
@@ -234,15 +301,26 @@ is no time-of-day correction.
 
 API:
 
-- `GET /correlations/hrv-activities?period_days=30&context_metric=hrv_rmssd&window_minutes=30`
+- `GET /correlations/hrv-activities?period_days=30&window_minutes=30`
   and MCP `get_hrv_activities_correlation` (`window_minutes`, 10–1440, default
-  30). The response echoes `window_minutes`.
+  30; `metrics`, see [Other metrics](#other-metrics-extras)). The response
+  echoes `window_minutes`. Productivity rows carry
+  `correlation_coefficients` (r per metric); the optional `context_metric`
+  only picks which of them fills the legacy `correlation_coefficient`.
+  An activity type's row counts its own activities and those of every subtype
+  (a type whose `parent_type` chain reaches it, at any depth), merged into
+  sessions together, so the same session logged under parent and subtype is one
+  occurrence. A parent row exists even when only its subtypes were logged, and
+  then carries `includes_subtypes`: the contributing subtype names, sorted. Rows
+  that count only their own type omit it. Subtype rows are unchanged.
 - `GET /correlations/activity-impact/:activity?activity_type=activity_type&period_days=30&window_minutes=30&match=exact`
-  and MCP `get_activity_impact` (`window_minutes`, `match`). `match` is
+  and MCP `get_activity_impact` (`window_minutes`, `match`, `metrics`). `match` is
   `contains` (default: every name containing `activity`, case-insensitive) or
-  `exact` (the grouping key the context table uses). `timeline` is an ordered
+  `exact` (the grouping key the context table uses). For `activity_type` and
+  `tag`, an activity also matches when any ancestor of its type matches the same
+  rule, so the parent counts as many occurrences as its table row. `timeline` is an ordered
   array of buckets, `{ phase, start_offset_minutes, end_offset_minutes, hrv, hr,
-stress }`: the before buckets oldest first, then `during`, then the after
+  stress }`: the before buckets oldest first, then `during`, then the after
   buckets. Offsets of before buckets are relative to the session start
   (negative, e.g. `-240 … -180`), offsets of after buckets relative to the
   session end, and `during` has both offsets `0`. So `window_minutes=240` gives
@@ -255,6 +333,162 @@ stress }`: the before buckets oldest first, then `during`, then the after
   days: `start` inclusive, `end` exclusive. One without the other, or a `start`
   not before `end`, is a 400 (an error from the MCP tool). An article's impact
   block uses this with `match=exact` and its own window.
+- `GET /correlations/impact-metrics?period_days=30` and MCP
+  `get_impact_metrics`: the metrics dense enough to pass as `metrics`.
+
+`period_days`, on these and on every other correlation route and tool
+(`event-probability`, `generic`, `continuous`), is a whole number of days from
+1 to 3650; anything else is a 400 (an error from the MCP tools).
+
+### Breaking down and filtering an activity's impact
+
+`GET /correlations/activity-impact/:activity` and MCP `get_activity_impact` can
+split the sessions into groups along one **dimension** (`breakdown`), keep only
+some of them (`filters`), and list what can be split by (`include_dimensions`).
+Everything is opt-in: without these parameters the response is what it was,
+plus `total_occurrences`.
+
+Sessions and their windows are formed first, over every matching occurrence,
+exactly as above. Groups and filters then only **select among those sessions**:
+a session left out by a filter, or in another group, still clips its
+neighbours' before and after windows. A selection is analysed exactly like the
+whole (effects, timeline, legacy `*_timeline`).
+
+Dimensions:
+
+- **`duration`**: the merged session's length in minutes, in buckets cut at the
+  `duration_buckets` limits (default `15,30,60`; 1–6 ascending whole minutes,
+  1–1440). Keys `0-15`, `15-30`, `30-60`, `60-`; a bucket holds
+  `min ≤ minutes < max`.
+- **`time_of_day`**: the local clock time the session starts at, in `tz` (REST
+  parameter, MCP tool timezone; default the user's device timezone), daylight
+  saving included. `time_buckets` (default `0,6,12,18`; 1–6 ascending whole
+  hours, 0–23) cut the 24-hour circle, the last bucket wrapping to the first:
+  `6,22` gives `6-22` and `22-6`. One limit is one bucket covering the day.
+- **`sleep`**: whether an activity of type `sleep` or `nap` (or a subtype)
+  overlaps the full window before (`[start − W, start]`) or after
+  (`[end, end + W]`) by at least 5 minutes. Keys `none`, `before`, `after`,
+  `both`. The analysed occurrences never count as sleep. Sleep is looked for
+  from a day and a window before the period to a window after it.
+- **`type`**: the activity type of the session's occurrences, so a parent's
+  sessions split by subtype (and the parent itself). A merged session with two
+  types counts under each. Labels are the types' display names. Listed only for
+  `activity_type` and `tag`.
+- **`year`**: the four-digit calendar year the session starts in, in `tz`
+  (`2024`). Mostly useful with a long `period_days`.
+- For `activity_type=meal_sensitivity` (meals carrying a sensitivity flag, each
+  a point occurrence at the meal's time) only `time_of_day`, `sleep` and `year`
+  are listed; a meal has no length and no data fields.
+- **`field:<path>`**: a data field of the activity type, a scalar
+  (`field:session_name`) or an item of a list field (`field:sets.exercise`,
+  grouped by normalized value as the sessions view groups them). The key is the
+  value; a session without one is `(none)`. A merged session with several
+  distinct values is counted under each of them, so group counts can add up to
+  more than `occurrences`. Fields are read only for `activity_type=activity_type`;
+  for other kinds every session is `(none)`.
+
+`filters` (REST) is one string: filters separated by `;`, each
+`<dimension>:<key>,<key>` with every key URL-encoded (a field dimension's own
+colon belongs to the dimension), then the whole parameter URL-encoded again as
+usual. A session passes a filter when it has any of its keys and must pass every
+filter; the same dimension twice merges its keys. Over MCP `filters` is an array
+of `{ dimension, keys }`. Bad bucket limits or a malformed filter string are a
+400 (an error from the MCP tool). For example, yoga sessions under 30 minutes
+without sleep around them, broken down by session name:
+
+```
+GET /correlations/activity-impact/yoga?activity_type=activity_type&match=exact
+    &breakdown=field:session_name
+    &filters=duration%3A0-15%2C15-30%3Bsleep%3Anone
+```
+
+The response adds:
+
+- `total_occurrences`: sessions before filters; `occurrences`,
+  `avg_duration_min`, the effects and timelines describe the ones kept.
+- `breakdown` (with `breakdown`): `{ dimension, label, groups, omitted_groups }`,
+  each group `{ key, label, occurrences, avg_duration_min, hr_effect,
+  hrv_effect, stress_effect, metric_effects?, timeline }` over the kept
+  sessions in that group. Only non-empty groups are listed, at most 12 (for a
+  field, `(none)` is kept and counts toward the 12); the rest are counted in
+  `omitted_groups`.
+- `dimensions` (with `include_dimensions=true`): `duration`, `time_of_day`,
+  `sleep`, `type` and `year` (these two only with at least two groups; a
+  request for them is still answered), then, for `activity_type=activity_type` when a type named `activity` has a data schema, each categorical
+  scalar field and categorical list-item field. Each lists its groups with
+  `occurrences` counted **before** filters, so the counts stay put while filters
+  change: every bucket for duration and time of day, the non-empty groups
+  otherwise, at most 50 (`omitted_groups` for the rest).
+
+Group order: duration and time buckets in limit order; sleep as none, before,
+after, both; types and field values by session count, then name, `(none)`
+last; years ascending.
+
+Caution: the more groups, the fewer sessions each holds, and among many small
+groups a few will show a "clear" change (p < 0.05) by chance alone. The adjusted
+p-value (see [Multiple comparisons](#multiple-comparisons)) takes the number of
+groups into account, but a lone striking group is still a hint to check over a
+longer period, not a finding.
+
+## Multiple comparisons
+
+A table of results is many tests at once: at p < 0.05, about one in twenty
+comparisons passes by chance even when nothing is going on. Wherever one response
+carries several tests, each p-value comes with a **Benjamini–Hochberg** adjusted
+one, computed over the tests of that response, and the response says how many
+there are:
+
+| Response                                              | Family                                                                         | Count                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------- |
+| Context tables (`/correlations/hrv-activities`)       | every paired change with a p-value: all rows of all three tables, every metric | `comparisons`               |
+| Activity impact (`/correlations/activity-impact/...`) | the paired changes of the whole and of every breakdown group, every metric     | `comparisons`               |
+| Generic correlation with an event outcome             | the lag windows                                                                | `event_outcome.comparisons` |
+
+`p_value` stays the raw p of the one test; `p_value_adjusted` is the one to compare
+with 0.05. Benjamini–Hochberg controls the false-discovery rate: among the results
+called notable at adjusted p < 0.05, about 5 % or fewer are expected to be chance.
+It was chosen over Bonferroni, which controls the chance of even one false finding
+and would hide nearly every real effect in a table of dozens of rows; it is also
+robust to the positive correlation between rows built from the same days.
+The family is the response, so the same activity's change can be notable in its own
+impact chart (a few comparisons) and not in the context table (many). Comparisons
+with too few pairs to test (fewer than 3) get no p-value and do not count. The
+continuous analysis (Pearson, Spearman, Welch, Mann–Whitney) tests one hypothesis
+several ways and is not adjusted.
+
+## Flagged windows (`exclude_from_baseline`)
+
+Some stretches diverge from everyday life in every way at once: a festival, a retreat, a family
+gathering. Food, sleep timing, social load, alcohol and exercise all change together, and treated as
+ordinary days they pollute every baseline and correlation. An activity whose `data` holds
+`exclude_from_baseline: true` (whatever its type; a `gathering` type with that field in its
+`data_schema` is one way to set it) flags its span `[start_time, end_time)` as such a window. An
+activity without an end flags nothing.
+
+The analyses leave the flagged windows out by default. One shared helper reads the flagged activities
+overlapping the analysed range once per query (`services/flagged-windows.ts`), and each analysis drops
+its own inputs:
+
+| Analysis               | REST / MCP                                                           | What is left out                                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Baseline               | `GET /correlations/baseline`, `get_baseline`                         | HRV, resting HR and stress samples inside a window                                                                                                                                         |
+| HRV context            | `GET /correlations/hrv-activities`, `get_hrv_activities_correlation` | samples inside a window, and the activities, place visits and app spans starting in one                                                                                                    |
+| Activity impact        | `GET /correlations/activity-impact/:activity`, `get_activity_impact` | the 5-minute bins and the occurrences starting in a window                                                                                                                                 |
+| Generic correlation    | `POST /correlations/generic`, `get_generic_correlation`              | activities, app spans and metric samples in a window, and the days a window overlaps (from the baseline days and the compound-trigger days; for an `event` outcome from the analysed days) |
+| Continuous correlation | `POST /correlations/continuous`, `get_metric_correlation`            | the UTC days a window overlaps, on either side of a pair                                                                                                                                   |
+| Metric trend           | `GET /trends`, `get_trend` (`source_type: metric`)                   | samples inside a window; a day left without samples is skipped rather than counted as zero                                                                                                 |
+
+Each takes `include_flagged` (default false) to keep the windows, for studying them themselves. When a
+window overlaps the analysed range, the response carries `flagged_exclusion`: the `windows` (activity
+id and type, start and end), and `excluded_points` (samples, bins, activities, visits and app spans
+left out) or `excluded_days` (days left out of a per-day analysis), or both. Stored samples are counted
+from every source.
+
+Raw views keep the windows. `GET /metrics/bucketed` and `query_metrics_bucketed` take the opt-in
+`exclude_flagged` instead, and the daily summary shows the flagged activity and everything during it as
+usual: it describes the day rather than analysing it. Activity-type, screentime and measure trends,
+event probability, goals, and the shared dashboards, articles and feed posts that compute an analysis
+on the server keep the windows too.
 
 ## Statistics notes
 
@@ -271,6 +505,11 @@ stress }`: the before buckets oldest first, then `during`, then the after
 - `pearson_p` is the two-sided significance of the Pearson r via the t-transform
   `t = r·√((n−2)/(1−r²))` on `n−2` df; null with fewer than 3 pairs, 0 for a
   perfect correlation.
+- A `metric` outcome of `get_generic_correlation` (`POST /correlations/generic`)
+  pools the samples after each trigger and on the baseline days. For a
+  time-weighted metric they are averaged per 5-minute bin first, so the mean and
+  `stddev` are over bins (`bin_count`), while `sample_count` stays the raw
+  sample count (see [Time-weighted averages](data-storage.md#time-weighted-averages)).
 
 ## Performance
 

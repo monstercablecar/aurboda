@@ -3,8 +3,7 @@
  * links to the full chart page only when an `href` is supplied (home dashboard).
  */
 
-import type { BarChartConfig, BarChartData } from '@aurboda/api-spec'
-
+import { type BarChartConfig, type BarChartData, muscleGroupFilter } from '@aurboda/api-spec'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'preact/hooks'
 
@@ -13,7 +12,7 @@ import { CHART_PRIMARY } from '../../theme'
 import { widgetRange } from '../../utils/chart-range'
 import { buildChartUrl, type ChartOrigin } from '../../utils/chart-url'
 import { BarChart } from '../charts/BarChart'
-import { BreakdownLegend, SERIES_COLORS } from '../charts/breakdown'
+import { BreakdownLegend, breakdownBarSeries } from '../charts/breakdown'
 import { barsFetchParams } from './chartFetchParams'
 import { measureChartTitle } from './chartTitle'
 import { HEAVY_QUERY_OPTIONS } from './heavyQuery'
@@ -34,17 +33,7 @@ export function BarChartView({ config, data, href }: BarChartViewProps) {
   const breakdownSeries = data?.breakdown_series
   const breakdownBuckets = data?.breakdown_buckets
   const multiSeries = useMemo(
-    () =>
-      breakdownSeries && breakdownSeries.length > 0 && breakdownBuckets
-        ? breakdownSeries.map((name, i) => ({
-            color: SERIES_COLORS[i % SERIES_COLORS.length],
-            data: breakdownBuckets.map((b) => ({
-              bucket_start: b.bucket_start,
-              value: b.series[name] ?? 0,
-            })),
-            name,
-          }))
-        : null,
+    () => breakdownBarSeries(breakdownSeries, breakdownBuckets),
     [breakdownSeries, breakdownBuckets],
   )
 
@@ -54,10 +43,21 @@ export function BarChartView({ config, data, href }: BarChartViewProps) {
       {breakdownSeries && multiSeries ? (
         <>
           <BreakdownLegend series={breakdownSeries} />
-          <BarChart data={NO_BUCKETS} height={200} multiSeries={multiSeries} />
+          <BarChart
+            data={NO_BUCKETS}
+            height={200}
+            bucketSize={bucket_size}
+            multiSeries={multiSeries}
+            stacked={muscleGroupFilter(config.filter_field, config.filter_value) !== undefined}
+          />
         </>
       ) : (
-        <BarChart data={data?.buckets ?? NO_BUCKETS} color={CHART_PRIMARY} height={200} />
+        <BarChart
+          data={data?.buckets ?? NO_BUCKETS}
+          color={CHART_PRIMARY}
+          height={200}
+          bucketSize={bucket_size}
+        />
       )}
     </>
   )

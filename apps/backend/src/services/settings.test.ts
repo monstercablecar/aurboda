@@ -13,11 +13,14 @@ import {
   hrZonesFromSettings,
   type HrZoneThresholds,
   lowHrCeiling,
+  normalizeHomeAssistantUrl,
   setTagMapping,
+  shouldClearHomeAssistantToken,
   validateAndUpdateSettings,
 } from './settings.ts'
 
 vi.mock('../db', () => ({
+  getAllSyncStates: vi.fn().mockResolvedValue([]),
   getGoals: vi.fn().mockResolvedValue([]),
   getOAuthToken: vi.fn(),
   getUserSettings: vi.fn(),
@@ -129,6 +132,7 @@ describe('getSettingsResponse', () => {
     expect(result.oura_connected).toBe(false)
     expect(result.rescue_time_key).toBeNull()
     expect(result.maf_hr).toBeNull()
+    expect(result.sleep_need_minutes).toBe(480)
   })
 
   test('passes a stored maf_hr through', async () => {
@@ -165,6 +169,20 @@ describe('getSettingsResponse', () => {
     expect(result.onboarding_dismissed_at).toBe('2026-11-01T10:00:00.000Z')
     expect(result.onboarding_manual_done).toEqual(['ask_ai'])
     expect(result.onboarding_progress).toEqual({ work: 'completed', people: 'skipped' })
+  })
+
+  test('defaults the timeline daily metrics to resting heart rate and passes a stored pick through', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValueOnce(null)
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    expect((await getSettingsResponse('testuser')).timeline_daily_metrics).toEqual(['resting_heart_rate'])
+
+    vi.mocked(db.getUserSettings).mockResolvedValueOnce({
+      timeline_daily_metrics: ['steps', 'sleep_duration'],
+    })
+    expect((await getSettingsResponse('testuser')).timeline_daily_metrics).toEqual([
+      'steps',
+      'sleep_duration',
+    ])
   })
 
   test('returns formatted response with custom zones', async () => {
@@ -208,6 +226,7 @@ describe('getSettingsResponse derived fields', () => {
     vi.mocked(db.getGoals).mockResolvedValue([])
     const tokens: Record<string, { access_token: string; provider: string } | null> = {
       garmin: { access_token: '', provider: 'garmin' },
+      garmin_oauth: null,
       gravl: { access_token: 'oauth-token', provider: 'gravl' },
       oura: { access_token: 'o', provider: 'oura' },
       strava: { access_token: 's', provider: 'strava' },
@@ -245,6 +264,115 @@ describe('getSettingsResponse derived fields', () => {
     expect(result.gravl_connection).toBe('token')
     expect(result.gravl_configured).toBe(false)
     expect(result.lastfm_configured).toBe(false)
+  })
+
+  test('reports a Garmin key alone as connected, with its expiry and no session', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    vi.mocked(db.getOAuthToken).mockImplementation(async (_user, provider) =>
+      provider === 'garmin_personal'
+        ? ({
+            access_token: '',
+            expires_at: new Date('2027-03-01T00:00:00Z'),
+            provider,
+            refresh_token: 'fake-key',
+          } as never)
+        : null,
+    )
+
+    const result = await getSettingsResponse('testuser')
+
+    expect(result).toMatchObject({
+      garmin_connected: true,
+      garmin_personal_key: { available: true, connected: true, expires_at: '2027-03-01', refused: false },
+      garmin_session_connected: false,
+    })
+  })
+
+  test('reports a refused key, a session, and the admin switch turned off', async () => {
+    central.getServerSetting.mockImplementation(async (key: string) =>
+      key === 'garmin_personal_key_enabled' ? (false as never) : null,
+    )
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    vi.mocked(db.getOAuthToken).mockImplementation(async (_user, provider) =>
+      provider === 'garmin_personal'
+        ? ({
+            access_token: '',
+            expires_at: new Date('2027-03-01T00:00:00Z'),
+            provider,
+            refresh_token: 'fake-key',
+            refused_at: new Date(),
+          } as never)
+        : ({ access_token: 'session', provider } as never),
+    )
+
+    const result = await getSettingsResponse('testuser')
+
+    expect(result).toMatchObject({
+      garmin_connected: true,
+      garmin_personal_key: { available: false, connected: true, expires_at: '2027-03-01', refused: true },
+      garmin_session_connected: true,
+    })
+  })
+
+  test('reports Connect with Garmin with its permissions, and counts it as connected', async () => {
+    central.getServerSetting.mockImplementation(async (key: string) =>
+      key === 'garmin_client_id' || key === 'garmin_client_secret' ? 'fake-value' : null,
+    )
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    vi.mocked(db.getOAuthToken).mockImplementation(async (_user, provider) =>
+      provider === 'garmin_oauth'
+        ? ({ access_token: 'fake-access', provider, scopes: ['HEALTH_EXPORT', 'ACTIVITY_EXPORT'] } as never)
+        : null,
+    )
+
+    const result = await getSettingsResponse('testuser')
+
+    expect(result).toMatchObject({
+      garmin_connected: true,
+      garmin_oauth: {
+        available: true,
+        connected: true,
+        last_received_at: null,
+        needs_reconnect: false,
+        permissions: ['HEALTH_EXPORT', 'ACTIVITY_EXPORT'],
+      },
+      garmin_session_connected: false,
+    })
+  })
+
+  test('reports a refused Connect with Garmin grant as needing a reconnect, unavailable without credentials', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    vi.mocked(db.getOAuthToken).mockImplementation(async (_user, provider) =>
+      provider === 'garmin_oauth'
+        ? ({ access_token: 'fake-access', provider, refused_at: new Date(), scopes: [] } as never)
+        : null,
+    )
+
+    const result = await getSettingsResponse('testuser')
+
+    expect(result.garmin_oauth).toEqual({
+      available: false,
+      connected: true,
+      last_received_at: null,
+      needs_reconnect: true,
+      permissions: [],
+    })
+  })
+
+  test('reports when Garmin last pushed data, from the newest garmin_push sync state', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    const provider = 'garmin_push'
+    vi.mocked(db.getAllSyncStates).mockResolvedValueOnce([
+      { data_type: 'dailies', last_sync_time: new Date('2026-11-16T08:00:00Z'), provider, status: 'idle' },
+      { data_type: 'sleeps', last_sync_time: new Date('2026-11-17T06:30:00Z'), provider, status: 'idle' },
+      { data_type: 'hrv', provider, status: 'idle' },
+    ])
+
+    const result = await getSettingsResponse('testuser')
+
+    expect(db.getAllSyncStates).toHaveBeenCalledWith('testuser', 'garmin_push')
+    expect(result.garmin_oauth.last_received_at).toBe('2026-11-17T06:30:00.000Z')
   })
 
   test('reports no Gravl connection without a grant or a pasted token', async () => {
@@ -395,6 +523,38 @@ describe('validateAndUpdateSettings', () => {
 
     await validateAndUpdateSettings('testuser', { maf_hr: null })
     expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['maf_hr'])
+  })
+
+  test('stores the timeline daily metrics and resets them to the default with null', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue({})
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({})
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+
+    await validateAndUpdateSettings('testuser', { timeline_daily_metrics: ['hrv_rmssd', 'weight'] })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith(
+      'testuser',
+      { timeline_daily_metrics: ['hrv_rmssd', 'weight'] },
+      [],
+    )
+
+    await validateAndUpdateSettings('testuser', { timeline_daily_metrics: [] })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', { timeline_daily_metrics: [] }, [])
+
+    await validateAndUpdateSettings('testuser', { timeline_daily_metrics: null })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['timeline_daily_metrics'])
+  })
+
+  test.each([
+    ['a metric outside the five', { timeline_daily_metrics: ['heart_rate'] }],
+    ['a repeated metric', { timeline_daily_metrics: ['steps', 'steps'] }],
+  ])('rejects timeline daily metrics with %s', async (_label, input) => {
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    vi.mocked(db.upsertUserSettings).mockClear()
+
+    const result = await validateAndUpdateSettings('testuser', input)
+
+    expect(result.success).toBe(false)
+    expect(db.upsertUserSettings).not.toHaveBeenCalled()
   })
 
   test('stores the get-started guide dismissal and manual steps, and clears them with null', async () => {
@@ -562,6 +722,26 @@ describe('validateAndUpdateSettings', () => {
     expect(onProfileChanged).not.toHaveBeenCalled()
   })
 
+  test('stores sleep_need_minutes and resets it to the default with null', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue({})
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({})
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+
+    await validateAndUpdateSettings('testuser', { sleep_need_minutes: 450 })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith('testuser', { sleep_need_minutes: 450 }, [])
+
+    await validateAndUpdateSettings('testuser', { sleep_need_minutes: null })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['sleep_need_minutes'])
+  })
+
+  test.each([120, 800, 450.5])('rejects a sleep_need_minutes of %s', async (value) => {
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+
+    const result = await validateAndUpdateSettings('testuser', { sleep_need_minutes: value })
+
+    expect(result.success).toBe(false)
+  })
+
   test('rejects a maf_hr out of range', async () => {
     vi.mocked(db.getOAuthToken).mockResolvedValue(null)
 
@@ -589,6 +769,23 @@ describe('validateAndUpdateSettings', () => {
     expect(result.success).toBe(false)
     expect(result.error).toBeDefined()
     expect(db.upsertUserSettings).not.toHaveBeenCalled()
+  })
+
+  test('a rejected update still reports whether Connect with Garmin is available', async () => {
+    central.getServerSetting.mockImplementation(async (key: string) =>
+      key === 'garmin_client_id' || key === 'garmin_client_secret' ? 'fake-value' : null,
+    )
+    const result = await validateAndUpdateSettings('testuser', { birth_date: '15-03-1985' })
+
+    expect(result.success).toBe(false)
+    expect(result.garmin_oauth).toEqual({
+      available: true,
+      connected: false,
+      last_received_at: null,
+      needs_reconnect: false,
+      permissions: [],
+    })
+    central.getServerSetting.mockImplementation(async () => null)
   })
 
   test('rejects invalid date', async () => {
@@ -1034,5 +1231,116 @@ describe('computeHrZoneSecs', () => {
 
     expect(result[0]).toBe(2) // First sample below zone 1
     expect(result[1]).toBe(4) // Two samples in zone 1
+  })
+})
+
+describe('Home Assistant settings', () => {
+  const TOKEN = 'ha-long-lived-token-xyz'
+  const stored = {
+    home_assistant_entity_id: 'device_tracker.pixel_8',
+    home_assistant_token: TOKEN,
+    home_assistant_url: 'https://ha.example.org',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({})
+  })
+
+  test('the response never carries the token, only whether one is set', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(stored)
+    const result = await getSettingsResponse('testuser')
+    expect(JSON.stringify(result)).not.toContain(TOKEN)
+    expect(result).toMatchObject({
+      home_assistant_entity_id: 'device_tracker.pixel_8',
+      home_assistant_token_set: true,
+      home_assistant_url: 'https://ha.example.org',
+    })
+    expect(result).not.toHaveProperty('home_assistant_token')
+  })
+
+  test('home_assistant_token_set is false without a token', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(null)
+    const result = await getSettingsResponse('testuser')
+    expect(result.home_assistant_token_set).toBe(false)
+    expect(result.home_assistant_url).toBeNull()
+  })
+
+  test('normalizeHomeAssistantUrl drops trailing slashes', () => {
+    expect(normalizeHomeAssistantUrl('https://ha.example.org/')).toBe('https://ha.example.org')
+    expect(normalizeHomeAssistantUrl('https://ha.example.org:8123/ha//')).toBe(
+      'https://ha.example.org:8123/ha',
+    )
+  })
+
+  test.each([
+    ['another origin', { home_assistant_url: 'https://evil.example.com' }, true],
+    ['another port', { home_assistant_url: 'https://ha.example.org:8443' }, true],
+    ['a cleared URL', { home_assistant_url: null }, true],
+    ['only the path', { home_assistant_url: 'https://ha.example.org/ha' }, false],
+    ['a trailing slash', { home_assistant_url: 'https://ha.example.org/' }, false],
+    [
+      'a new token with the move',
+      { home_assistant_token: 'new', home_assistant_url: 'https://evil.example.com' },
+      false,
+    ],
+    ['an untouched URL', { home_assistant_entity_id: 'person.me' }, false],
+  ])('shouldClearHomeAssistantToken: %s → %s', (_label, data, expected) => {
+    expect(shouldClearHomeAssistantToken(stored, data)).toBe(expected)
+  })
+
+  test('shouldClearHomeAssistantToken: nothing to clear without a stored token', () => {
+    expect(shouldClearHomeAssistantToken({}, { home_assistant_url: 'https://ha.example.org' })).toBe(false)
+  })
+
+  test('moving the URL to another origin clears the stored token', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(stored)
+    await validateAndUpdateSettings('testuser', { home_assistant_url: 'https://evil.example.com/' })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith(
+      'testuser',
+      { home_assistant_url: 'https://evil.example.com' },
+      ['home_assistant_token'],
+    )
+  })
+
+  test('changing only the path keeps the token and normalises the trailing slash', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(stored)
+    await validateAndUpdateSettings('testuser', { home_assistant_url: 'https://ha.example.org/ha/' })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith(
+      'testuser',
+      { home_assistant_url: 'https://ha.example.org/ha' },
+      [],
+    )
+  })
+
+  test('a new token in the same update is kept', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(stored)
+    await validateAndUpdateSettings('testuser', {
+      home_assistant_token: 'fresh',
+      home_assistant_url: 'https://other.example.org',
+    })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith(
+      'testuser',
+      { home_assistant_token: 'fresh', home_assistant_url: 'https://other.example.org' },
+      [],
+    )
+  })
+
+  test('clearing the URL clears the token with it', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue(stored)
+    await validateAndUpdateSettings('testuser', { home_assistant_url: null })
+    expect(db.upsertUserSettings).toHaveBeenCalledWith('testuser', {}, [
+      'home_assistant_url',
+      'home_assistant_token',
+    ])
+  })
+
+  test('rejects a URL with credentials, query or another scheme', async () => {
+    for (const url of ['https://u:p@ha.example.org', 'https://ha.example.org/?x=1', 'ftp://ha.example.org']) {
+      const result = await validateAndUpdateSettings('testuser', { home_assistant_url: url })
+      expect(result.success).toBe(false)
+    }
+    expect(db.upsertUserSettings).not.toHaveBeenCalled()
   })
 })

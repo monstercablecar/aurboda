@@ -30,27 +30,23 @@ describe('pharmacology display helpers', () => {
 
   test('summarizes all recurrence shapes', () => {
     expect(scheduleSummary({ type: 'daily' })).toBe('Every day')
-    expect(scheduleSummary({ type: 'weekdays', weekdays: [1, 3, 5] })).toBe(
-      'Monday, Wednesday, Friday',
-    )
+    expect(scheduleSummary({ type: 'weekdays', weekdays: [1, 3, 5] })).toBe('Monday, Wednesday, Friday')
     expect(scheduleSummary({ anchor_date: '2026-01-01', interval_days: 2, type: 'every_n_days' })).toBe(
       'Every 2 days from 2026-01-01',
     )
     expect(scheduleSummary({ type: 'weekly', weekday: 7 })).toBe('Every Sunday')
     expect(scheduleSummary({ day_of_month: 12, type: 'monthly' })).toBe('Monthly on day 12')
     expect(scheduleSummary({ date: '2026-11-09', type: 'specific_date' })).toBe('On 2026-11-09')
-    expect(
-      scheduleSummary({ anchor_at: '2026-11-09T10:00:00Z', interval_hours: 8, type: 'interval' }),
-    ).toBe('Every 8 hours')
+    expect(scheduleSummary({ anchor_at: '2026-11-09T10:00:00Z', interval_hours: 8, type: 'interval' })).toBe(
+      'Every 8 hours',
+    )
     expect(scheduleSummary({ type: 'as_needed' })).toBe('As needed')
     expect(scheduleSummary({ type: 'none' })).toBe('No schedule')
   })
 
   test('distinguishes actual and scheduled timestamps', () => {
     expect(actualVsScheduledLabel('2026-11-09T18:00:00Z')).toMatch(/^Administered /)
-    expect(actualVsScheduledLabel('2026-11-09T18:00:00Z', '2026-11-09T17:00:00Z')).toContain(
-      ' · scheduled ',
-    )
+    expect(actualVsScheduledLabel('2026-11-09T18:00:00Z', '2026-11-09T17:00:00Z')).toContain(' · scheduled ')
   })
 })
 

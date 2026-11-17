@@ -7,14 +7,21 @@ import type { FeedPostRecord } from './db/index.ts'
 import type { FeedDeliver } from './routes/feed-router.ts'
 
 import { auditOperation, summarizeAuditError } from './api/audit-body.ts'
-import { registerAuthRoutes } from './api/auth-routes.ts'
+import { accountSignupDeps, isValidUsername, registerAuthRoutes } from './api/auth-routes.ts'
 import { gateFederation } from './api/federation-gate.ts'
 import { createAdminMiddleware, createAuditLogMiddleware, createAuthMiddleware } from './api/middleware.ts'
 import { registerOAuthRoutes } from './api/oauth-routes.ts'
+import {
+  bearerAccount,
+  createClientIp,
+  createRateLimits,
+  mountRateLimits,
+  trustProxySetting,
+} from './api/rate-limit-middleware.ts'
 import { mountRestRouters, postChartDeps } from './api/rest-routes.ts'
 import { mountSyncRouter } from './api/sync-setup.ts'
 import { createUsageMiddleware } from './api/usage-middleware.ts'
-import { setupOuraWebhook, setupStravaWebhook } from './api/webhooks-setup.ts'
+import { setupGarminPush, setupOuraWebhook, setupStravaWebhook } from './api/webhooks-setup.ts'
 import { createAuth } from './auth.ts'
 import { closeAllUserPools, dropUserDb, getDbForUser } from './db/connection.ts'
 import { getLargestTables, getUserDatabaseSizes } from './db/database-sizes.ts'
@@ -40,9 +47,10 @@ import {
   listPublicFeedPosts,
   listReplyUncheckedEntries,
   listUnenrichedAurbodaEntries,
-  getOAuthToken,
   listUserNames,
   loginToUserDb,
+  setUserPassword,
+  getWebAuthnCredentialsForUser,
   markChallengeResultPublished,
   markEnrichTransientFailure,
   migrateAllUsers,
@@ -51,6 +59,7 @@ import {
   pruneSyncedOutboundSync,
   rematerializeSupersededOnce,
   resolveOrCreateActivityType,
+  retireSingleLiftTypes,
   markTimelineEntryReplyChecked,
   setTimelineEntryReplyInfo,
   setTimelineEntryStructured,
@@ -61,10 +70,26 @@ import {
 } from './db/index.ts'
 import { errorResponseBody, httpError, isHttpError } from './http-error.ts'
 import { garminClient } from './integrations/garmin/client.ts'
+import { defaultGarminKeyReminderDeps, remindGarminKey } from './integrations/garmin/key-reminder.ts'
+import { garminOAuthClient } from './integrations/garmin/oauth-client.ts'
+import { garminPersonalClient } from './integrations/garmin/personal-client.ts'
 import { garminDataTypes } from './integrations/garmin/process.ts'
+import { garminPushBodyParser } from './integrations/garmin/push-router.ts'
+import { garminPushToken, garminPushUrl } from './integrations/garmin/push.ts'
+import {
+  chooseGarminSource,
+  garminRoutedClient,
+  getGarminConnections,
+  hasGarminConnection,
+} from './integrations/garmin/source.ts'
 import { syncActivityDetails, syncGarminDataType } from './integrations/garmin/sync.ts'
 import { gravlClient } from './integrations/gravl/client.ts'
 import { enrichGravlWorkout } from './integrations/gravl/sync.ts'
+import { homeAssistantClient, homeAssistantReachability } from './integrations/home-assistant/client.ts'
+import {
+  defaultHomeAssistantSyncDeps,
+  syncHomeAssistantLocations,
+} from './integrations/home-assistant/sync.ts'
 import { ouraClient } from './integrations/oura/client.ts'
 import { createOwnTracksRouter } from './integrations/owntracks/router.ts'
 import { stravaClient } from './integrations/strava/client.ts'
@@ -73,8 +98,11 @@ import { createActorAcceptNormalizer, createActorHtmlRouter } from './routes/act
 import { createFeedTombstoneRouter } from './routes/feed-tombstone-router.ts'
 import { createOAuthRouter } from './routes/oauth-router.ts'
 import { createAccountDeleter } from './services/account-deletion.ts'
+import { startVerification } from './services/account-email.ts'
 import { createAccountGate, gateSyncProvider, safeIsReadOnly, safeRefusal } from './services/account-gate.ts'
 import { backfillAccounts, createAccountPlans, readBillingSettings } from './services/account-plan.ts'
+import { createAccountRecovery } from './services/account-recovery.ts'
+import { createAccount, isUsernameTaken } from './services/account-signup.ts'
 import {
   deliverFeedArticlePost,
   deliverFeedArticleUpdate,
@@ -97,6 +125,7 @@ import {
   toDeliverableExercise,
   toDeliverableReply,
 } from './services/activitypub/deliver.ts'
+import { federationDelivery } from './services/activitypub/delivery-queue.ts'
 import {
   buildActorPerson,
   createFeedFederation,
@@ -108,12 +137,14 @@ import { createPostUpdateResender, deliverPostUpdate } from './services/activity
 import { createTimelineBackfiller } from './services/activitypub/timeline-backfill.ts'
 import { createAurbodaEnrichAttempt } from './services/activitypub/timeline-enrich.ts'
 import { createAdminUsers } from './services/admin-users.ts'
+import { appVersion } from './services/app-version.ts'
 import { createArticlePreviewer } from './services/article-preview.ts'
 import { createAuditLogPruneQueue } from './services/audit-log-prune-queue.ts'
 import { auditError, auditInfo, pruneAuditLog } from './services/audit-log.ts'
-import { createAutoshareDeps } from './services/autoshare-deps.ts'
+import { autoshareSkipDeps, createAutoshareDeps } from './services/autoshare-deps.ts'
 import { type AutoshareQueue, createAutoshareQueue } from './services/autoshare-queue.ts'
-import { evaluateAutoshareWindow } from './services/autoshare.ts'
+import { autosharePendingSkipHandler, skipAutoshare } from './services/autoshare-skip.ts'
+import { announceAutoshareWindow, evaluateAutoshareWindow } from './services/autoshare.ts'
 import { backfillMealFoodItemNames } from './services/backfill-meal-food-item-names.ts'
 import { triggerCalorieComputation } from './services/calorie-computation.ts'
 import { createCalorieQueue, type CalorieQueue } from './services/calorie-queue.ts'
@@ -132,6 +163,7 @@ import {
 import { createDeletedUsers } from './services/deleted-users.ts'
 import { createDetectionTrigger, type DetectionTrigger } from './services/detection-trigger.ts'
 import { runDetectionForUser } from './services/detection-worker.ts'
+import { createMailer } from './services/email.ts'
 import { createDumpExporter, createDumpLinkIssuer } from './services/export-dump.ts'
 import { createExportTokens } from './services/export-token.ts'
 import { reconcileExportedSharedFoodItems } from './services/exported-shared-food.ts'
@@ -160,14 +192,21 @@ import {
 import { createGeocodeQueue } from './services/geocode-queue.ts'
 import { createInvitationAuth } from './services/invitation.ts'
 import { getPlaceVisits, type NamedLocationsChanged } from './services/locations.ts'
+import { createLoginMethodCounter } from './services/login-methods.ts'
+import { runNotificationAction } from './services/notification-actions.ts'
+import { notificationStore, notifier } from './services/notifications.ts'
 import {
   ensureDefaultOfficialFeed,
   officialRemoteHandles,
   readOfficialFeedSetting,
 } from './services/official-feed.ts'
+import { allowHttpIssuer, createDiscoveryCache, createOidcClient } from './services/oidc-client.ts'
+import { createOidcProviderAdmin, oidcRedirectUri } from './services/oidc-providers.ts'
+import { createOidcService } from './services/oidc.ts'
 import { createPeopleReminderScheduler } from './services/people-reminders.ts'
 import { createPgBoss } from './services/pg-boss.ts'
 import { installProcessGuards } from './services/process-guards.ts'
+import { createPublicTagModeration } from './services/public-tag-moderation.ts'
 import { createPublicTagPruneQueue } from './services/public-tag-prune-queue.ts'
 import {
   applyInstanceTagFollowsAtStartup,
@@ -179,11 +218,13 @@ import {
   readPublicTagPages,
   readPublicTagRetentionDays,
 } from './services/public-tags.ts'
+import { accountUploadLimiter, createTokenBucketLimiter, RATE_LIMITS } from './services/rate-limit.ts'
 import {
   createRelayActions,
   createRelayInboxHooks,
   ensureDefaultRelays,
   relayRecipients,
+  retryErroredRelays,
 } from './services/relays.ts'
 import { safeFetchGet } from './services/safe-fetch.ts'
 import { initSentry, Sentry } from './services/sentry.ts'
@@ -311,7 +352,7 @@ const main = async () => {
     androidFingerprints,
     androidPackageName,
     apiBaseUrl,
-    version: process.env.BUILD_SHA ?? 'dev',
+    version: appVersion(),
   }
 
   const envOuraClientId = process.env.OURA_CLIENT
@@ -347,8 +388,9 @@ const main = async () => {
     onUserAuthenticated: (ouraUserId, username) => centralDb.upsertOuraUserMapping(ouraUserId, username),
   })
 
-  // No server-side credentials: the client uses per-user session tokens.
-  const garmin = garminClient()
+  // No server-side credentials: per-user session tokens and Personal API keys.
+  const garminPersonal = garminPersonalClient()
+  const garmin = garminRoutedClient({ personal: garminPersonal, session: garminClient() })
 
   // Credentials are read from the DB on each request, not captured at startup.
   const getStravaCredentials = async () => {
@@ -374,6 +416,18 @@ const main = async () => {
   }
   const gravl = gravlClient(getGravlCredentials, apiBaseUrl)
 
+  const getGarminOAuthCredentials = async () => {
+    const clientId = await centralDb.getServerSetting('garmin_client_id')
+    const clientSecret = await centralDb.getServerSetting('garmin_client_secret')
+    return clientId && clientSecret ? { clientId, clientSecret } : null
+  }
+  const garminOAuth = garminOAuthClient(getGarminOAuthCredentials, apiBaseUrl, {
+    deleteGarminUserMappingByUsername: (username) => centralDb.deleteGarminUserMappingByUsername(username),
+    getGarminUserIdByUsername: (username) => centralDb.getGarminUserIdByUsername(username),
+    upsertGarminUserMapping: (garminUserId, username) =>
+      centralDb.upsertGarminUserMapping(garminUserId, username),
+  })
+
   // Deduction queue is assigned once pg-boss is up (below). The notifier closes
   // over the variable, so it starts enqueuing as soon as the queue exists.
   let deductionQueue: DeductionQueue | null = null
@@ -390,6 +444,20 @@ const main = async () => {
     // stabilisation delay (the queue's startAfter). Fire-and-forget.
     void autoshareQueue?.enqueueEvaluation(user, start, end)
   }
+  // Home Assistant location pull. The detection trigger is built much
+  // further down (it needs the geocode queue, which needs pg-boss), so the
+  // post-sync hook reads it through this holder once it exists.
+  let triggerDetectionForUser: ((user: string) => void) | null = null
+  const homeAssistant = homeAssistantClient(
+    homeAssistantReachability(process.env.HOME_ASSISTANT_ALLOW_PRIVATE_ADDRESSES === 'true'),
+  )
+  const homeAssistantSyncDeps = defaultHomeAssistantSyncDeps(homeAssistant, (user, start, end) => {
+    triggerDetectionForUser?.(user)
+    activityNotifier(user, '*', start, end)
+  })
+  const syncHomeAssistant = (user: string, options?: { fullResync?: boolean; startDate?: Date }) =>
+    syncHomeAssistantLocations(user, homeAssistantSyncDeps, options)
+
   const NAMED_LOCATION_LOOKBACK_MS = 90 * 86_400_000
   const onNamedLocationsChanged: NamedLocationsChanged = (user) =>
     activityNotifier(user, '*', new Date(Date.now() - NAMED_LOCATION_LOOKBACK_MS), new Date())
@@ -425,6 +493,7 @@ const main = async () => {
     onActivityDetailSynced,
     onActivitySynced: activityNotifier,
     onTrackWritten,
+    syncHomeAssistant: (user) => syncHomeAssistant(user),
   })
   const syncProvider = gateSyncProvider(ungatedSyncProvider, isReadOnly)
 
@@ -547,6 +616,20 @@ const main = async () => {
         console.error(`⚠️ Supersession re-materialization failed for ${user}:`, error)
       }
     }
+    for (const user of users) {
+      try {
+        const { converted, deleted, kept } = await retireSingleLiftTypes(user)
+        if (converted > 0 || deleted.length > 0 || kept.length > 0) {
+          console.info(
+            `🏋️ Retired single-lift types for ${user}: ${converted} activit(ies) converted, ` +
+              `deleted [${deleted.join(', ')}], kept as custom [${kept.join(', ')}]`,
+          )
+        }
+      } catch (error) {
+        console.error(`⚠️ Single-lift type retirement failed for ${user}:`, error)
+      }
+    }
+    console.info('Startup user maintenance completed')
   })
 
   // Accounts from before signup dates were tracked get a row without one.
@@ -562,8 +645,71 @@ const main = async () => {
   // CORS must come first for preflight requests
   httpd.use(cors({ origin: true }))
 
+  const rateLimits = createRateLimits({
+    accountOf: bearerAccount(auth),
+    clientIp: createClientIp((message) => console.warn(message)),
+    now: Date.now,
+    uploadLimiter: accountUploadLimiter,
+  })
+  mountRateLimits(httpd, rateLimits)
+
+  const mailer = createMailer({ centralDb })
+  const accountRecovery = createAccountRecovery({
+    audit: (user, message) => auditInfo(user, 'auth', message),
+    centralDb,
+    clearFailedLogins: rateLimits.failedLogins.clear,
+    createSessionToken: (user) => auth.createToken(user),
+    isValidUsername,
+    mailer,
+    recoveryLimiter: createTokenBucketLimiter(RATE_LIMITS.recovery_mails, Date.now),
+    setPassword: async (user, password) => {
+      await setUserPassword(userDb, user, password)
+      await centralDb.setPasswordLogin(user, true)
+    },
+    verificationLimiter: createTokenBucketLimiter(RATE_LIMITS.verification_mails, Date.now),
+    webHost,
+  })
+  const accountEmail = {
+    centralDb,
+    emailEnabled: mailer.isConfigured,
+    sendVerification: accountRecovery.sendVerification,
+  }
+  const startEmailVerification = (user: string) => startVerification(accountEmail, user)
+
+  const loginMethods = createLoginMethodCounter({
+    countOidcLinks: centralDb.countOidcLinks,
+    countPasskeys: async (user) => (await getWebAuthnCredentialsForUser(user)).length,
+    getPasswordLogin: centralDb.getPasswordLogin,
+  })
+  const oidcClient = createOidcClient({ allowHttp: allowHttpIssuer() })
+  const oidcRedirect = oidcRedirectUri(apiBaseUrl)
+  const signupDeps = accountSignupDeps({ auth, centralDb, invitationAuth, startEmailVerification, userDb })
+  const oidc = {
+    providers: createOidcProviderAdmin({
+      allowHttp: allowHttpIssuer(),
+      loginMethods,
+      redirectUri: oidcRedirect,
+      store: centralDb,
+      verifyIssuer: async (issuer, clientId, clientSecret) => {
+        await oidcClient.discover(issuer, clientId, clientSecret)
+      },
+    }),
+    service: createOidcService({
+      createAccount: (input) => createAccount(signupDeps, input),
+      createSessionToken: (user) => auth.createToken(user),
+      discover: createDiscoveryCache(oidcClient),
+      invitationAuth,
+      loginMethods,
+      redirectUri: oidcRedirect,
+      startEmailVerification,
+      store: centralDb,
+      usernameTaken: (user) => isUsernameTaken(signupDeps, user),
+      webHost,
+    }),
+  }
+
   // Mount OAuth endpoints BEFORE body-parser (uses its own parsers)
-  httpd.use(createOAuthRouter({ centralDb, loginToUserDb, webHost }))
+  httpd.use(createOAuthRouter({ centralDb, failedLogins: rateLimits.failedLogins, loginToUserDb, webHost }))
 
   // Live home-timeline updates: one in-process hub fans Postgres NOTIFY pings out
   // to a user's open SSE streams. Injected into the feed router (SSE endpoint) and
@@ -573,6 +719,9 @@ const main = async () => {
     void timelineHub.notify(user).catch((err) => console.error(`⚠️ timeline notify failed for ${user}:`, err))
   }
 
+  const federationQueueAbort = new AbortController()
+  const queuedDelivery = await federationDelivery(boss, centralDb)
+  const tagActorHost = () => readTagActorHost(centralDb)
   // ActivityPub federation object (one instance, shared by the actor mount, the
   // MCP feed tools, and the REST feed router). `feedDeliver` fans a shared post
   // out to followers, fire-and-forget, so it's identical whether a post is
@@ -596,7 +745,14 @@ const main = async () => {
       relays: createRelayInboxHooks(centralDb),
       tagFollows: createPublicTagInboxHooks(centralDb),
     },
+    queuedDelivery ?? undefined,
+    tagActorHost,
   )
+  if (queuedDelivery != null) {
+    feedFederation
+      .startQueue(undefined, { signal: federationQueueAbort.signal })
+      .catch((error: unknown) => console.error('⚠️ Federation delivery queue stopped:', error))
+  }
   const backfill = createTimelineBackfiller(feedFederation, webHost)
   const feedDeps = {
     apiBaseUrl,
@@ -608,14 +764,18 @@ const main = async () => {
       publicTagPages: () => readPublicTagPages(centralDb),
       store: centralDb,
     }),
-    tagActorHost: () => readTagActorHost(centralDb),
+    tagActorHost,
   }
   const relayActions = createRelayActions({ federation: feedFederation, origin: webHost, store: centralDb })
+  const publicTagModeration = createPublicTagModeration({
+    ownHost: new URL(webHost).hostname,
+    store: centralDb,
+  })
   const publicTagActions = createPublicTagActions({
     federation: feedFederation,
     origin: webHost,
     store: centralDb,
-    tagActorHost: () => readTagActorHost(centralDb),
+    tagActorHost,
   })
   try {
     if (
@@ -636,6 +796,7 @@ const main = async () => {
     }),
   )
   postListenCallbacks.push(async () => {
+    await retryErroredRelays({ federation: feedFederation, origin: webHost, store: centralDb })
     if ((await ensureDefaultRelays({ add: relayActions.add, centralDb, origin: webHost })) === 'seeded') {
       console.info('🛰️ Subscribed to the tags.pub relay by default')
     }
@@ -649,6 +810,7 @@ const main = async () => {
       { disconnect: (user) => oura.disconnect(user), name: 'Oura' },
       { disconnect: (user) => strava.deauthorize(user), name: 'Strava' },
       { disconnect: (user) => gravl.disconnect(user), name: 'Gravl' },
+      { disconnect: (user) => garminOAuth.disconnect(user), name: 'Garmin' },
     ],
     listUsers: () => listUserNames(userDb),
     onDeleted: (user) => deletedUsers.add(user),
@@ -703,8 +865,6 @@ const main = async () => {
   }
   const onDeliverError = (op: string, user: string, postId: string) => (err: unknown) =>
     console.error(`⚠️ feed ${op} delivery failed for ${user}/${postId}:`, err)
-  // Every edit path ends in one of the `updated*` hooks, so this is where a post narrowed to
-  // followers-only loses its quote stamps (FEP-044f).
   const revokeUnsharedStamps = (user: string, post: FeedPostRecord): void => {
     void revokeQuoteStamps(feedDeps, user, post).catch(onDeliverError('quote stamp revoke', user, post.id))
   }
@@ -825,11 +985,19 @@ const main = async () => {
   // after a stabilisation delay, publishing matches through the SAME
   // feedDeliver.created fan-out a manual share fires. The deps double as the
   // preview deps for the REST router and MCP tools.
-  const autoshareDeps = createAutoshareDeps(feedDeliver.created)
+  const autoshareDeps = createAutoshareDeps(feedDeliver.created, notifier)
+  const skipAutoshareActivity = skipAutoshare(autoshareSkipDeps)
+  const notificationActionRunner = runNotificationAction({
+    get: notificationStore.get,
+    handlers: { autoshare_pending: { skip: autosharePendingSkipHandler(skipAutoshareActivity) } },
+    revise: notificationStore.revise,
+  })
   const feedRefreshWindowDeps = createFeedRefreshWindowDeps(feedDeliver.updated)
   if (boss) {
     try {
       autoshareQueue = await createAutoshareQueue(boss, {
+        announceWindow: (user, start, end, nextEvaluationAt) =>
+          announceAutoshareWindow(user, start, end, autoshareDeps, nextEvaluationAt),
         evaluateWindow: (user, start, end, requeue) =>
           evaluateAutoshareWindow(user, start, end, { ...autoshareDeps, requeue }),
         refreshWindow: (user, start, end, requeue) =>
@@ -878,6 +1046,7 @@ const main = async () => {
       sourceEnrichQueue = await createSourceEnrichQueue(boss, {
         enrichGravl: (user, workoutId) => enrichGravlWorkout(user, gravl, workoutId),
         garminDetailPending: async (user, garminActivityId) => {
+          if (chooseGarminSource('activityDetail', await getGarminConnections(user)) === null) return false
           const row = await findActivityByExternalId(
             user,
             'garmin',
@@ -885,10 +1054,7 @@ const main = async () => {
           )
           return row != null && row.data?.detail_synced !== true
         },
-        isGarminConnected: async (user) => {
-          const token = await getOAuthToken(user, 'garmin')
-          return token !== null && token.access_token !== ''
-        },
+        isGarminConnected: (user) => hasGarminConnection(user),
         isGravlConnected: async (user) => (await gravl.connectionKind(user)) !== null,
         onEnriched: (user) => activityNotifier(user, '*', new Date(Date.now() - 86_400_000), new Date()),
         syncGarmin: async (user, dataType) => {
@@ -917,7 +1083,9 @@ const main = async () => {
     try {
       await createSyncScheduler(boss, {
         garminDataTypes,
+        keepGarminOAuthFresh: (user) => garminOAuth.keepFresh(user),
         listUsers: () => listUserNames(userDb),
+        remindGarminKey: remindGarminKey(defaultGarminKeyReminderDeps(notifier.raiseBestEffort)),
         sync: syncProvider,
       })
     } catch (error) {
@@ -1031,16 +1199,21 @@ const main = async () => {
     '/mcp',
     createMcpRouter(auth, {
       accountDeleter,
+      accountEmail,
       accountGate,
       accountPlans,
       adminUsers,
       apiBaseUrl,
       autosharePreviewDeps: autoshareDeps,
+      runNotificationAction: notificationActionRunner,
+      skipAutoshare: skipAutoshareActivity,
       relayActions,
+      oidcProviders: oidc.providers,
       postUpdateResender,
       centralDb,
       previewArticle,
       publicTagActions,
+      publicTagModeration,
       requestDumpLink: dataExport.requestDumpLink,
       deductionQueue: deductionQueue ?? undefined,
       discoverChallenges,
@@ -1050,6 +1223,7 @@ const main = async () => {
       followerActions,
       garmin,
       gravl,
+      homeAssistant,
       isDeletedUser,
       onActivityDetailSynced,
       onActivityMutated: activityNotifier,
@@ -1062,6 +1236,8 @@ const main = async () => {
       retroEnrichTimeline,
       stravaQueue: stravaQueue ?? undefined,
       sync: syncProvider,
+      syncHomeAssistant,
+      tagActorHost,
       webHost,
     }),
   )
@@ -1072,12 +1248,12 @@ const main = async () => {
   // wraps EVERY non-GET body with `Readable.toWeb(req)` and next()s without
   // consuming it, hanging `express.json()` on any large non-federation POST
   // (e.g. a Health Connect batch > ~64 KB). `trust proxy` lets Fedify
-  // reconstruct the external https URL from nginx's X-Forwarded-* headers.
-  // Scope it to `loopback`: nginx proxies to the backend over loopback
-  // (proxy_pass http://127.0.0.1:3000), so Express trusts X-Forwarded-* only when
-  // the immediate peer is loopback — a direct remote client isn't, so it can't
-  // spoof them.
-  httpd.set('trust proxy', 'loopback')
+  // reconstruct the external https URL from nginx's X-Forwarded-* headers, and
+  // gives the rate limits the client's address. The default, `loopback`, trusts
+  // the bundled nginx alone (proxy_pass http://127.0.0.1:3000): a direct remote
+  // client isn't loopback, so it can't spoof them. `TRUST_PROXY` adds a proxy in
+  // front of nginx (docs/docker.md).
+  httpd.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY))
   // Any representation will do for a wildcard or absent Accept on an actor URL,
   // and the default is the actor document: hand Fedify the type it serves.
   httpd.use(createActorAcceptNormalizer())
@@ -1098,6 +1274,8 @@ const main = async () => {
     }),
   )
 
+  // Ahead of the global parser, which skips a body already parsed: Garmin pushes can be large.
+  httpd.use('/webhooks/garmin', garminPushBodyParser(garminPushToken(sessionSecret)))
   httpd.use(json({ limit: '10mb' }))
 
   httpd.use(createAuditLogMiddleware(auth, isDeletedUser))
@@ -1111,8 +1289,10 @@ const main = async () => {
     auth,
     authMiddleware,
     centralDb,
+    failedLogins: rateLimits.failedLogins,
     invitationAuth,
     userDb,
+    startEmailVerification,
     unauthorized,
     userExists: async (username) => (await listUserNames(userDb)).includes(username),
   })
@@ -1124,6 +1304,7 @@ const main = async () => {
     oura,
     garmin,
     gravl,
+    syncHomeAssistant,
     stravaQueue,
     calorieQueue,
     sourceEnrichQueue,
@@ -1137,6 +1318,8 @@ const main = async () => {
     authMiddleware,
     centralDb,
     garmin,
+    garminOAuth,
+    garminPersonal,
     gravl,
     oura,
     strava,
@@ -1154,6 +1337,8 @@ const main = async () => {
     })
     postListenCallbacks.push(ensureStravaWebhook)
   }
+
+  setupGarminPush({ centralDb, garminOAuth, httpd, isReadOnly, sessionSecret })
 
   const ouraWebhookManager = await setupOuraWebhook({
     httpd,
@@ -1187,6 +1372,7 @@ const main = async () => {
     insertActivities,
     runDetectionForUser,
   })
+  triggerDetectionForUser = (user) => detectionTrigger.triggerDetectionForUser(user)
 
   httpd.use(
     '/ownTracks',
@@ -1204,13 +1390,23 @@ const main = async () => {
 
   mountRestRouters({
     accountDeleter,
+    accountEmail,
+    accountRecovery,
+    adminTestEmail: {
+      mailer,
+      testLimiter: createTokenBucketLimiter(RATE_LIMITS.admin_test_mails, Date.now),
+    },
+    startEmailVerification,
     accountPlans,
     activityNotifier,
     autosharePreviewDeps: autoshareDeps,
+    runNotificationAction: notificationActionRunner,
+    skipAutoshare: skipAutoshareActivity,
     adminMiddleware,
     dataExport,
     adminUsers,
     apiBaseUrl,
+    garminPushUrl: garminPushUrl(apiBaseUrl, sessionSecret),
     auth,
     authMiddleware,
     centralDb,
@@ -1221,6 +1417,7 @@ const main = async () => {
     followActions,
     followerActions,
     garmin,
+    homeAssistant,
     httpd,
     postUpdateResender,
     previewArticle,
@@ -1233,12 +1430,16 @@ const main = async () => {
     onProfileChanged,
     ouraWebhookManager,
     publicTagActions,
+    publicTagModeration,
     reactionActions,
     retroEnrichTimeline,
     syncProvider,
+    tagActorHost,
     timelineHub,
     userDb,
     webAuthn,
+    oidc,
+    loginMethods,
     webHost,
     webIndexPath,
     wellKnown,
@@ -1282,6 +1483,7 @@ const main = async () => {
     now: () => Date.now(),
     startTimer: startUnrefTimer,
     stopJobs: async () => {
+      federationQueueAbort.abort()
       await boss?.stop({ graceful: true, timeout: JOB_STOP_TIMEOUT_MS })
     },
     stopTimers: () => {

@@ -10,9 +10,12 @@ import type {
   GeocodeStatus,
   MetricType,
   OnboardingProgress,
+  NotificationAction,
   OnboardingStepId,
   ReportFlag,
+  ReportImportMapping,
   SyncStatus,
+  TimelineDailyMetric,
   TrainingLoadSettings,
   WorkSettings,
 } from '@aurboda/api-spec'
@@ -305,6 +308,9 @@ export interface ReportEntry {
   reference_low?: number
   reference_high?: number
   flag?: ReportFlag
+  /** The value and unit in time_series, present only when they differ from the printed `value`/`unit`. */
+  stored_value?: number
+  stored_unit?: string
 }
 
 export interface Report {
@@ -414,6 +420,9 @@ export interface OAuthToken {
   refresh_token?: string
   expires_at?: Date
   scopes?: string[]
+  refused_at?: Date
+  /** Read only; for a refused key, when Garmin last refused it. */
+  updated_at?: Date
 }
 
 export type { SyncStatus }
@@ -459,8 +468,11 @@ export interface UserSettings {
   onboarding_progress?: OnboardingProgress
   onboarding_manual_done?: OnboardingStepId[] // Get-started steps marked done by hand
   rescue_time_key?: string // RescueTime API key (personal token)
+  report_import_mapping?: ReportImportMapping // Column mapping of the last lab report spreadsheet import
   run_category_rules_seeded?: boolean // Internal: the default run-category deduction rules were created once
   sex?: BiologicalSex // Biological sex for calorie calculation
+  sleep_need_minutes?: number // Sleep need per night in minutes; sleep debt is judged against it (default 480)
+  timeline_daily_metrics?: TimelineDailyMetric[] // Daily metric tracks the Timeline draws at week and month spans
   timeline_show_replies?: boolean // Show followed actors' replies to posts outside your timeline as own cards
   item_icons?: Record<string, string> // Unified icon mappings for all timeline items (tags, activities, exercise types)
   tag_icons?: Record<string, string> // Deprecated: tag-only icons (migrated to item_icons)
@@ -471,13 +483,16 @@ export interface UserSettings {
   training_load?: TrainingLoadSettings // Training load (Banister model) parameters
   garmin_disabled_data_types?: GarminDataType[] // Garmin data types to skip during sync
   gravl_api_token?: string // Gravl personal access token (used when no OAuth grant exists)
+  home_assistant_url?: string // Home Assistant base URL (origin + path, no trailing slash)
+  home_assistant_token?: string // Home Assistant long-lived access token (write-only)
+  home_assistant_entity_id?: string // device_tracker.* or person.* entity to pull locations from
   sync_intervals?: SyncIntervals // Per-provider background poll intervals in minutes, `default` as fallback
   work?: WorkSettings // Versioned user-owned Work profiles and legacy Recruiting overrides
 }
 
 /**
  * Background sync poll intervals in minutes, keyed by provider
- * (`gravl`, `garmin`, `oura`, `rescuetime`, `lastfm`, `calendar`) with
+ * (`gravl`, `garmin`, `oura`, `rescuetime`, `lastfm`, `calendar`, `home_assistant`) with
  * `default` as the fallback for providers without an explicit entry.
  */
 export type SyncIntervals = Partial<Record<string, number>>
@@ -487,4 +502,31 @@ export interface McpSessionRecord {
   username: string
   created_at: Date
   last_activity: Date
+}
+
+export interface NotificationRecord {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  link: string | null
+  data: Record<string, unknown> | null
+  actions: NotificationAction[]
+  dedupe_key: string | null
+  in_app: boolean
+  push: boolean
+  read_at: Date | null
+  created_at: Date
+}
+
+/** A listing row plus its keyset position: `created_at` as Postgres text, at µs precision. */
+export interface NotificationPageRow extends NotificationRecord {
+  cursor_ts: string
+}
+
+export interface NotificationPreferenceRecord {
+  type: string
+  in_app: boolean
+  push: boolean
+  updated_at: Date
 }

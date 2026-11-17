@@ -27,8 +27,9 @@ function readAppearance(user?: string): Appearance {
       !Object.hasOwn(accents, value.accent) ||
       !('showDescriptions' in value) ||
       typeof value.showDescriptions !== 'boolean'
-    )
-      {return defaults}
+    ) {
+      return defaults
+    }
     return {
       density: value.density,
       accent: value.accent as Appearance['accent'],
@@ -92,8 +93,9 @@ export function BoardAppearance({
               value={appearance.accent}
               onChange={(event) => {
                 const accent = event.currentTarget.value
-                if (Object.hasOwn(accents, accent))
-                  {change({ ...appearance, accent: accent as Appearance['accent'] })}
+                if (Object.hasOwn(accents, accent)) {
+                  change({ ...appearance, accent: accent as Appearance['accent'] })
+                }
               }}
             >
               <option value="default">Default</option>

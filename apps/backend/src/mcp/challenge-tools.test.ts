@@ -1,15 +1,37 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { ChallengePatch, ChallengeRecord } from '../db/index.ts'
+import type {
+  ChallengeParticipationRecord,
+  ChallengeParticipationSnapshotPatch,
+  ChallengePatch,
+  ChallengeRecord,
+} from '../db/index.ts'
 import type { McpServer } from './helpers.ts'
 
 const db = vi.hoisted(() => ({
   deleteChallengeBanner: vi.fn(async () => true),
   getChallengeById: vi.fn<(user: string, id: string) => Promise<ChallengeRecord | null>>(),
   getChallengeBySlug: vi.fn<(user: string, slug: string) => Promise<ChallengeRecord | null>>(),
-  hasRemoteChallengeMember: vi.fn<(user: string, id: string) => Promise<boolean>>(),
+  getParticipationByUrl: vi.fn(async () => null),
+  listChallengeMembers: vi.fn(async () => []),
+  listChallengeParticipations: vi.fn<(user: string) => Promise<ChallengeParticipationRecord[]>>(),
+  updateChallengeParticipationSnapshot:
+    vi.fn<
+      (
+        user: string,
+        id: string,
+        patch: ChallengeParticipationSnapshotPatch,
+      ) => Promise<ChallengeParticipationRecord | null>
+    >(),
   updateChallenge:
-    vi.fn<(user: string, id: string, patch: ChallengePatch) => Promise<ChallengeRecord | null>>(),
+    vi.fn<
+      (
+        user: string,
+        id: string,
+        patch: ChallengePatch,
+        options?: { unlessRemoteMember?: boolean },
+      ) => Promise<ChallengeRecord | null>
+    >(),
 }))
 
 vi.mock('../db/index.ts', () => db)
@@ -88,28 +110,51 @@ describe('update_challenge', () => {
     unit: 'km',
   }
 
+  let remoteMember = false
+
   beforeEach(() => {
+    remoteMember = false
     db.getChallengeById.mockReset().mockResolvedValue(challenge)
-    db.hasRemoteChallengeMember.mockReset()
-    db.updateChallenge
-      .mockReset()
-      .mockImplementation(async (_user, _id, patch) => ({ ...challenge, spec: patch.spec ?? challenge.spec }))
+    db.updateChallenge.mockReset().mockImplementation(async (_user, _id, patch, options) =>
+      options?.unlessRemoteMember && remoteMember
+        ? null
+        : {
+            ...challenge,
+            spec: patch.spec ?? challenge.spec,
+            timezone: patch.timezone ?? challenge.timezone,
+          },
+    )
   })
 
   test('refuses a spec change once a remote member has joined', async () => {
-    db.hasRemoteChallengeMember.mockResolvedValue(true)
+    remoteMember = true
     const { call } = setup()
     expect(await call('update_challenge', { id: challenge.id, spec: changedSpec })).toContain(
       "The scoring can't change once someone from another instance has joined",
     )
-    expect(db.updateChallenge).not.toHaveBeenCalled()
   })
 
-  test('changes the spec while no remote member has joined', async () => {
-    db.hasRemoteChallengeMember.mockResolvedValue(false)
+  test('refuses a date or timezone change once a remote member has joined', async () => {
+    remoteMember = true
     const { call } = setup()
-    const body = JSON.parse(await call('update_challenge', { id: challenge.id, spec: changedSpec }))
+    for (const change of [
+      { start_ts: '2026-10-02T00:00:00.000Z' },
+      { end_ts: '2026-11-15T00:00:00.000Z' },
+      { timezone: 'Europe/Stockholm' },
+    ]) {
+      expect(await call('update_challenge', { id: challenge.id, ...change })).toContain(
+        "The dates and timezone can't change once someone from another instance has joined",
+      )
+    }
+  })
+
+  test('changes the spec and timezone while no remote member has joined', async () => {
+    const { call } = setup()
+    const body = JSON.parse(
+      await call('update_challenge', { id: challenge.id, spec: changedSpec, timezone: 'Europe/Stockholm' }),
+    )
     expect(body.spec.pattern).toBe('distance')
+    expect(body.timezone).toBe('Europe/Stockholm')
   })
 })
 
@@ -138,5 +183,45 @@ describe('preview_challenge', () => {
     expect(await call('preview_challenge', { challenge_url: 'https://aurboda.test/u/bob/abc' })).toContain(
       'Challenge not found',
     )
+  })
+})
+
+describe('list_joined_challenges', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  test('lists the participations, a challenge on this instance as the host has it now', async () => {
+    const joined: ChallengeParticipationRecord = {
+      challenge_url: 'https://aurboda.test/u/bob/abc',
+      created_at: new Date('2026-10-02T00:00:00Z'),
+      data_token: 'tok',
+      end_ts: new Date('2026-10-20T00:00:00Z'),
+      host_checked_at: null,
+      host_identity: 'https://aurboda.test/u/bob',
+      id: 'p1',
+      name: 'Old name',
+      protocol: 'aurboda',
+      spec: challenge.spec,
+      start_ts: challenge.start_ts,
+      status: 'active',
+      timezone: 'UTC',
+    }
+    db.listChallengeParticipations.mockResolvedValue([joined])
+    db.getChallengeBySlug.mockResolvedValue(challenge)
+    db.updateChallengeParticipationSnapshot.mockImplementation(async (_user, _id, patch) => ({
+      ...joined,
+      ...patch,
+      host_checked_at: null,
+    }))
+    const { call } = setup()
+    const body = JSON.parse(await call('list_joined_challenges'))
+    expect(db.updateChallengeParticipationSnapshot).toHaveBeenCalledWith('alice', 'p1', {
+      end_ts: challenge.end_ts,
+      name: 'Push-ups',
+    })
+    expect(body).toEqual([
+      expect.objectContaining({ end_ts: '2026-11-01T00:00:00.000Z', id: 'p1', name: 'Push-ups' }),
+    ])
   })
 })

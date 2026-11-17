@@ -83,6 +83,7 @@ import {
 } from '../services/article-drafts.ts'
 import { buildArticleMarkdown, renderableArticleBlocks } from '../services/article-export.ts'
 import { mergeArticleContent, validateArticleContent } from '../services/article.ts'
+import { autoshareSharedByHand } from '../services/autoshare-pending.ts'
 import { resolveChallengeShare } from '../services/challenge-share.ts'
 import {
   dashboardShareTags,
@@ -97,6 +98,7 @@ import {
 import { listPostReactions } from '../services/feed-reactions.ts'
 import {
   getFeedPage,
+  getOwnFeedPost,
   normalizeFeedMessage,
   previewActivityShare,
   serializeFeedPost,
@@ -110,6 +112,7 @@ import {
   retagPost,
 } from '../services/post-tags.ts'
 import { getSettings } from '../services/settings.ts'
+import { DEFAULT_TAG_ACTOR_HOST } from '../services/tag-actor-host.ts'
 import { getThreadSnapshot, listOwnPostReplies, MAX_POST_REPLIES } from '../services/timeline-replies.ts'
 import { getTimelinePage, reactionTarget } from '../services/timeline.ts'
 import { withTimeout } from '../services/with-timeout.ts'
@@ -173,6 +176,8 @@ export const createFeedRouter = (
   reactions?: ReactionActions,
   /** The article preview, with the chart data it draws from; absent → that route answers 503. */
   previewArticle?: ArticlePreviewer,
+  /** Boosts by accounts on this host are hashtag feeds: left out of `boost_count` and the reactions list. */
+  tagActorHost: () => Promise<string> = async () => DEFAULT_TAG_ACTOR_HOST,
 ): TypedRouter => {
   const router = typedRouter()
 
@@ -187,6 +192,7 @@ export const createFeedRouter = (
         includeStructured: true,
         origin: webHost,
         settings,
+        tagActorHost: await tagActorHost(),
       })
       res.json({ next_cursor, posts, success: true })
     },
@@ -440,7 +446,10 @@ export const createFeedRouter = (
       if ((await getFeedPostById(user, req.params.postId)) == null) {
         return res.status(404).json({ error: 'Feed post not found', reactions: [], success: false })
       }
-      res.json({ reactions: await listPostReactions(user, req.params.postId), success: true })
+      res.json({
+        reactions: await listPostReactions(user, req.params.postId, await tagActorHost()),
+        success: true,
+      })
     },
   )
 
@@ -494,6 +503,7 @@ export const createFeedRouter = (
       })
       // Fan the post out to followers (best-effort; never blocks the response).
       deliver?.created(user, record, activity)
+      await autoshareSharedByHand(user, record, activity.activity_type)
       res.json({
         post: await serializeFeedPost(user, record, { includeStructured: true, webHost }),
         success: true,
@@ -746,6 +756,21 @@ export const createFeedRouter = (
       res.json({ markdown, success: true })
     },
   )
+
+  // Registered after every other one-segment GET so it shadows none of them.
+  router.get<{ postId: string }, FeedPostResponse>('/:postId', authMiddleware, async (req, res) => {
+    const user = req.user!
+    const notFound = { error: 'Feed post not found', success: false }
+    if (!UUID_RE.test(req.params.postId)) return res.status(404).json(notFound)
+    const post = await getOwnFeedPost(user, req.params.postId, {
+      includeStructured: true,
+      origin: webHost,
+      settings: await getSettings(user).catch(() => null),
+      tagActorHost: await tagActorHost(),
+    })
+    if (post == null) return res.status(404).json(notFound)
+    res.json({ post, success: true })
+  })
 
   router.patch<{ postId: string }, FeedPostResponse, UpdateFeedPostBody>(
     '/:postId',

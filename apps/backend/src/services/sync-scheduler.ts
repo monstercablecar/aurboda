@@ -28,6 +28,10 @@ export interface SyncSchedulerDeps {
   sync: SyncProvider
   /** Garmin data types to consider (each keeps its own sync state). */
   garminDataTypes: readonly string[]
+  /** Raises the Garmin Personal API key reminder that is due, if any. Never throws. */
+  remindGarminKey: (user: string) => Promise<void>
+  /** Refreshes a due Connect with Garmin grant, so its refresh token does not lapse. Never throws. */
+  keepGarminOAuthFresh: (user: string) => Promise<void>
 }
 
 /**
@@ -45,7 +49,10 @@ export const runScheduledSyncs = async (deps: SyncSchedulerDeps): Promise<number
       for (const dataType of deps.garminDataTypes) {
         await deps.sync.syncGarminIfNeeded(user, dataType)
       }
+      await deps.remindGarminKey(user)
+      await deps.keepGarminOAuthFresh(user)
       await deps.sync.syncGravlIfNeeded(user)
+      await deps.sync.syncHomeAssistantIfNeeded(user)
       await deps.sync.syncRescueTimeIfNeeded(user)
       await deps.sync.syncLastFmIfNeeded(user)
       await deps.sync.syncCalendarsIfNeeded(user)

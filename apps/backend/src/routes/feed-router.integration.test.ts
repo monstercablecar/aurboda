@@ -17,6 +17,7 @@ import type { ArticlePreviewer } from '../services/article-preview.ts'
  */
 import { insertActivity } from '../db/activities/index.ts'
 import { createChallenge, createChallengeParticipation, deleteChallenge } from '../db/challenges.ts'
+import { query } from '../db/connection.ts'
 import { listFeedQuoteAuthorizations, upsertFeedQuoteAuthorization } from '../db/feed-quotes.ts'
 import { upsertFeedPostReaction } from '../db/feed-reactions.ts'
 import { createFeedPost } from '../db/feed.ts'
@@ -944,6 +945,12 @@ describe('Feed post reactions (integration)', () => {
       kind: 'like',
       post_id: created.id,
     })
+    // Newest first is by timestamp, and the two rows can be written within the same millisecond.
+    await query(
+      user,
+      `UPDATE feed_post_reaction SET created_at = created_at - interval '1 minute' WHERE post_id = $1`,
+      [created.id],
+    )
     await upsertFeedQuoteAuthorization(user, {
       actor_uri: 'https://mastodon.example/users/alice',
       post_id: created.id,
@@ -1003,6 +1010,91 @@ describe('Feed post reactions (integration)', () => {
     )
     expect(byId[counted.id]).toEqual({ boost: 0, like: 2, quote: 1 })
     expect(byId[uncounted.id]).toEqual({ boost: 0, like: 0, quote: 0 })
+  })
+  test('a hashtag account’s boost is left out of GET /feed/:postId/reactions and boost_count', async () => {
+    const user = getTestUser()
+    const created = await post()
+    await upsertFeedPostReaction(user, {
+      actor_uri: 'https://tags.pub/user/running',
+      kind: 'announce',
+      post_id: created.id,
+    })
+    await upsertFeedPostReaction(user, {
+      actor_uri: 'https://remote.example/users/bob',
+      kind: 'announce',
+      post_id: created.id,
+    })
+
+    const reactions = await app.request.get(`/feed/${created.id}/reactions`)
+    expect(reactions.body.reactions.map((r: { actor_uri: string }) => r.actor_uri)).toEqual([
+      'https://remote.example/users/bob',
+    ])
+    const listing = await app.request.get('/feed')
+    expect(listing.body.posts.map((p: { boost_count: number }) => p.boost_count)).toEqual([1])
+  })
+})
+
+describe('One own post (GET /feed/:postId)', () => {
+  let app: ReturnType<typeof startApp>
+
+  beforeAll(async () => {
+    await startTestDb()
+    app = startApp(undefined, undefined, 'https://aurboda.example')
+  }, CONTAINER_TIMEOUT)
+
+  afterAll(async () => {
+    await app.close()
+    await stopTestDb()
+  })
+
+  beforeEach(async () => {
+    await cleanTestDb()
+  })
+
+  test('answers the owner a followers-only post, as GET /feed lists it', async () => {
+    const user = getTestUser()
+    const created = await createFeedPost(user, {
+      activity_id: null,
+      include_chart: false,
+      include_map: false,
+      included_metrics: [],
+      message: 'For followers',
+      series_metrics: [],
+      visibility: 'followers',
+    })
+    await upsertFeedPostReaction(user, {
+      actor_uri: 'https://mastodon.example/users/alice',
+      kind: 'like',
+      post_id: created.id,
+    })
+
+    const res = await app.request.get(`/feed/${created.id}`)
+    expect(res.status).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(res.body.post).toMatchObject({
+      id: created.id,
+      like_count: 1,
+      reply_count: 0,
+      visibility: 'followers',
+    })
+    const listing = await app.request.get('/feed')
+    expect(res.body.post).toEqual(listing.body.posts[0])
+  })
+
+  test('404s an unknown or non-UUID post id', async () => {
+    const unknown = await app.request.get('/feed/00000000-0000-4000-8000-000000000000')
+    expect(unknown.status).toBe(404)
+    expect(unknown.body).toEqual({ error: 'Feed post not found', success: false })
+    expect((await app.request.get('/feed/not-a-uuid')).status).toBe(404)
+  })
+
+  test('does not shadow GET /feed/timeline or /feed/article-drafts', async () => {
+    const timeline = await app.request.get('/feed/timeline')
+    expect(timeline.status).toBe(200)
+    expect(timeline.body.entries).toEqual([])
+    const drafts = await app.request.get('/feed/article-drafts')
+    expect(drafts.status).toBe(200)
+    expect(drafts.body.drafts).toEqual([])
   })
 })
 

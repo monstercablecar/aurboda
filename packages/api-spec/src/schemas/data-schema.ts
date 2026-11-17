@@ -29,6 +29,8 @@ const fieldDefinitionShape = {
     .optional()
     .meta({ description: 'For string fields: constrain to specific values' }),
   label: z.string().optional().meta({ description: 'Human-readable label (defaults to capitalized name)' }),
+  max: z.number().optional().meta({ description: 'For number fields: the highest allowed value' }),
+  min: z.number().optional().meta({ description: 'For number fields: the lowest allowed value' }),
   name: z
     .string()
     .regex(/^[a-z][a-z0-9_]*$/)
@@ -37,15 +39,49 @@ const fieldDefinitionShape = {
   unit: z.string().optional().meta({ description: 'Display unit suffix (e.g. "cm", "kg")' }),
 }
 
+type BoundedField = { max?: number; min?: number; type: string }
+
+const boundsOnlyOnNumber = (field: BoundedField): boolean =>
+  field.type === 'number' || (field.min === undefined && field.max === undefined)
+
+const boundsInOrder = (field: BoundedField): boolean =>
+  field.min === undefined || field.max === undefined || field.min <= field.max
+
+const boundsOnlyOnNumberIssue = { message: 'min and max are only allowed on a number field', path: ['min'] }
+const boundsInOrderIssue = { message: 'min must not be above max', path: ['min'] }
+
+export const dataFieldCatalogs = ['exercises'] as const
+
+export const dataFieldCatalogSchema = z.enum(dataFieldCatalogs).meta({
+  id: 'DataFieldCatalog',
+  description:
+    'A built-in catalogue a data field can be matched against (`exercises`: the exercise catalogue)',
+})
+
+export type DataFieldCatalog = z.infer<typeof dataFieldCatalogSchema>
+
 export const dataItemFieldDefinitionSchema = z
   .object({
     ...fieldDefinitionShape,
+    catalog: dataFieldCatalogSchema.optional().meta({
+      description:
+        'Built-in catalogue the values of this field are matched against (`exercises`: the exercise catalogue, `GET /exercise-catalog`). Clients suggest its entries; any text stays valid. Only on a string field without enum_values',
+    }),
     is_categorical: z.boolean().optional().meta({
       description:
         'Whether the items can be grouped by this field (e.g. the exercise of a set): sessions, field values and chart breakdowns then accept the path `<list>.<field>`',
     }),
     type: dataItemFieldTypeSchema.meta({ description: 'Value type for validation' }),
   })
+  .refine(
+    (field) => field.catalog === undefined || (field.type === 'string' && field.enum_values === undefined),
+    {
+      message: 'catalog is only allowed on a string field without enum_values',
+      path: ['catalog'],
+    },
+  )
+  .refine(boundsOnlyOnNumber, boundsOnlyOnNumberIssue)
+  .refine(boundsInOrder, boundsInOrderIssue)
   .meta({
     id: 'DataItemFieldDefinition',
     description: 'Definition of one scalar field of a list item (e.g. the exercise, weight or reps of a set)',
@@ -82,6 +118,8 @@ export const dataFieldDefinitionSchema = z
     message: 'a list field carries no enum_values or unit; its item fields do',
     path: ['type'],
   })
+  .refine(boundsOnlyOnNumber, boundsOnlyOnNumberIssue)
+  .refine(boundsInOrder, boundsInOrderIssue)
   .meta({ id: 'DataFieldDefinition', description: 'Definition of a single data field on an activity type' })
 
 export type DataFieldDefinition = z.infer<typeof dataFieldDefinitionSchema>

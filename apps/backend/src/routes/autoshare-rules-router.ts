@@ -13,6 +13,9 @@ import {
   type AutoshareRulesResponse,
   type BaseResponse,
   type PreviewAutoshareRuleResponse,
+  type SkipAutoshareBody,
+  skipAutoshareBodySchema,
+  type SkipAutoshareResponse,
   type UpdateAutoshareRuleBody,
   updateAutoshareRuleBodySchema,
   normalizeTags,
@@ -20,6 +23,7 @@ import {
 
 import type { AutoshareRulePatch, AutoshareRuleRecord } from '../db/index.ts'
 import type { AutoshareGroupMember } from '../services/autoshare-deps.ts'
+import type { SkipAutoshare } from '../services/autoshare-skip.ts'
 import type { AutosharePreviewDeps } from '../services/autoshare.ts'
 
 import {
@@ -29,6 +33,7 @@ import {
   insertAutoshareRule,
   updateAutoshareRule,
 } from '../db/index.ts'
+import { withdrawRuleAutoshares } from '../services/autoshare-pending.ts'
 import { PREVIEW_SAMPLE_DAYS, previewAutoshareRule } from '../services/autoshare.ts'
 import { type AnyMiddleware, type TypedRouter, typedRouter } from '../typed-router.ts'
 import { UUID_RE } from '../utils.ts'
@@ -40,6 +45,7 @@ export const serializeAutoshareRule = (record: AutoshareRuleRecord): AutoshareRu
   created_at: record.created_at.toISOString(),
   data_filters: record.data_filters,
   enabled: record.enabled,
+  delay_minutes: record.delay_minutes,
   enabled_at: record.enabled_at?.toISOString() ?? null,
   id: record.id,
   max_age_hours: record.max_age_hours,
@@ -63,6 +69,7 @@ export const serializeAutoshareRule = (record: AutoshareRuleRecord): AutoshareRu
 export const autoshareRuleInputFromBody = (body: AddAutoshareRuleBody) => ({
   activity_types: body.activity_types,
   data_filters: body.data_filters,
+  delay_minutes: body.delay_minutes,
   include_chart: body.include_chart,
   include_exercises: body.include_exercises,
   include_map: body.include_map,
@@ -91,6 +98,7 @@ export const autoshareRulePatchFromBody = ({
 export const createAutoshareRulesRouter = (
   authMiddleware: AnyMiddleware,
   previewDeps: AutosharePreviewDeps<AutoshareGroupMember>,
+  skip: SkipAutoshare,
 ): TypedRouter => {
   const router = typedRouter()
 
@@ -134,6 +142,23 @@ export const createAutoshareRulesRouter = (
     },
   )
 
+  router.post<Record<string, never>, SkipAutoshareResponse, SkipAutoshareBody>(
+    '/skips',
+    authMiddleware,
+    validateBody(skipAutoshareBodySchema),
+    async (req, res) => {
+      const outcome = await skip(req.user!, req.body.activity_id)
+      switch (outcome.status) {
+        case 'not_found':
+          return res.status(404).json({ error: 'Activity not found', success: false })
+        case 'already_shared':
+          return res.status(409).json({ error: 'This activity is already shared', success: false })
+        case 'skipped':
+          return res.json({ activity_ids: outcome.activity_ids, success: true })
+      }
+    },
+  )
+
   router.patch<{ id: string }, AutoshareRuleResponse, UpdateAutoshareRuleBody>(
     '/:id',
     authMiddleware,
@@ -145,6 +170,7 @@ export const createAutoshareRulesRouter = (
       }
       const record = await updateAutoshareRule(user, req.params.id, autoshareRulePatchFromBody(req.body))
       if (!record) return res.status(404).json({ error: 'Rule not found', success: false })
+      if (!record.enabled) await withdrawRuleAutoshares(user, record.id)
       res.json({ rule: serializeAutoshareRule(record), success: true })
     },
   )
@@ -156,6 +182,7 @@ export const createAutoshareRulesRouter = (
     }
     const deleted = await deleteAutoshareRule(user, req.params.id)
     if (!deleted) return res.status(404).json({ error: 'Rule not found', success: false })
+    await withdrawRuleAutoshares(user, req.params.id)
     res.json({ success: true })
   })
 
