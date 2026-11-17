@@ -48,6 +48,7 @@ import {
   wellKnownQuantpubSchema,
 } from './schemas/challenges.ts'
 import {
+  baseResponseSchema,
   baseResponseSchemaMeta,
   iso8601DateTimeSchema,
   metricTypeSchema,
@@ -220,6 +221,13 @@ import {
   sendEmailVerificationResponseSchema,
   updateAccountEmailBodySchema,
 } from './schemas/profile.ts'
+import {
+  addReminderBodySchema,
+  updateReminderBodySchema,
+  reminderResponseSchema,
+  remindersResponseSchema,
+  reminderTestResponseSchema,
+} from './schemas/reminders.ts'
 import {
   mergeRoutesBodySchema,
   mergeRoutesResponseSchema,
@@ -1862,6 +1870,135 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/reminders': {
+      get: {
+        security: [{ bearerAuth: [] }],
+        tags: ['Notifications'],
+        summary: 'List custom reminders and scheduler availability',
+        responses: {
+          200: {
+            description: 'Successful response',
+            content: { 'application/json': { schema: remindersResponseSchema } },
+          },
+          400: {
+            description: 'Invalid reminder',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          404: {
+            description: 'Reminder not found',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          409: {
+            description: 'Reminder limit or test rate limit',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+        },
+      },
+      post: {
+        security: [{ bearerAuth: [] }],
+        tags: ['Notifications'],
+        summary: 'Create a custom reminder',
+        responses: {
+          200: {
+            description: 'Successful response',
+            content: { 'application/json': { schema: reminderResponseSchema } },
+          },
+          400: {
+            description: 'Invalid reminder',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          404: {
+            description: 'Reminder not found',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          409: {
+            description: 'Reminder limit or test rate limit',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+        },
+        requestBody: { required: true, content: { 'application/json': { schema: addReminderBodySchema } } },
+      },
+    },
+    '/reminders/{id}': {
+      patch: {
+        security: [{ bearerAuth: [] }],
+        tags: ['Notifications'],
+        summary: 'Update or pause a custom reminder',
+        responses: {
+          200: {
+            description: 'Successful response',
+            content: { 'application/json': { schema: reminderResponseSchema } },
+          },
+          400: {
+            description: 'Invalid reminder',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          404: {
+            description: 'Reminder not found',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          409: {
+            description: 'Reminder limit or test rate limit',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+        },
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: updateReminderBodySchema } },
+        },
+        requestParams: { path: z.object({ id: z.string().uuid() }) },
+      },
+      delete: {
+        security: [{ bearerAuth: [] }],
+        tags: ['Notifications'],
+        summary: 'Delete a custom reminder',
+        responses: {
+          200: {
+            description: 'Successful response',
+            content: { 'application/json': { schema: baseResponseSchema } },
+          },
+          400: {
+            description: 'Invalid reminder',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          404: {
+            description: 'Reminder not found',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          409: {
+            description: 'Reminder limit or test rate limit',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+        },
+        requestParams: { path: z.object({ id: z.string().uuid() }) },
+      },
+    },
+    '/reminders/{id}/test': {
+      post: {
+        security: [{ bearerAuth: [] }],
+        tags: ['Notifications'],
+        summary: 'Queue a test notification (one per account per minute)',
+        responses: {
+          200: {
+            description: 'Successful response',
+            content: { 'application/json': { schema: reminderTestResponseSchema } },
+          },
+          400: {
+            description: 'Invalid reminder',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          404: {
+            description: 'Reminder not found',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+          409: {
+            description: 'Reminder limit or test rate limit',
+            content: { 'application/json': { schema: errorResponseSchema } },
+          },
+        },
+        requestParams: { path: z.object({ id: z.string().uuid() }) },
+      },
+    },
     '/notifications': {
       get: {
         description:

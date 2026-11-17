@@ -1,0 +1,72 @@
+.custom-reminders-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.custom-reminders-list > li {
+  border-bottom: 1px solid var(--color-border, #8885);
+  padding: 0.8rem 0;
+}
+.custom-reminder-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+  margin-bottom: 0.6rem;
+}
+.custom-reminder-summary span {
+  font-size: 0.85rem;
+}
+.custom-reminder-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.custom-reminder-form {
+  margin-top: 1rem;
+}
+.custom-reminder-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.custom-reminder-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+}
+.custom-reminder-form input:not([type='checkbox']),
+.custom-reminder-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.6rem;
+  font: inherit;
+}
+.custom-reminder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+.custom-reminder-form .custom-reminder-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.custom-reminder-delete {
+  margin-top: 0.75rem;
+}
+.custom-reminder-calendar {
+  display: inline-block;
+  margin-top: 0.6rem;
+}
+@media (max-width: 480px) {
+  .custom-reminder-grid {
+    grid-template-columns: 1fr;
+  }
+  .custom-reminder-actions button {
+    min-height: 44px;
+  }
+}

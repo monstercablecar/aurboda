@@ -226,6 +226,7 @@ import {
   relayRecipients,
   retryErroredRelays,
 } from './services/relays.ts'
+import { createReminderScheduler } from './services/reminders.ts'
 import { safeFetchGet } from './services/safe-fetch.ts'
 import { initSentry, Sentry } from './services/sentry.ts'
 import {
@@ -1098,6 +1099,14 @@ const main = async () => {
       await createPeopleReminderScheduler(boss, () => listUserNames(userDb))
     } catch {
       console.warn('People reminders unavailable: scheduler could not start.')
+    }
+  }
+
+  if (boss) {
+    try {
+      await createReminderScheduler(boss, () => listUserNames(userDb))
+    } catch {
+      console.warn('Custom reminders unavailable: scheduler could not start.')
     }
   }
 

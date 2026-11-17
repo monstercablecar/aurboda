@@ -82,6 +82,7 @@ import { registerPeopleTools } from './mcp/people-tools.ts'
 import { registerPharmacologyTools } from './mcp/pharmacology-tools.ts'
 import { registerQueryTools } from './mcp/query-tools.ts'
 import { refuseMutatingTools } from './mcp/read-only-gate.ts'
+import { registerReminderTools } from './mcp/reminder-tools.ts'
 import { registerReportTools } from './mcp/report-tools.ts'
 import { MAX_MCP_INPUT_ELEMENTS, mcpRequestLimitError } from './mcp/request-limits.ts'
 import { registerResourcesTools } from './mcp/resources-tools.ts'
@@ -254,6 +255,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerNativeTasksTools(server, user)
   registerResourcesTools(server, user, deps.centralDb)
   registerNoteTools(server, user)
+  registerReminderTools(server, user)
   registerNotificationTools(
     server,
     user,
