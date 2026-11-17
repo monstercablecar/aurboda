@@ -12,7 +12,7 @@ export const restoreDumpAsDocumented = (dumpPath: string, role: string, database
   if (!container || !adminUri) {
     throw new Error('Test database not available: this run started without the integration global setup')
   }
-  const restore = String.raw`(echo 'SET ROLE "${role}";'; gunzip -c "$DUMP" | grep -v -e '^COMMENT ON EXTENSION' -e '^SET transaction_timeout' -e '^\\restrict ' -e '^\\unrestrict ') | docker exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 --quiet -U "$SUPERUSER" -d "$DATABASE"`
+  const restore = String.raw`set -o pipefail; (echo 'SET ROLE "${role}";'; gunzip -c "$DUMP" | grep -v -e '^COMMENT ON EXTENSION' -e '^SET transaction_timeout' -e '^\\restrict ' -e '^\\unrestrict ') | docker exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 --quiet -U "$SUPERUSER" -d "$DATABASE"`
   execFileSync('bash', ['-c', restore], {
     env: {
       ...process.env,

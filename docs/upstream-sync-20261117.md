@@ -286,3 +286,9 @@ Node 26.13.0 and pinned pnpm 10.33.4; frozen dependency input regenerated while 
 The first unrestricted backend run was interrupted after missing host PostgreSQL clients and local disk timeouts. The bounded rerun uses four workers and container-backed PostgreSQL clients. Disk flushes are disabled only in its disposable test container; no production database settings are changed and this is not a crash-durability test.
 
 The working-tree secret scan flags public assessment/exercise identifiers and synthetic test keys (including generated build output); no credential was identified in those candidates. The fetched full-history scan identified one additional upstream public exercise identifier, `landmine_180_s`. Its exact original-commit fingerprint was documented in `.gitleaksignore`; no broad exclusions were added. A final history scan must pass after committing.
+
+## Regression follow-up
+
+The bounded backend run passed 9,215 tests and skipped one. Ten failures and a cleanup hook were isolated to new federation test fixtures, missing local Docker command compatibility and cleanup timing. The fixtures now preserve Fedify method receivers and allow loopback delivery only in the synthetic transport test, keeping production address restrictions intact. The export restore helper keeps pipeline failures visible. The six affected suites then passed all 152 tests with a 60-second cleanup allowance and two workers. This is combined evidence from the broad run and focused rerun, not a claim that the first broad run was green. GitHub CI remains the complete normal-environment gate.
+
+The host proxy candidate passed eight isolated modes covering headers, authentication/signup budgets, per-client/global budgets, missing forwarded headers, Garmin secret-path routing/log suppression, and the new OIDC/recovery endpoints. The candidate is not installed on production.

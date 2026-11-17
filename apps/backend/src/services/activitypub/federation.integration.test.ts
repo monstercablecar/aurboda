@@ -1119,8 +1119,11 @@ describe('Feed federation actor + WebFinger', () => {
       const quietContext = (user: string) => {
         const base = inboxContext(fed, ORIGIN, user, aliceServes())
         return new Proxy(base, {
-          get: (target, prop) =>
-            prop === 'sendActivity' ? async () => undefined : (Reflect.get(target, prop) as unknown),
+          get: (target, prop) => {
+            if (prop === 'sendActivity') return async () => undefined
+            const value: unknown = Reflect.get(target, prop, target)
+            return typeof value === 'function' ? value.bind(target) : value
+          },
         })
       }
 

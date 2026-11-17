@@ -1,11 +1,12 @@
-import type { Federation } from '@fedify/fedify'
+import type * as Fedify from '@fedify/fedify'
+import type { Federation, FederationOptions } from '@fedify/fedify'
 import type { AddressInfo } from 'node:net'
 
 import { Follow } from '@fedify/fedify/vocab'
 import { generateKeyPairSync } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import * as PgBossModule from 'pg-boss'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
 import type { PgBoss } from '../pg-boss.ts'
 
@@ -18,6 +19,16 @@ import {
 import { createQueuedDelivery, OUTBOX_QUEUE } from './delivery-queue.ts'
 import { createFeedFederation } from './federation.ts'
 import { INSTANCE_ACTOR_ID } from './instance-actor.ts'
+
+// Only this transport test sends to a loopback inbox; production keeps Fedify's address guard.
+vi.mock('@fedify/fedify', async (importOriginal) => {
+  const actual = await importOriginal<typeof Fedify>()
+  return {
+    ...actual,
+    createFederation: (options: FederationOptions<void>) =>
+      actual.createFederation({ ...options, allowPrivateAddress: true }),
+  }
+})
 
 const SETUP_TIMEOUT = 120_000
 const ORIGIN = 'https://aurboda.test'
