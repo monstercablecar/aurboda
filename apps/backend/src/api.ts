@@ -629,6 +629,7 @@ const main = async () => {
         console.error(`⚠️ Single-lift type retirement failed for ${user}:`, error)
       }
     }
+    console.info('Startup user maintenance completed')
   })
 
   // Accounts from before signup dates were tracked get a row without one.

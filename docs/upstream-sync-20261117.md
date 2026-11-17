@@ -21,6 +21,10 @@ The 251 entries comprise 138 non-merge changes and 113 merges. Every entry was i
 
 31 conflicted files were combined explicitly. Shared schemas include custom settings and new upstream fields. Both private tables and notification tables remain registered. Resources and account email/OIDC central storage coexist. Sleep retains naps, check-ins, wake-date attribution and history while adding sleep-debt displays. Timeline retains private future Family dates and session navigation while adding daily metrics and range presets. Navigation keeps page descriptions/visibility and adopts new destinations in source-card order. New OIDC/recovery auth assignments are fenced against account changes.
 
+## Migration and rollback constraints
+
+Startup includes data conversions as well as additive schema changes. In particular, legacy single-lift activities become strength-training sets; unreferenced built-in lift definitions are deleted and referenced definitions become custom types. Image rollback does not reverse these transformations. Deployment requires a synthetic upgrade and old-image compatibility test covering references and overlapping sessions, a matched pre-upgrade backup, and private verification of schema fingerprints and startup maintenance completion without migration errors. Database discovery must occur after pausing application writes.
+
 ## Commit inventory
 
 “Adopt” below means inclusion in the candidate subject to the safeguards above and required testing/review. It does not assert deployment. “History” means retain the merge ancestry; substantive changes are listed separately. Test counts are changed test files, not passing test counts.
