@@ -3,6 +3,7 @@ import type { Assessment, AssessmentQuestion, QuestionnaireTemplate } from '@aur
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'preact/hooks'
 
+import { AssessmentAbout } from '../../components/AssessmentLibrary/AssessmentAbout'
 import { pharmacologyErrorMessage, submitAssessment } from '../../state/api'
 import { localDateTimeToIso, nowLocalDateTime } from './model'
 import { configuredChoices } from './questionnaire-choices'
@@ -68,17 +69,24 @@ export function QuestionField({
     }
     case 'numeric':
       return (
-        <input
-          type="number"
-          step={typeof question.config.step === 'number' ? question.config.step : 'any'}
-          min={typeof question.config.min === 'number' ? question.config.min : undefined}
-          max={typeof question.config.max === 'number' ? question.config.max : undefined}
-          value={typeof value === 'number' ? value : ''}
-          onInput={(event) => {
-            const next = (event.target as HTMLInputElement).value
-            onChange(next === '' ? undefined : Number(next))
-          }}
-        />
+        <>
+          <input
+            aria-label={question.prompt}
+            type="number"
+            step={typeof question.config.step === 'number' ? question.config.step : 'any'}
+            min={typeof question.config.min === 'number' ? question.config.min : undefined}
+            max={typeof question.config.max === 'number' ? question.config.max : undefined}
+            value={typeof value === 'number' ? value : ''}
+            onInput={(event) => {
+              const next = (event.target as HTMLInputElement).value
+              onChange(next === '' ? undefined : Number(next))
+            }}
+          />
+          <div class="anchor-labels">
+            <span>{String(anchors.min ?? '')}</span>
+            <span>{String(anchors.max ?? '')}</span>
+          </div>
+        </>
       )
     case 'yes_no':
       return (
@@ -142,6 +150,7 @@ export function QuestionField({
     case 'short_text':
       return (
         <input
+          aria-label={question.prompt}
           value={typeof value === 'string' ? value : ''}
           onInput={(event) => onChange((event.target as HTMLInputElement).value)}
         />
@@ -149,6 +158,7 @@ export function QuestionField({
     case 'long_text':
       return (
         <textarea
+          aria-label={question.prompt}
           value={typeof value === 'string' ? value : ''}
           onInput={(event) => onChange((event.target as HTMLTextAreaElement).value)}
         />
@@ -156,6 +166,7 @@ export function QuestionField({
     case 'datetime':
       return (
         <input
+          aria-label={question.prompt}
           type="datetime-local"
           value={typeof value === 'string' ? value : ''}
           onInput={(event) => onChange((event.target as HTMLInputElement).value)}
@@ -164,6 +175,7 @@ export function QuestionField({
     case 'tags':
       return (
         <input
+          aria-label={question.prompt}
           placeholder="Separate tags with commas"
           value={Array.isArray(value) ? value.join(', ') : ''}
           onInput={(event) =>
@@ -233,6 +245,7 @@ export function AssessmentForm({
         responses,
         stage,
         template_id: template.id,
+        template_version: template.version,
         timezone,
         ...(treatmentSessionId && { treatment_session_id: treatmentSessionId }),
       })
@@ -258,6 +271,7 @@ export function AssessmentForm({
           ×
         </button>
       </div>
+      <AssessmentAbout template={template} />
       {template.description && <p>{template.description}</p>}
       {needsActualTime && (
         <p class="form-hint">

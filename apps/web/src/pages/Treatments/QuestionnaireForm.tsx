@@ -1,9 +1,11 @@
 import type { AssessmentQuestion, QuestionnaireTemplate } from '@aurboda/api-spec'
 
+import { isManagedInstrumentKey } from '@aurboda/api-spec'
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'preact/hooks'
 
 import { createQuestionnaire, pharmacologyErrorMessage, updateQuestionnaire } from '../../state/api'
+import { QuestionField } from './AssessmentForm'
 import { configuredChoices, hasStructuredChoices } from './questionnaire-choices'
 
 type ResponseType = AssessmentQuestion['response_type']
@@ -79,6 +81,15 @@ const buildQuestionInput = (question: QuestionDraft, sortOrder: number) => {
   if (numericType(question.responseType) && (!Number.isFinite(min) || !Number.isFinite(max) || min >= max)) {
     throw new Error(`Question ${sortOrder + 1} needs a valid minimum and maximum.`)
   }
+  if (numericType(question.responseType) && (!Number.isFinite(step) || step <= 0)) {
+    throw new Error(`Question ${sortOrder + 1} needs a positive step.`)
+  }
+  if (
+    question.responseType === 'likert' &&
+    (!Number.isInteger(min) || !Number.isInteger(max) || max - min > 20)
+  ) {
+    throw new Error('Use a whole-number scale with at most 21 choices, or choose Numeric.')
+  }
   const structuredChoices = hasStructuredChoices(question.originalConfig)
   const choices = structuredChoices
     ? configuredChoices({ config: question.originalConfig }).map((choice) => choice.value)
@@ -120,17 +131,27 @@ const buildQuestionInput = (question: QuestionDraft, sortOrder: number) => {
   }
 }
 
+// eslint-disable-next-line complexity -- shared editor preserves advanced fields while supporting simple creation and a renderer-backed preview
 export function QuestionnaireForm({
   onCancel,
   onSaved,
   template,
+  simple = false,
 }: {
+  simple?: boolean
   onCancel: () => void
   onSaved: (message: string) => void
   template?: QuestionnaireTemplate
 }) {
   const [displayName, setDisplayName] = useState(template?.display_name ?? '')
-  const [stableKey, setStableKey] = useState(template?.stable_key ?? '')
+  const [stableKey, setStableKey] = useState(
+    template?.stable_key ?? (simple ? `custom_${crypto.randomUUID().replaceAll('-', '')}` : ''),
+  )
+  const [domain, setDomain] = useState<'mental' | 'physical' | 'general'>(
+    template?.library?.domain ?? 'general',
+  )
+  const [recall, setRecall] = useState(template?.library?.recall_period ?? 'How you feel when answering')
+  const [effort, setEffort] = useState(template?.library?.estimated_minutes ?? 2)
   const [description, setDescription] = useState(template?.description ?? '')
   const [moment, setMoment] = useState<QuestionnaireTemplate['moment']>(template?.moment ?? 'custom')
   const [enabled, setEnabled] = useState(template?.enabled ?? true)
@@ -139,8 +160,21 @@ export function QuestionnaireForm({
       template?.questions
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map(questionDraft) ?? [questionDraft()],
+        .map(questionDraft) ?? [
+        { ...questionDraft(), stableKey: simple ? `q_${crypto.randomUUID().replaceAll('-', '')}` : '' },
+      ],
   )
+  const [previewQuestions, setPreviewQuestions] = useState<AssessmentQuestion[]>([])
+  const [preview, setPreview] = useState(false)
+  const [previewAnswers, setPreviewAnswers] = useState<Record<string, unknown>>({})
+  const moveQuestion = (index: number, direction: number) =>
+    setQuestions((current) => {
+      const next = [...current]
+      const target = index + direction
+      if (target < 0 || target >= next.length) return current
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
   const [error, setError] = useState('')
   const updateQuestion = (index: number, updates: Partial<QuestionDraft>) =>
     setQuestions((current) =>
@@ -154,6 +188,7 @@ export function QuestionnaireForm({
       const bodyQuestions = questions.map(buildQuestionInput)
       const body = {
         description: description.trim() || null,
+        library: { domain, recall_period: recall.trim(), estimated_minutes: effort },
         display_name: displayName.trim(),
         enabled,
         moment,
@@ -167,6 +202,21 @@ export function QuestionnaireForm({
     onSuccess: () => onSaved(template ? 'Questionnaire updated.' : 'Questionnaire created.'),
   })
 
+  if (template && isManagedInstrumentKey(template.stable_key)) {
+    return (
+      <section>
+        <h2>Standardized instrument</h2>
+        <p>
+          This definition is read-only. Use the shared assessment library to make a custom copy without
+          official scoring.
+        </p>
+        <a href={template.library?.domain === 'physical' ? '/physical-assessments' : '/assessments'}>
+          Open library
+        </a>
+        <button onClick={onCancel}>Close</button>
+      </section>
+    )
+  }
   return (
     <form
       class="treatments-form wide-form"
@@ -193,7 +243,7 @@ export function QuestionnaireForm({
             onInput={(event) => setDisplayName((event.target as HTMLInputElement).value)}
           />
         </label>
-        <label class="field">
+        <label class="field" hidden={simple}>
           <span>Stable key</span>
           <input
             required
@@ -202,7 +252,7 @@ export function QuestionnaireForm({
             onInput={(event) => setStableKey((event.target as HTMLInputElement).value)}
           />
         </label>
-        <label class="field">
+        <label class="field" hidden={simple}>
           <span>When</span>
           <select
             value={moment}
@@ -235,17 +285,107 @@ export function QuestionnaireForm({
           />
         </label>
       </div>
+      <div class="form-grid">
+        <label class="field">
+          Library category
+          <select value={domain} onChange={(e) => setDomain(e.currentTarget.value as typeof domain)}>
+            <option value="general">General</option>
+            <option value="mental">Mental well-being</option>
+            <option value="physical">Physical health and function</option>
+          </select>
+        </label>
+        <label class="field">
+          Recall period
+          <input required maxLength={300} value={recall} onInput={(e) => setRecall(e.currentTarget.value)} />
+        </label>
+        <label class="field">
+          Estimated minutes
+          <input
+            type="number"
+            required
+            min={1}
+            max={120}
+            value={effort}
+            onInput={(e) => setEffort(Number(e.currentTarget.value))}
+          />
+        </label>
+      </div>
+      <p class="form-hint">
+        Custom questionnaire · not a validated instrument. Choose questions that help you notice something
+        useful. No total score is calculated.
+      </p>
+      <button
+        class="btn-secondary"
+        type="button"
+        onClick={() => {
+          if (preview) {
+            setPreview(false)
+            return
+          }
+          try {
+            setPreviewQuestions(
+              questions.map((q, i) => ({
+                ...buildQuestionInput(q, i),
+                id: q.id ?? q.stableKey,
+                version: q.version ?? 1,
+              })),
+            )
+            setError('')
+            setPreviewAnswers({})
+            setPreview(true)
+          } catch (failure) {
+            setError(pharmacologyErrorMessage(failure))
+          }
+        }}
+      >
+        {preview ? 'Edit questions' : 'Preview questions'}
+      </button>
+      {preview && (
+        <section aria-label="Questionnaire preview">
+          <p>Preview only. Answers here are not saved.</p>
+          {previewQuestions
+            .filter((q) => q.enabled)
+            .map((q) => (
+              <fieldset class="question-field" key={q.id}>
+                <legend>
+                  {q.prompt} {q.required ? '(required)' : '(optional)'}
+                </legend>
+                <QuestionField
+                  question={q}
+                  value={previewAnswers[q.id]}
+                  onChange={(value) => setPreviewAnswers((current) => ({ ...current, [q.id]: value }))}
+                />
+              </fieldset>
+            ))}
+        </section>
+      )}
       <fieldset class="form-panel">
         <legend>Questions</legend>
         <p class="form-hint">
           Editing a question creates a new immutable version. Existing answers keep their original wording and
           scale.
         </p>
-        <div class="builder-items">
+        <div class="builder-items" hidden={preview}>
           {questions.map((question, index) => (
-            <div class="builder-item" key={question.id ?? index}>
+            <div class="builder-item" key={question.stableKey || index}>
               <div class="builder-item-heading">
                 <strong>Question {index + 1}</strong>
+                <button
+                  type="button"
+                  disabled={index === 0}
+                  onClick={() => moveQuestion(index, -1)}
+                  aria-label={`Move question ${index + 1} up`}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  disabled={index === questions.length - 1}
+                  onClick={() => moveQuestion(index, 1)}
+                  aria-label={`Move question ${index + 1} down`}
+                >
+                  Move down
+                </button>
                 <button
                   class="danger-link"
                   type="button"
@@ -257,7 +397,7 @@ export function QuestionnaireForm({
                 </button>
               </div>
               <div class="form-grid">
-                <label class="field">
+                <label class="field" hidden={simple}>
                   <span>Stable key</span>
                   <input
                     required
@@ -373,7 +513,7 @@ export function QuestionnaireForm({
                     )}
                   </label>
                 )}
-                <label class="field">
+                <label class="field" hidden={simple}>
                   <span>Analytics metric name</span>
                   <input
                     pattern="[a-z][a-z0-9_]*"
@@ -384,7 +524,7 @@ export function QuestionnaireForm({
                     }
                   />
                 </label>
-                <label class="field">
+                <label class="field" hidden={simple}>
                   <span>Unit</span>
                   <input
                     value={question.unit}
@@ -422,7 +562,13 @@ export function QuestionnaireForm({
         <button
           class="btn-secondary"
           type="button"
-          onClick={() => setQuestions((current) => [...current, questionDraft()])}
+          onClick={() => {
+            setPreview(false)
+            setQuestions((current) => [
+              ...current,
+              { ...questionDraft(), stableKey: simple ? `q_${crypto.randomUUID().replaceAll('-', '')}` : '' },
+            ])
+          }}
         >
           Add question
         </button>

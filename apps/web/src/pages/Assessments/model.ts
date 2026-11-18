@@ -117,6 +117,7 @@ export const assessmentBody = (
   timezone: string,
 ): SubmitAssessmentBody => ({
   template_id: template.id,
+  template_version: template.version,
   assessed_at,
   timezone,
   responses: Object.entries(values).map(([key, value]) => {

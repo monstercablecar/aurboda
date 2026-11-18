@@ -27,6 +27,8 @@ import type {
   UpdateTreatmentTypeBody,
 } from '@aurboda/api-spec'
 
+import { assessmentInstruments, matchesInstrumentDefinition, isManagedInstrumentKey } from '@aurboda/api-spec'
+
 import { withUserTransaction, query } from '../db/connection.ts'
 import * as db from '../db/pharmacology.ts'
 import { BRIEF_TREATMENT_KEY } from './treatment-checkin-questions.ts'
@@ -177,8 +179,14 @@ export const deleteTreatment = (user: string, id: string) =>
     if (session) await refreshCheckinSchedule(tx, session)
     return deleted
   })
+export const getQuestionnaireCatalog = () => assessmentInstruments.map((i) => i.definition)
 export const listQuestionnaires = db.listQuestionnaires
 export const createQuestionnaire = (user: string, input: CreateQuestionnaireBody) => {
+  if (isManagedInstrumentKey(input.stable_key) && !matchesInstrumentDefinition(input)) {
+    throw new Error(
+      'Install the unchanged library instrument, or save a custom questionnaire with a new identity.',
+    )
+  }
   if (input.stable_key === BRIEF_TREATMENT_KEY) {
     throw new Error('This questionnaire key is reserved for the versioned brief check-in.')
   }

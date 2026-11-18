@@ -14,3 +14,5 @@ export * from './article-blocks.ts'
 export * from './metric-units.ts'
 export * from './report-table.ts'
 export * from './actor-host.ts'
+
+export * from './assessment-catalog.ts'

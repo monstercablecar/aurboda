@@ -20,6 +20,7 @@ import { TodayView } from './TodayView'
 const mocks = vi.hoisted(() => ({
   submit: vi.fn<typeof Api.submitAssessment>(),
   update: vi.fn<typeof Api.updateQuestionnaire>(),
+  create: vi.fn<typeof Api.createQuestionnaire>(),
   query: {} as Record<string, string>,
   templates: [] as QuestionnaireTemplate[],
 }))
@@ -32,6 +33,7 @@ vi.mock('../../state/api', async () => ({
   ...(await vi.importActual<typeof Api>('../../state/api')),
   submitAssessment: mocks.submit,
   updateQuestionnaire: mocks.update,
+  createQuestionnaire: mocks.create,
   pharmacologyErrorMessage: (error: Error) => error.message,
   fetchQuestionnaires: async () => mocks.templates,
   fetchSubstances: async () => [],
@@ -203,4 +205,48 @@ describe('nutrition questionnaires belong on Simple Food', () => {
       expect(container.querySelector('.assessment-form')).toBeNull()
     },
   )
+})
+
+describe('lightweight shared builder', () => {
+  const input = (caption: string, value: string, index = 0) => {
+    const label = [...container.querySelectorAll('label')].filter(
+      (l) => l.querySelector('span')?.textContent === caption,
+    )[index]
+    const field = label?.querySelector('input')
+    if (!field) throw new Error(`Missing ${caption}`)
+    act(() => {
+      field.value = value
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+  test('generates identities, previews without saving, reorders and saves reusable optional questions', async () => {
+    mount(<QuestionnaireForm simple onCancel={() => {}} onSaved={() => {}} />)
+    input('Name', 'My useful observations')
+    input('Prompt', 'First observation')
+    act(() => button('Add question').click())
+    input('Prompt', 'Second observation', 1)
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Move question 2 up"]')!.click())
+    act(() => button('Preview questions').click())
+    const preview = container.querySelector('[aria-label="Questionnaire preview"]')!
+    expect(preview.textContent).toContain('Second observation')
+    expect(preview.querySelector('legend')?.textContent).toContain('Second observation')
+    expect(mocks.create).not.toHaveBeenCalled()
+    await submit()
+    const body = mocks.create.mock.calls[0]?.[0]
+    expect(body?.stable_key).toMatch(/^custom_/)
+    expect(body?.questions.map((q) => q.prompt)).toEqual(['Second observation', 'First observation'])
+    expect(body?.questions.every((q) => !q.required && q.metric_name === null)).toBe(true)
+    expect(body?.library?.recall_period).toBeTruthy()
+  })
+  test('does not truncate an invalid scale in preview or save it', async () => {
+    mount(<QuestionnaireForm simple onCancel={() => {}} onSaved={() => {}} />)
+    input('Name', 'Scale')
+    input('Prompt', 'Ability')
+    input('Maximum', '10000')
+    act(() => button('Preview questions').click())
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('at most 21')
+    expect(container.querySelector('[aria-label="Questionnaire preview"]')).toBeNull()
+    await submit()
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
 })

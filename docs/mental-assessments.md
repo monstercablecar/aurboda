@@ -53,3 +53,7 @@ Completed memory and reaction runs save automatically, including low scores and 
 ## Shared treatment check-ins
 
 The page also displays the same private [treatment check-ins](features/treatment-checkins.md) used in Treatments, including drafts, timing and saved assessment facts. Personality and IQ activities remain optional exploration, not default treatment follow-ups. Standardized deeper assessments are planned for release two and are not implemented by this change.
+
+## Shared in-app library
+
+Mental Assessments now also hosts the common custom/instrument library used by Physical Assessments and treatment follow-up selection. **+ Add → Questionnaire** creates reusable templates. Existing external-test cards and their saved results remain available. Initial in-app instruments are GAD-7 and PEG; see the [candidate comparison](research/assessment-candidates.md) and [release-two behavior](features/treatment-checkins.md#shared-assessment-library-and-optional-deeper-observations). Installing or declining an instrument schedules nothing by itself. Physical Assessments uses the same component and is independently hideable through Feature Control.

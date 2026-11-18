@@ -117,6 +117,7 @@ const StrengthLog = lazyPage(() => import('./pages/Strength/Session.jsx'), 'Stre
 const StrengthSession = lazyPage(() => import('./pages/Strength/Session.jsx'), 'StrengthSession')
 const Terms = lazyPage(() => import('./pages/Terms/index.jsx'), 'Terms')
 const Timeline = lazyPage(() => import('./pages/Timeline/index.jsx'), 'Timeline')
+const PhysicalAssessments = lazyPage(() => import('./pages/Assessments/index'), 'PhysicalAssessments')
 const Assessments = lazyPage(() => import('./pages/Assessments/index'), 'Assessments')
 const Treatments = lazyPage(() => import('./pages/Treatments/index'), 'Treatments')
 const CPAP = lazyPage(() => import('./pages/CPAP/index'), 'CPAP')
@@ -176,6 +177,7 @@ function AppShell() {
             <Route path="/journal/prompted" component={Journal} />
             <Route path="/resources" component={Resources} />
             <Route path="/assessments" component={Assessments} />
+            <Route path="/physical-assessments" component={PhysicalAssessments} />
             <Route path="/treatments" component={Treatments} />
             <Route path="/simple-food" component={SimpleFood} />
             <Route path="/timeline" component={Timeline} />

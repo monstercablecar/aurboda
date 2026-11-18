@@ -185,6 +185,7 @@ import {
   pharmacologyTimelineResponseSchema,
   questionnaireResponseSchema,
   questionnairesResponseSchema,
+  questionnaireCatalogResponseSchema,
   regimenResponseSchema,
   regimensResponseSchema,
   submitAssessmentBodySchema,
@@ -3620,6 +3621,14 @@ const openApiDocument = createDocument({
         security: [{ bearerAuth: [] }],
         summary: 'Soft-delete treatment session',
         tags: ['Pharmacology'],
+      },
+    },
+    '/pharmacology/questionnaires/catalog': {
+      get: {
+        responses: pharmacologyResponses(questionnaireCatalogResponseSchema),
+        summary: 'List optional standardized assessment definitions',
+        tags: ['Pharmacology'],
+        security: [{ bearerAuth: [] }],
       },
     },
     '/pharmacology/questionnaires': {

@@ -1402,3 +1402,19 @@
     --treatment-red-soft: #351c20;
   }
 }
+
+.treatments-form [hidden] {
+  display: none !important;
+}
+
+.assessment-library .mental-card button {
+  margin: 0.35rem;
+}
+
+.treatments-form,
+.treatments-form *,
+.assessment-library,
+.assessment-library * {
+  box-sizing: border-box;
+  min-width: 0;
+}

@@ -9,6 +9,7 @@ import { activitiesTables } from './schema/activities.ts'
  * See docs/data-storage.md for design decisions and data flow documentation.
  */
 import { activityFeaturesTables } from './schema/activity-features.ts'
+import { assessmentLibraryTables } from './schema/assessment-library.ts'
 import { journalTables } from './schema/journal.ts'
 import { locationsTables } from './schema/locations.ts'
 import { mealsTables } from './schema/meals.ts'
@@ -66,6 +67,7 @@ export const createTableStatements: Record<string, string> = {
   ...metricsTables,
   ...pharmacologyTables,
   ...treatmentCheckinTables,
+  ...assessmentLibraryTables,
   ...notificationsTables,
   ...reminderTables,
   ...productivityTables,
@@ -309,6 +311,7 @@ export const tableCreationOrder = [
   'treatment_checkin_plans',
   'treatment_checkins',
   'treatment_checkins_indexes',
+  ...Object.keys(assessmentLibraryTables),
   'custom_reminders',
   'custom_reminders_indexes',
 ]

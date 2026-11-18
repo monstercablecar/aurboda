@@ -4,6 +4,7 @@ import type { VNode } from 'preact'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'preact/hooks'
 
+import { AssessmentLibrary } from '../../components/AssessmentLibrary'
 import { Celebration } from '../../components/Celebration'
 import {
   nextCelebration,
@@ -54,7 +55,8 @@ function Result({ entry, template }: { entry: Assessment; template: Questionnair
           return (
             <div key={answer.question_id}>
               <dt>
-                {question?.prompt ?? 'Archived question'}
+                {answer.question_prompt ??
+                  (question?.version === answer.question_version ? question.prompt : 'Archived question')}
                 {question && question.version !== answer.question_version
                   ? ` (version ${answer.question_version})`
                   : ''}
@@ -311,6 +313,7 @@ function Catalog() {
       {celebration && (
         <Celebration key={celebration.id} {...celebration} onDone={() => setCelebration(null)} />
       )}
+      <AssessmentLibrary domain="mental" />
       <TreatmentCheckins />
       <div class="mental-toolbar">
         <label>
@@ -435,8 +438,8 @@ export function Assessments() {
         <p class="mental-eyebrow">A personal record of your mind</p>
         <h1>Mental assessments</h1>
         <p>
-          Take a test externally, then record your results here. Results are saved to your Aurboda account and
-          can be exported. These tools do not provide a diagnosis.
+          Choose a questionnaire from your library, or take an external test and record its result. Results
+          are saved to your Aurboda account and can be exported. These tools do not provide a diagnosis.
         </p>
       </header>
       <details class="mental-method">
@@ -449,6 +452,22 @@ export function Assessments() {
         </p>
       </details>
       {auth.value.token ? <Catalog /> : <p>Please log in to record and view your results.</p>}
+    </div>
+  )
+}
+
+export function PhysicalAssessments() {
+  return (
+    <div class="mental-page">
+      <header>
+        <h1>Physical assessments</h1>
+        <p>Record pain, function and everyday difficulties when useful to you.</p>
+      </header>
+      {auth.value.token ? (
+        <AssessmentLibrary domain="physical" />
+      ) : (
+        <p>Please log in to record and view your results.</p>
+      )}
     </div>
   )
 }

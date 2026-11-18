@@ -35,6 +35,7 @@ import {
   getTreatmentSession,
 } from '../db/pharmacology.ts'
 import { httpError } from '../http-error.ts'
+import { validateResponses } from './assessment-validation.ts'
 import { createNotifier } from './notifications.ts'
 import { BRIEF_TREATMENT_KEY, ensureBriefTemplate } from './treatment-checkin-questions.ts'
 import { afterQuietHours, checkinWindow, HOUR, initialReminder } from './treatment-checkin-timing.ts'
@@ -355,84 +356,6 @@ export const addTreatmentReflection = async (
   })
 }
 
-type CheckinQuestion = QuestionnaireTemplate['questions'][number]
-const validateNumber = (q: CheckinQuestion, v: unknown) => {
-  if (
-    typeof v !== 'number' ||
-    !Number.isFinite(v) ||
-    (q.response_type === 'likert' && !Number.isInteger(v)) ||
-    (typeof q.config.min === 'number' && v < q.config.min) ||
-    (typeof q.config.max === 'number' && v > q.config.max)
-  ) {
-    throw httpError(400, 'Check the numeric answer range.')
-  }
-}
-const validateChoice = (q: CheckinQuestion, v: unknown) => {
-  const configured = q.config.choices ?? q.config.options
-  const choices = Array.isArray(configured)
-    ? configured.map((c) => (typeof c === 'string' ? c : (c as { value?: unknown }).value))
-    : []
-  const values = q.response_type === 'single_choice' ? [v] : v
-  if (!Array.isArray(values) || !values.length || values.some((value) => !choices.includes(value))) {
-    throw httpError(400, 'Choose an available answer.')
-  }
-}
-const validateText = (q: CheckinQuestion, v: unknown) => {
-  if (typeof v !== 'string' || v.length > 10000) throw httpError(400, 'Check the text answer.')
-  if (q.response_type === 'datetime' && !Number.isFinite(Date.parse(v))) {
-    throw httpError(400, 'Choose a valid date and time.')
-  }
-}
-const validateAnswer = (q: CheckinQuestion, v: unknown) => {
-  if (v === null || v === undefined || v === '') throw httpError(400, 'Omit unanswered questions.')
-  switch (q.response_type) {
-    case 'numeric':
-    case 'likert':
-      return validateNumber(q, v)
-    case 'short_text':
-    case 'long_text':
-    case 'datetime':
-      return validateText(q, v)
-    case 'single_choice':
-    case 'multiple_choice':
-      return validateChoice(q, v)
-    case 'yes_no':
-      if (typeof v !== 'boolean') throw httpError(400, 'Choose yes or no.')
-      break
-    case 'tags':
-      return validateTags(v)
-  }
-}
-const validateTags = (v: unknown) => {
-  if (!Array.isArray(v) || v.length > 100 || v.some((t) => typeof t !== 'string' || t.length > 200)) {
-    throw httpError(400, 'Check the tags.')
-  }
-}
-const validateResponses = (
-  template: QuestionnaireTemplate,
-  responses: AssessmentAnswer[],
-  final: boolean,
-) => {
-  const ids = new Set<string>()
-  for (const response of responses) {
-    const q = template.questions.find(
-      (question) =>
-        question.id === response.question_id &&
-        question.version === response.question_version &&
-        question.enabled,
-    )
-    if (!q || ids.has(q.id)) throw httpError(400, 'Answers must match the selected questionnaire version.')
-    ids.add(q.id)
-    validateAnswer(q, response.value)
-  }
-  if (
-    final &&
-    (!responses.length || template.questions.some((q) => q.enabled && q.required && !ids.has(q.id)))
-  ) {
-    throw httpError(400, 'Answer the required questions, or skip this optional check-in.')
-  }
-}
-
 const validateOpenEntry = (
   row: CheckinRow,
   session: TreatmentSession,
@@ -518,12 +441,8 @@ export const saveTreatmentCheckin = async (
           responses: savedResponses,
         },
         false,
+        template,
       )
-      // The selected questionnaire is a historical version, even if the library changed meanwhile.
-      await tx.query('UPDATE assessments SET template_version=$2 WHERE id=$1', [
-        assessment.id,
-        template.version,
-      ])
       assessmentId = assessment.id
       await retireNotifications(tx, id)
     }

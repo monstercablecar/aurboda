@@ -115,6 +115,7 @@ const savedTables = [
   'goals',
   'activity_type_definitions',
   'questionnaire_templates',
+  'questionnaire_template_versions',
   'assessment_questions',
   'assessment_question_versions',
   'assessments',
@@ -150,7 +151,7 @@ const insertFixture = async (db: UserDb, table: string, row: Record<string, unkn
   const keys = Object.keys(row)
   const result = await db.query<{ id: string }>(
     format(
-      'INSERT INTO %I (%s) VALUES (%s) RETURNING id',
+      'INSERT INTO %I (%s) VALUES (%s) RETURNING *',
       table,
       keys.map((key) => format('%I', key)).join(','),
       keys.map((_, i) => `$${i + 1}`).join(','),
@@ -331,6 +332,16 @@ const seedSavedFeatures = async (db: UserDb, user: string) => {
         },
       })
     }
+    await insertFixture(db, 'questionnaire_template_versions', {
+      template_id: template,
+      version: 2,
+      snapshot: {
+        id: template,
+        version: 2,
+        display_name: 'Saved custom fixture',
+        questions: [{ id: question, version: 2, prompt: 'Edited fixture question?' }],
+      },
+    })
     const assessment = await insertFixture(db, 'assessments', {
       template_id: template,
       template_version: 2,
