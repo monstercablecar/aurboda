@@ -125,6 +125,7 @@ import { createSharedDashboardsRouter } from '../routes/shared-dashboards-router
 import { createSharedExercisesRouter } from '../routes/shared-exercises-router.ts'
 import { createTracksRouter } from '../routes/tracks-router.ts'
 import { createTrainingLoadRouter } from '../routes/training-load-router.ts'
+import { createTreatmentCheckinsRouter } from '../routes/treatment-checkins-router.ts'
 import { createTrendsRouter } from '../routes/trends-router.ts'
 import { createWebAuthnRouter } from '../routes/webauthn-router.ts'
 import { createWellKnownRouter, type WellKnownConfig } from '../routes/well-known-router.ts'
@@ -357,6 +358,7 @@ export const mountRestRouters = ({
     createAutoshareRulesRouter(authMiddleware, autosharePreviewDeps, skipAutoshare),
   )
   httpd.use('/locations', createLocationsRouter(authMiddleware, onNamedLocationsChanged))
+  httpd.use('/treatment-checkins', createTreatmentCheckinsRouter(authMiddleware))
   httpd.use('/reminders', createRemindersRouter(authMiddleware))
   httpd.use('/notifications/web-push', createBrowserPushRouter(authMiddleware))
   httpd.use(

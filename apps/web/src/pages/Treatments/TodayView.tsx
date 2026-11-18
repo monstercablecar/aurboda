@@ -16,6 +16,7 @@ import { actualVsScheduledLabel, treatmentStageLabel, treatmentUrl } from './mod
 import { PrnForm } from './PrnForm'
 import { isNutritionQuestionnaire, NutritionQuestionnaireNotice } from './questionnaire-scope'
 import { RegimenCard } from './RegimenCard'
+import { TreatmentCheckins } from './TreatmentCheckins'
 
 // eslint-disable-next-line complexity -- daily dashboard intentionally keeps all routine actions in one view
 export function TodayView({
@@ -76,6 +77,7 @@ export function TodayView({
     .filter(
       (template) =>
         !template.stable_key.startsWith('mental_') &&
+        template.stable_key !== 'treatment_brief_v1' &&
         template.enabled &&
         ['morning', 'midday', 'evening', 'custom'].includes(template.moment),
     )
@@ -103,6 +105,7 @@ export function TodayView({
 
   return (
     <div class="today-view">
+      <TreatmentCheckins compact />
       <section class="today-hero">
         <div>
           <p class="treatments-kicker">

@@ -20,6 +20,7 @@ import {
   voidAssessment,
 } from '../../state/api/pharmacology'
 import { auth } from '../../state/auth'
+import { TreatmentCheckins } from '../Treatments/TreatmentCheckins'
 import {
   bigFiveLongInstrument,
   catalog_version,
@@ -36,6 +37,7 @@ import {
   localTimestamp,
   takenTimestamp,
 } from './model'
+import '../Treatments/style.css'
 import './index.css'
 
 function Result({ entry, template }: { entry: Assessment; template: QuestionnaireTemplate }) {
@@ -309,6 +311,7 @@ function Catalog() {
       {celebration && (
         <Celebration key={celebration.id} {...celebration} onDone={() => setCelebration(null)} />
       )}
+      <TreatmentCheckins />
       <div class="mental-toolbar">
         <label>
           Category{' '}

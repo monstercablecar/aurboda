@@ -79,13 +79,17 @@ Questionnaires are also managed in the Library. The editor supports all response
 
 Assessment metric names come from the questionnaire editor. Substance exposure metric names are derived from the substance's stable analysis key. These are observational inputs to Aurboda's existing charting and correlation tools, not estimates of neurotransmitter activity, treatment efficacy, or causality.
 
+## Optional session check-ins
+
+[Release-one check-in workflow](treatment-checkins.md) adds saved per-session plans, brief unscored observations, selected library questionnaires, optional bounded notifications, and honest late reflections. Session end and follow-up completion are separate. Existing sessions do not gain new obligations.
+
 ## Current limitations
 
-- Reminder preferences are saved, but browser/Android notification delivery and home-screen shortcuts are not implemented yet.
-- Follow-up intervals are stored on treatment sessions, but they do not yet create notification tasks automatically; later follow-up entries reuse the configurable follow-up questionnaire from the session journal.
+- Regimen reminder metadata remains separate from the new optional session check-in notification delivery. Home-screen shortcuts are not implemented.
+- Legacy follow-up interval metadata does not schedule notifications. New sessions use the explicit check-in plan described above.
 - Treatments does not perform medication-interaction checking, pharmacokinetic modeling, dosing guidance, or automatic regimen changes.
 - Its Insights view summarizes data quality and exposure coverage. Advanced adjusted models, automatic confounder control, and ranked causal claims are intentionally not generated; use Aurboda's existing Analyze tools for exploratory comparisons and interpret small or confounded samples cautiously.
-- Chamomile, meditation, and other non-ketamine sessions offer optional **Session preparation**, **Session reflection**, and **Next-day reflection** text prompts. Ketamine sessions retain their dedicated questionnaires. Other enabled custom questionnaires remain available for every session type; general per-treatment assignment is not yet a separate configuration layer. Previously used questionnaires stay visible on their saved sessions, including legacy cross-type answers. Non-ketamine sessions mark substance records as optional. Existing questionnaire definitions and saved responses are preserved.
+- Chamomile, meditation, and other non-ketamine sessions offer optional **Session preparation**, **Session reflection**, and **Next-day reflection** text prompts. Ketamine sessions retain their dedicated questionnaires. New session plans explicitly select questionnaires; library items are no longer automatically shown as missing session work. Previously used questionnaires stay visible on their saved sessions, including legacy cross-type answers. Non-ketamine sessions mark substance records as optional. Existing questionnaire definitions and saved responses are preserved.
 
 ## Nutrition questionnaire ownership
 

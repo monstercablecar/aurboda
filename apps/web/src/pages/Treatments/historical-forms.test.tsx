@@ -16,6 +16,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { AssessmentForm } from './AssessmentForm'
 import { ContextEventForm } from './ContextEventForm'
 import { PrnForm } from './PrnForm'
+vi.mock('./TreatmentCheckins', () => ({ TreatmentCheckins: () => null }))
+
 import { TreatmentSessionForm } from './TreatmentJournal'
 const mocks = vi.hoisted(() => ({
   administration: vi.fn().mockResolvedValue({}),

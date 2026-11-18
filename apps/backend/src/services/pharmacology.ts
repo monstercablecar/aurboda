@@ -27,7 +27,10 @@ import type {
   UpdateTreatmentTypeBody,
 } from '@aurboda/api-spec'
 
+import { withUserTransaction, query } from '../db/connection.ts'
 import * as db from '../db/pharmacology.ts'
+import { BRIEF_TREATMENT_KEY } from './treatment-checkin-questions.ts'
+import { initializeCheckinPlan, refreshCheckinSchedule } from './treatment-checkins.ts'
 
 export const isActualExposureStatus = db.exposureStatus
 export const deterministicAdministrationKey = (requestKey: string, itemId: string): string =>
@@ -142,20 +145,68 @@ export const updateTreatmentType = (user: string, id: string, input: UpdateTreat
 export const listTreatments = db.listTreatmentSessions
 export const getTreatment = db.getTreatmentSession
 export const createTreatment = (user: string, input: CreateTreatmentSessionBody) =>
-  db.createTreatmentSession(user, input)
+  withUserTransaction(user, async (tx) => {
+    const session = await db.createTreatmentSession(tx, {
+      ...input,
+      status:
+        input.actual_end && ['planned', 'in_progress'].includes(input.status) ? 'completed' : input.status,
+    })
+    const plan = input.checkin_plan ?? session.treatment_type.default_checkin_plan
+    if (plan) await initializeCheckinPlan(tx, session, plan)
+    return session
+  })
 export const updateTreatment = (user: string, id: string, input: UpdateTreatmentSessionBody) =>
-  db.updateTreatmentSession(user, id, input)
-export const deleteTreatment = db.deleteTreatmentSession
+  withUserTransaction(user, async (tx) => {
+    await tx.query('SELECT id FROM treatment_sessions WHERE id=$1 FOR UPDATE', [id])
+    const old = await db.getTreatmentSession(tx, id)
+    if (!old || old.deleted_at) return null
+    const end = input.actual_end === undefined ? old.actual_end : input.actual_end
+    const status = input.status ?? old.status
+    const session = await db.updateTreatmentSession(tx, id, {
+      ...input,
+      status: end && ['planned', 'in_progress'].includes(status) ? 'completed' : status,
+    })
+    if (session) await refreshCheckinSchedule(tx, session)
+    return session
+  })
+export const deleteTreatment = (user: string, id: string) =>
+  withUserTransaction(user, async (tx) => {
+    await tx.query('SELECT id FROM treatment_sessions WHERE id=$1 FOR UPDATE', [id])
+    const deleted = await db.deleteTreatmentSession(tx, id)
+    const session = await db.getTreatmentSession(tx, id)
+    if (session) await refreshCheckinSchedule(tx, session)
+    return deleted
+  })
 export const listQuestionnaires = db.listQuestionnaires
-export const createQuestionnaire = (user: string, input: CreateQuestionnaireBody) =>
-  db.createQuestionnaire(user, input)
-export const updateQuestionnaire = (user: string, id: string, input: UpdateQuestionnaireBody) =>
-  db.updateQuestionnaire(user, id, input)
+export const createQuestionnaire = (user: string, input: CreateQuestionnaireBody) => {
+  if (input.stable_key === BRIEF_TREATMENT_KEY) {
+    throw new Error('This questionnaire key is reserved for the versioned brief check-in.')
+  }
+  return db.createQuestionnaire(user, input)
+}
+export const updateQuestionnaire = async (user: string, id: string, input: UpdateQuestionnaireBody) => {
+  if (
+    input.stable_key === BRIEF_TREATMENT_KEY ||
+    (await db.getQuestionnaire(user, id))?.stable_key === BRIEF_TREATMENT_KEY
+  ) {
+    throw new Error(
+      'This versioned short check-in is managed by the application. Create your own questionnaire instead.',
+    )
+  }
+  return db.updateQuestionnaire(user, id, input)
+}
 export const listAssessments = db.listAssessments
 export const submitAssessment = (user: string, input: SubmitAssessmentBody) =>
   db.createAssessment(user, input)
-export const correctAssessment = (user: string, id: string, input: CorrectAssessmentBody) =>
-  db.updateAssessment(user, id, input)
+export const correctAssessment = async (user: string, id: string, input: CorrectAssessmentBody) => {
+  const linked = await query(user, 'SELECT id FROM treatment_checkins WHERE assessment_id=$1', [id])
+  if (linked.rows.length) {
+    throw new Error(
+      'Keep this check-in as recorded. Void it and add a new reflection to correct the history.',
+    )
+  }
+  return db.updateAssessment(user, id, input)
+}
 export const deleteAssessment = db.deleteAssessment
 export const listContextTypes = db.listContextEventTypes
 export const createContextType = (user: string, input: CreateContextEventTypeBody) =>

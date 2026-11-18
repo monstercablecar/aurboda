@@ -3,7 +3,7 @@ import cors from 'cors'
 import express, { json, type NextFunction, type Request, type Response } from 'express'
 import { Client } from 'pg'
 
-import type { FeedPostRecord } from './db/index.ts'
+import type { FeedPostRecord, NotificationRecord } from './db/index.ts'
 import type { FeedDeliver } from './routes/feed-router.ts'
 
 import { auditOperation, summarizeAuditError } from './api/audit-body.ts'
@@ -256,6 +256,7 @@ import {
   type TrackAnalyseQueue,
   type TrackBackfillQueue,
 } from './services/track-queues.ts'
+import { createTreatmentCheckinScheduler, actOnTreatmentCheckin } from './services/treatment-checkins.ts'
 import {
   createUsageRecorder,
   installUsageRecorder,
@@ -990,7 +991,30 @@ const main = async () => {
   const skipAutoshareActivity = skipAutoshare(autoshareSkipDeps)
   const notificationActionRunner = runNotificationAction({
     get: notificationStore.get,
-    handlers: { autoshare_pending: { skip: autosharePendingSkipHandler(skipAutoshareActivity) } },
+    handlers: {
+      autoshare_pending: { skip: autosharePendingSkipHandler(skipAutoshareActivity) },
+      treatment_checkin: Object.fromEntries(
+        (['skip', 'snooze'] as const).map((action) => [
+          action,
+          async (user: string, notification: NotificationRecord) => {
+            const id = notification.data?.checkin_id
+            if (typeof id !== 'string') return { ok: false as const, message: 'Check-in not found.' }
+            try {
+              await actOnTreatmentCheckin(user, id, { action })
+              return {
+                ok: true as const,
+                revision: { title: action === 'skip' ? 'Check-in skipped' : 'Check-in snoozed' },
+              }
+            } catch (error) {
+              if (isHttpError(error)) {
+                return { ok: false as const, message: error.message, revision: { title: 'Check-in updated' } }
+              }
+              throw error
+            }
+          },
+        ]),
+      ),
+    },
     revise: notificationStore.revise,
   })
   const feedRefreshWindowDeps = createFeedRefreshWindowDeps(feedDeliver.updated)
@@ -1105,6 +1129,7 @@ const main = async () => {
   if (boss) {
     try {
       await createReminderScheduler(boss, () => listUserNames(userDb))
+      await createTreatmentCheckinScheduler(boss, () => listUserNames(userDb))
     } catch {
       console.warn('Custom reminders unavailable: scheduler could not start.')
     }

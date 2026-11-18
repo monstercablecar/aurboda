@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { baseResponseSchema, createDataArrayResponseSchema, createDataResponseSchema } from './common.ts'
 import { ianaTimezoneSchema } from './timezone.ts'
+import { treatmentCheckinPlanBodySchema } from './treatment-checkin-plan.ts'
 
 const dateSchema = z.iso.date()
 const dateTimeSchema = z.iso.datetime({ offset: true })
@@ -318,6 +319,7 @@ export const treatmentTypeSchema = z
     description: z.string().nullable().optional(),
     active: z.boolean(),
     default_follow_up_hours: z.array(z.number().int().min(0).max(8760)),
+    default_checkin_plan: treatmentCheckinPlanBodySchema.nullable().optional(),
     created_at: dateTimeSchema,
     updated_at: dateTimeSchema,
   })
@@ -363,6 +365,7 @@ export const treatmentSessionSchema = z
 export type TreatmentSession = z.infer<typeof treatmentSessionSchema>
 export const createTreatmentSessionBodySchema = z
   .object({
+    checkin_plan: treatmentCheckinPlanBodySchema.optional(),
     treatment_type_id: uuid,
     planned_at: dateTimeSchema.optional(),
     actual_start: dateTimeSchema.optional(),
@@ -383,8 +386,13 @@ export const createTreatmentSessionBodySchema = z
   .meta({ id: 'CreateTreatmentSessionBody', description: 'Create a treatment session.' })
 export type CreateTreatmentSessionBody = z.infer<typeof createTreatmentSessionBodySchema>
 export const updateTreatmentSessionBodySchema = createTreatmentSessionBodySchema
+  .omit({ checkin_plan: true })
   .partial()
   .extend({
+    status: treatmentStatusSchema.optional(),
+    adverse_events: z.array(z.string()).optional(),
+    metadata: jsonObjectSchema.optional(),
+    follow_up_hours: z.array(z.number().int().min(0).max(8760)).optional(),
     planned_at: dateTimeSchema.nullable().optional(),
     actual_start: dateTimeSchema.nullable().optional(),
     actual_end: dateTimeSchema.nullable().optional(),
@@ -465,7 +473,12 @@ export const updateQuestionnaireBodySchema = createQuestionnaireBodySchema
 export type UpdateQuestionnaireBody = z.infer<typeof updateQuestionnaireBodySchema>
 
 export const assessmentAnswerSchema = z
-  .object({ question_id: uuid, question_version: z.number().int().positive(), value: z.unknown() })
+  .object({
+    question_id: uuid,
+    question_version: z.number().int().positive(),
+    value: z.unknown(),
+    question_prompt: z.string().optional(),
+  })
   .meta({ id: 'AssessmentAnswer', description: 'Raw response bound to an immutable question version.' })
 export type AssessmentAnswer = z.infer<typeof assessmentAnswerSchema>
 export const assessmentSchema = z
@@ -684,6 +697,8 @@ export const pharmacologyExportSchema = z
     assessment_question_versions: z.array(z.unknown()),
     assessments: z.array(z.unknown()),
     assessment_responses: z.array(z.unknown()),
+    treatment_checkin_plans: z.array(z.unknown()),
+    treatment_checkins: z.array(z.unknown()),
     context_event_types: z.array(z.unknown()),
     context_events: z.array(z.unknown()),
   })

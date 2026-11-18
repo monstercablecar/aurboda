@@ -188,6 +188,13 @@ export const updateTreatmentType = async (
   return dataOrThrow(response.data, 'Failed to update treatment type.')
 }
 
+export const fetchTreatmentSession = async (id: string): Promise<TreatmentSession> => {
+  return dataOrThrow(
+    (await axios.get<TreatmentSessionResponse>(`${BASE}/treatments/${idPath(id)}`, options())).data,
+    'Session not found.',
+  )
+}
+
 export const fetchTreatmentSessions = async (params?: PharmacologyListQuery): Promise<TreatmentSession[]> => {
   const response = await axios.get<TreatmentSessionsResponse>(`${BASE}/treatments`, {
     ...options(),

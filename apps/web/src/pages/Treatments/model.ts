@@ -174,6 +174,8 @@ export const groupTimelineByDay = (
 }
 
 export const treatmentStageLabel = (stage: string): string =>
-  stage.replaceAll('_', ' ').replaceAll(/\b\w/g, (letter) => letter.toUpperCase())
+  stage === 'completed'
+    ? 'Session ended'
+    : stage.replaceAll('_', ' ').replaceAll(/\b\w/g, (letter) => letter.toUpperCase())
 
 export const stableActionKey = (prefix: string, createId: () => string): string => `${prefix}:${createId()}`

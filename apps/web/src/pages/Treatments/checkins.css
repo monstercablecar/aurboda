@@ -1,0 +1,89 @@
+.treatment-checkins {
+  margin: 1.5rem 0;
+  padding: 1.1rem;
+  border: 1px solid var(--color-border, #7776);
+  border-radius: 12px;
+}
+.treatment-checkins h3,
+.treatment-checkins h4 {
+  margin: 0 0 0.5rem;
+}
+.treatment-checkins p {
+  margin: 0.5rem 0 0.8rem;
+}
+.checkin-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+.checkin-item {
+  border: 1px solid var(--color-border, #7776);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+.checkin-item small {
+  display: block;
+  margin: 0.4rem 0;
+}
+.checkin-item dl {
+  display: grid;
+  gap: 0.6rem;
+}
+.checkin-item dd {
+  margin: 0.25rem 0;
+  white-space: pre-wrap;
+}
+.checkin-plan {
+  margin: 1rem 0;
+  padding: 1rem;
+  min-width: 0;
+  border: 1px solid var(--color-border, #7776);
+  border-radius: 8px;
+}
+.checkin-plan .check-label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0.8rem 0;
+}
+.checkin-plan details > fieldset {
+  margin: 1rem 0;
+  min-width: 0;
+}
+.checkin-fields {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.checkin-clear {
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  margin-top: 0.4rem;
+  color: inherit;
+}
+.checkin-return {
+  padding: 0.8rem;
+  border-left: 3px solid var(--color-primary, #718ddd);
+}
+.treatment-checkins .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+}
+.treatment-checkins input,
+.checkin-plan input,
+.checkin-plan select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 600px) {
+  .treatment-checkins {
+    padding: 0.8rem;
+  }
+  .checkin-plan .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
