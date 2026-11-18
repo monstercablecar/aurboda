@@ -11,6 +11,7 @@ import {
   fetchQuestionnaires,
   fetchSubstances,
   fetchTreatmentSessions,
+  fetchTreatmentSession,
   fetchTreatmentTypes,
   pharmacologyErrorMessage,
 } from '../../state/api'
@@ -40,6 +41,12 @@ function JournalView({
   timezone: string
 }) {
   const queryClient = useQueryClient()
+  const { query } = useLocation()
+  const selectedSession = useQuery({
+    queryKey: ['pharmacology', 'treatment', query.treatment],
+    queryFn: () => fetchTreatmentSession(query.treatment!),
+    enabled: !!query.treatment,
+  })
   const start = useMemo(() => subDays(new Date(), 120).toISOString(), [])
   const end = useMemo(() => addDays(new Date(), 30).toISOString(), [])
   const timelineQuery = useQuery({
@@ -68,6 +75,7 @@ function JournalView({
   })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['pharmacology'] })
   const error =
+    selectedSession.error ??
     timelineQuery.error ??
     sessionsQuery.error ??
     treatmentTypesQuery.error ??
@@ -83,6 +91,7 @@ function JournalView({
     )
   }
   if (
+    selectedSession.isLoading ||
     timelineQuery.isLoading ||
     sessionsQuery.isLoading ||
     treatmentTypesQuery.isLoading ||
@@ -111,7 +120,11 @@ function JournalView({
         notify={notify}
         onRefresh={refresh}
         questionnaires={treatmentQuestionnaires(questionnairesQuery.data ?? [])}
-        sessions={sessionsQuery.data ?? []}
+        sessions={
+          selectedSession.data && !sessionsQuery.data?.some((s) => s.id === selectedSession.data!.id)
+            ? [selectedSession.data, ...(sessionsQuery.data ?? [])]
+            : (sessionsQuery.data ?? [])
+        }
         substances={substances}
         timezone={timezone}
         treatmentTypes={treatmentTypesQuery.data ?? []}

@@ -196,12 +196,13 @@ const patchRecord = async (
         field === 'metadata' ||
         field === 'adverse_events' ||
         field === 'follow_up_hours' ||
-        field === 'default_follow_up_hours'
+        field === 'default_follow_up_hours' ||
+        field === 'default_checkin_plan'
         ? JSON.stringify(input[field])
         : input[field],
     )
     sets.push(
-      `${column} = $${values.length}${field === 'tags' || field === 'reminder' || field === 'schedule' || field === 'metadata' || field === 'adverse_events' || field === 'follow_up_hours' || field === 'default_follow_up_hours' ? '::jsonb' : ''}`,
+      `${column} = $${values.length}${field === 'tags' || field === 'reminder' || field === 'schedule' || field === 'metadata' || field === 'adverse_events' || field === 'follow_up_hours' || field === 'default_follow_up_hours' || field === 'default_checkin_plan' ? '::jsonb' : ''}`,
     )
   }
   sets.push(...extraSet)
@@ -719,11 +720,12 @@ const treatmentTypeFromRow = (row: Row): TreatmentType =>
     description: row.description as string | null,
     active: Boolean(row.active),
     default_follow_up_hours: json<number[]>(row.default_follow_up_hours, []),
+    default_checkin_plan: json<TreatmentType['default_checkin_plan']>(row.default_checkin_plan, null),
     created_at: iso(row.created_at),
     updated_at: iso(row.updated_at),
   })
 const TREATMENT_TYPE_COLUMNS =
-  'id, key, display_name, category, description, active, default_follow_up_hours, created_at, updated_at'
+  'id, key, display_name, category, description, active, default_follow_up_hours, default_checkin_plan, created_at, updated_at'
 
 export const listTreatmentTypes = async (db: DbTarget): Promise<TreatmentType[]> => {
   const result = await query(
@@ -738,7 +740,7 @@ export const createTreatmentType = async (
 ): Promise<TreatmentType> => {
   const result = await query(
     db,
-    `INSERT INTO treatment_types (key, display_name, category, description, active, default_follow_up_hours) VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING ${TREATMENT_TYPE_COLUMNS}`,
+    `INSERT INTO treatment_types (key, display_name, category, description, active, default_follow_up_hours, default_checkin_plan) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb) RETURNING ${TREATMENT_TYPE_COLUMNS}`,
     [
       input.key,
       input.display_name,
@@ -746,6 +748,7 @@ export const createTreatmentType = async (
       input.description ?? null,
       input.active,
       JSON.stringify(input.default_follow_up_hours),
+      JSON.stringify(input.default_checkin_plan ?? null),
     ],
   )
   return treatmentTypeFromRow(result.rows[0])
@@ -757,6 +760,7 @@ const TREATMENT_TYPE_PATCH_COLUMNS = {
   description: 'description',
   active: 'active',
   default_follow_up_hours: 'default_follow_up_hours',
+  default_checkin_plan: 'default_checkin_plan',
 }
 export const updateTreatmentType = async (
   db: DbTarget,
@@ -784,7 +788,7 @@ const TREATMENT_SESSION_SELECT = `ts.id, ts.treatment_type_id, ts.planned_at, ts
   ts.concerns, ts.preparation_notes, ts.adverse_events, ts.metadata, ts.follow_up_hours, ts.created_at,
   ts.updated_at, ts.deleted_at, tt.key AS type_key, tt.display_name AS type_display_name,
   tt.category AS type_category, tt.description AS type_description, tt.active AS type_active,
-  tt.default_follow_up_hours AS type_default_follow_up_hours, tt.created_at AS type_created_at,
+  tt.default_follow_up_hours AS type_default_follow_up_hours, tt.default_checkin_plan AS type_default_checkin_plan, tt.created_at AS type_created_at,
   tt.updated_at AS type_updated_at`
 const treatmentSessionFromRow = (row: Row): TreatmentSession =>
   present({
@@ -797,6 +801,7 @@ const treatmentSessionFromRow = (row: Row): TreatmentSession =>
       description: row.type_description,
       active: row.type_active,
       default_follow_up_hours: row.type_default_follow_up_hours,
+      default_checkin_plan: row.type_default_checkin_plan,
       created_at: row.type_created_at,
       updated_at: row.type_updated_at,
     }),
@@ -804,7 +809,10 @@ const treatmentSessionFromRow = (row: Row): TreatmentSession =>
     actual_start: nullableIso(row.actual_start),
     actual_end: nullableIso(row.actual_end),
     timezone: String(row.timezone),
-    status: row.status as TreatmentSession['status'],
+    status:
+      row.actual_end && ['planned', 'in_progress'].includes(String(row.status))
+        ? 'completed'
+        : (row.status as TreatmentSession['status']),
     setting: row.setting as string | null,
     provider: row.provider as string | null,
     protocol_reference: row.protocol_reference as string | null,
@@ -1115,7 +1123,7 @@ const responsesFor = async (
   if (assessmentIds.length === 0) return map
   const result = await query(
     db,
-    `SELECT assessment_id, question_id, question_version, value FROM assessment_responses WHERE assessment_id = ANY($1::uuid[]) ORDER BY created_at`,
+    `SELECT r.assessment_id, r.question_id, r.question_version, r.value, v.snapshot->>'prompt' AS question_prompt FROM assessment_responses r LEFT JOIN assessment_question_versions v ON v.question_id=r.question_id AND v.version=r.question_version WHERE r.assessment_id = ANY($1::uuid[]) ORDER BY r.created_at`,
     [assessmentIds],
   )
   for (const row of result.rows) {
@@ -1124,6 +1132,7 @@ const responsesFor = async (
     values.push({
       question_id: String(row.question_id),
       question_version: Number(row.question_version),
+      ...(typeof row.question_prompt === 'string' ? { question_prompt: row.question_prompt } : {}),
       value: row.value,
     })
     map.set(id, values)
@@ -1226,29 +1235,34 @@ const replaceAssessmentResponses = async (
     )
   }
 }
+export const createAssessmentInTransaction = async (
+  tx: Queryable,
+  input: SubmitAssessmentBody,
+  project = true,
+): Promise<Assessment> => {
+  const template = await getQuestionnaire(tx, input.template_id)
+  if (!template) throw new Error('Questionnaire not found')
+  const result = await query(
+    tx,
+    `INSERT INTO assessments (template_id, template_version, treatment_session_id, stage, assessed_at, timezone, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [
+      input.template_id,
+      template.version,
+      input.treatment_session_id ?? null,
+      input.stage ?? null,
+      input.assessed_at,
+      input.timezone,
+      input.notes ?? null,
+    ],
+  )
+  const id = String(result.rows[0].id)
+  await replaceAssessmentResponses(tx, id, input.responses)
+  const assessment = (await getAssessment(tx, id))!
+  if (project) await writeAssessmentProjection(tx, assessment)
+  return assessment
+}
 export const createAssessment = async (user: string, input: SubmitAssessmentBody): Promise<Assessment> =>
-  withUserTransaction(user, async (tx) => {
-    const template = await getQuestionnaire(tx, input.template_id)
-    if (!template) throw new Error('Questionnaire not found')
-    const result = await query(
-      tx,
-      `INSERT INTO assessments (template_id, template_version, treatment_session_id, stage, assessed_at, timezone, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [
-        input.template_id,
-        template.version,
-        input.treatment_session_id ?? null,
-        input.stage ?? null,
-        input.assessed_at,
-        input.timezone,
-        input.notes ?? null,
-      ],
-    )
-    const id = String(result.rows[0].id)
-    await replaceAssessmentResponses(tx, id, input.responses)
-    const assessment = (await getAssessment(tx, id))!
-    await writeAssessmentProjection(tx, assessment)
-    return assessment
-  })
+  withUserTransaction(user, (tx) => createAssessmentInTransaction(tx, input))
 export const updateAssessment = async (
   user: string,
   id: string,
@@ -1505,6 +1519,8 @@ const EXPORT_TABLES = [
   'assessment_question_versions',
   'assessments',
   'assessment_responses',
+  'treatment_checkin_plans',
+  'treatment_checkins',
   'context_event_types',
   'context_events',
 ] as const

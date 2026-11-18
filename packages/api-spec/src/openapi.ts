@@ -270,6 +270,14 @@ import {
   syncStatusResponseSchema,
 } from './schemas/sync.ts'
 import { activityTrackResponseSchema, trackBackfillResponseSchema } from './schemas/tracks.ts'
+import { treatmentCheckinSettingsSchema } from './schemas/treatment-checkin-plan.ts'
+import {
+  addTreatmentReflectionSchema,
+  treatmentCheckinActionSchema,
+  treatmentCheckinEntrySchema,
+  treatmentCheckinResponseSchema,
+  treatmentCheckinsResponseSchema,
+} from './schemas/treatment-checkins.ts'
 import {
   webauthnAuthOptionsBodySchema,
   webauthnAuthOptionsResponseSchema,
@@ -3366,6 +3374,62 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/treatment-checkins': {
+      get: {
+        summary: 'List optional session check-ins',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestParams: { query: z.object({ treatment_session_id: z.string().uuid().optional() }) },
+        responses: pharmacologyResponses(treatmentCheckinsResponseSchema),
+      },
+      post: {
+        summary: 'Start a current check-in or later reflection',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: pharmacologyRequestBody(addTreatmentReflectionSchema),
+        responses: pharmacologyResponses(treatmentCheckinResponseSchema, true),
+      },
+    },
+    '/treatment-checkins/plans/{id}': {
+      patch: {
+        summary: 'Change reminder preferences',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: pharmacologyRequestBody(treatmentCheckinSettingsSchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(baseResponseSchema),
+      },
+    },
+    '/treatment-checkins/{id}/draft': {
+      put: {
+        summary: 'Save an unfinished check-in',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: pharmacologyRequestBody(treatmentCheckinEntrySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentCheckinResponseSchema),
+      },
+    },
+    '/treatment-checkins/{id}/complete': {
+      post: {
+        summary: 'Complete a check-in once',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: pharmacologyRequestBody(treatmentCheckinEntrySchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentCheckinResponseSchema),
+      },
+    },
+    '/treatment-checkins/{id}/action': {
+      post: {
+        summary: 'Skip or snooze an optional check-in',
+        tags: ['Treatments'],
+        security: [{ bearerAuth: [] }],
+        requestBody: pharmacologyRequestBody(treatmentCheckinActionSchema),
+        requestParams: { path: pharmacologyIdParams },
+        responses: pharmacologyResponses(treatmentCheckinResponseSchema),
+      },
+    },
     '/pharmacology/substances': {
       get: {
         requestParams: { query: pharmacologyListQuerySchema },

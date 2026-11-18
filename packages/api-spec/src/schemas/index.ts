@@ -83,3 +83,6 @@ export * from './native-tasks.ts'
 export * from './journal.ts'
 
 export * from './reminders.ts'
+
+export * from './treatment-checkin-plan.ts'
+export * from './treatment-checkins.ts'

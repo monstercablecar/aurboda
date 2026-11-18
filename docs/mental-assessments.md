@@ -49,3 +49,7 @@ Choose the Big Five scoring format inside its card, above the latest result and 
 ### Home game results
 
 Completed memory and reaction runs save automatically, including low scores and runs with no valid reaction responses. To remove a result, find its test here, expand **Saved history**, select **Delete result**, and confirm. A failed deletion keeps the result available for retry.
+
+## Shared treatment check-ins
+
+The page also displays the same private [treatment check-ins](features/treatment-checkins.md) used in Treatments, including drafts, timing and saved assessment facts. Personality and IQ activities remain optional exploration, not default treatment follow-ups. Standardized deeper assessments are planned for release two and are not implemented by this change.

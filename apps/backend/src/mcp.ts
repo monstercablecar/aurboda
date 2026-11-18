@@ -96,6 +96,7 @@ import { registerSharedExerciseTools } from './mcp/shared-exercise-tools.ts'
 import { registerSyncTools } from './mcp/sync-tools.ts'
 import { installToolCatalogue } from './mcp/tool-catalogue.ts'
 import { registerTrainingLoadTools } from './mcp/training-load-tools.ts'
+import { registerTreatmentCheckinTools } from './mcp/treatment-checkin-tools.ts'
 import { registerTrendTools } from './mcp/trend-tools.ts'
 import { registerWorkTools } from './mcp/work-tools.ts'
 import { type AccountGate, safeRefusal } from './services/account-gate.ts'
@@ -255,6 +256,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerNativeTasksTools(server, user)
   registerResourcesTools(server, user, deps.centralDb)
   registerNoteTools(server, user)
+  registerTreatmentCheckinTools(server, user)
   registerReminderTools(server, user)
   registerNotificationTools(
     server,

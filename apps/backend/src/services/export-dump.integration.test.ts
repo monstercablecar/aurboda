@@ -119,6 +119,8 @@ const savedTables = [
   'assessment_question_versions',
   'assessments',
   'assessment_responses',
+  'treatment_checkin_plans',
+  'treatment_checkins',
   'treatment_types',
   'treatment_sessions',
   'context_event_types',
@@ -371,6 +373,18 @@ const seedSavedFeatures = async (db: UserDb, user: string) => {
     notes: 'Fake session fixture',
     metadata: { fixture: true },
     follow_up_hours: [24],
+  })
+  await db.query('INSERT INTO treatment_checkin_plans(treatment_session_id,settings) VALUES($1,$2::jsonb)', [
+    treatment,
+    JSON.stringify({ before: false, after: true, next_day: true, reminders_enabled: false }),
+  ])
+  await insertFixture(db, 'treatment_checkins', {
+    treatment_session_id: treatment,
+    kind: 'next_day',
+    due_at: '2026-11-02T16:00:00Z',
+    expires_at: '2026-11-03T16:00:00Z',
+    draft: { mood: 3, notes: 'Synthetic saved draft' },
+    revision: 1,
   })
   const substance = await insertFixture(db, 'substances', {
     analysis_key: 'fixture_supplement',

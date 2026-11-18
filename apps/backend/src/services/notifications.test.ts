@@ -262,6 +262,7 @@ describe('listNotificationTypeSettings', () => {
       'garmin_key_expiring',
       'admin_signup',
       'reminder',
+      'treatment_checkin',
     ])
   })
 

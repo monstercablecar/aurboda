@@ -9,12 +9,14 @@ import type {
 
 import { useMutation } from '@tanstack/react-query'
 import { useLocation } from 'preact-iso'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 
 import { createTreatmentSession, pharmacologyErrorMessage, updateTreatmentSession } from '../../state/api'
 import { AssessmentForm } from './AssessmentForm'
+import { CheckinPlanEditor, defaultCheckinPlan } from './CheckinPlanEditor'
 import { isoToLocalDateTime, localDateTimeToIso, treatmentStageLabel, treatmentUrl } from './model'
 import { PrnForm } from './PrnForm'
+import { TreatmentCheckins } from './TreatmentCheckins'
 
 const typeOrder = (key: string) => {
   switch (key) {
@@ -28,8 +30,6 @@ const typeOrder = (key: string) => {
       return 2
   }
 }
-const ketamineTemplates = new Set(['ketamine_pre_session', 'ketamine_post_session', 'ketamine_next_day'])
-const sessionTemplates = new Set(['session_preparation', 'session_reflection', 'session_follow_up'])
 
 const optionalTimestamp = (value: string) => (value ? localDateTimeToIso(value) : undefined)
 
@@ -47,7 +47,9 @@ export function TreatmentSessionForm({
   session,
   timezone,
   treatmentTypes,
+  questionnaires = [],
 }: {
+  questionnaires?: QuestionnaireTemplate[]
   onCancel: () => void
   onSaved: (session: TreatmentSession) => void
   session?: TreatmentSession
@@ -75,6 +77,14 @@ export function TreatmentSessionForm({
     session?.actual_end ? isoToLocalDateTime(session.actual_end) : '',
   )
   const [status, setStatus] = useState(session?.status ?? 'planned')
+  const [plan, setPlan] = useState(
+    () => activeTypes.find((type) => type.id === typeId)?.default_checkin_plan ?? defaultCheckinPlan(),
+  )
+  useEffect(() => {
+    if (!session) {
+      setPlan(activeTypes.find((type) => type.id === typeId)?.default_checkin_plan ?? defaultCheckinPlan())
+    }
+  }, [typeId])
   const [setting, setSetting] = useState(session?.setting ?? '')
   const [provider, setProvider] = useState(session?.provider ?? '')
   const [intention, setIntention] = useState(session?.intention ?? '')
@@ -106,6 +116,7 @@ export function TreatmentSessionForm({
           })
         : createTreatmentSession({
             ...common,
+            checkin_plan: plan,
             adverse_events: [],
             follow_up_hours: activeTypes.find((type) => type.id === typeId)?.default_follow_up_hours ?? [],
             metadata: {},
@@ -167,7 +178,7 @@ export function TreatmentSessionForm({
           >
             <option value="planned">Planned</option>
             <option value="in_progress">In progress</option>
-            <option value="completed">Completed</option>
+            <option value="completed">Session ended</option>
             <option value="incomplete">Incomplete</option>
             <option value="canceled">Canceled</option>
             <option value="archived">Archived</option>
@@ -227,6 +238,10 @@ export function TreatmentSessionForm({
           </label>
         </div>
       </details>
+      {!session && <CheckinPlanEditor value={plan} onChange={setPlan} questionnaires={questionnaires} />}
+      {endLocal && (
+        <p class="form-hint">An end time closes the active session. Optional follow-ups remain separate.</p>
+      )}
       {error && (
         <p class="form-error" role="alert">
           {error}
@@ -289,14 +304,11 @@ export function TreatmentJournal({
     ? administrations.filter((event) => event.treatment_session_id === selected.id)
     : []
   const treatmentTemplates = questionnaires
-    .filter((template) => {
-      if (!template.enabled || !momentOrder.includes(template.moment)) return false
-      const isKetamine = selected?.treatment_type.key === 'ketamine'
-      const hasSavedAnswers = sessionAssessments.some((assessment) => assessment.template_id === template.id)
-      if (ketamineTemplates.has(template.stable_key)) return isKetamine || hasSavedAnswers
-      if (sessionTemplates.has(template.stable_key)) return !isKetamine || hasSavedAnswers
-      return true
-    })
+    .filter(
+      (template) =>
+        template.stable_key !== 'treatment_brief_v1' &&
+        sessionAssessments.some((assessment) => assessment.template_id === template.id),
+    )
     .sort((left, right) => momentOrder.indexOf(left.moment) - momentOrder.indexOf(right.moment))
 
   return (
@@ -392,6 +404,8 @@ export function TreatmentJournal({
                   )}
                 </dl>
               )}
+              <TreatmentCheckins key={selected.id} session={selected} requestedId={query.checkin} />
+              <h4>Saved questionnaire history and administration</h4>
               <ol class="stage-flow">
                 {treatmentTemplates
                   .filter((template) => template.moment === 'pre_treatment')
@@ -406,9 +420,30 @@ export function TreatmentJournal({
                           <strong>{template.display_name}</strong>
                           <small>{done ? 'Completed' : 'Missing'}</small>
                         </div>
-                        <button type="button" onClick={() => setActiveTemplate(template)}>
-                          {done ? 'Add another' : 'Complete'}
-                        </button>
+                        <details>
+                          <summary>Saved answers</summary>
+                          {sessionAssessments
+                            .filter((a) => a.template_id === template.id)
+                            .map((a) => (
+                              <div key={a.id}>
+                                <p>
+                                  {a.assessed_at
+                                    ? new Date(a.assessed_at).toLocaleString()
+                                    : 'Recorded assessment'}
+                                </p>
+                                {a.responses?.map((r) => (
+                                  <p key={r.question_id}>
+                                    {r.question_prompt ??
+                                      template.questions.find(
+                                        (q) => q.id === r.question_id && q.version === r.question_version,
+                                      )?.prompt ??
+                                      `Archived question (version ${r.question_version})`}
+                                    : {String(r.value)}
+                                  </p>
+                                ))}
+                              </div>
+                            ))}
+                        </details>
                       </li>
                     )
                   })}
@@ -453,9 +488,30 @@ export function TreatmentJournal({
                                 : 'Missing / upcoming'}
                           </small>
                         </div>
-                        <button type="button" onClick={() => setActiveTemplate(template)}>
-                          {count > 0 ? 'Add another' : 'Complete'}
-                        </button>
+                        <details>
+                          <summary>Saved answers</summary>
+                          {sessionAssessments
+                            .filter((a) => a.template_id === template.id)
+                            .map((a) => (
+                              <div key={a.id}>
+                                <p>
+                                  {a.assessed_at
+                                    ? new Date(a.assessed_at).toLocaleString()
+                                    : 'Recorded assessment'}
+                                </p>
+                                {a.responses?.map((r) => (
+                                  <p key={r.question_id}>
+                                    {r.question_prompt ??
+                                      template.questions.find(
+                                        (q) => q.id === r.question_id && q.version === r.question_version,
+                                      )?.prompt ??
+                                      `Archived question (version ${r.question_version})`}
+                                    : {String(r.value)}
+                                  </p>
+                                ))}
+                              </div>
+                            ))}
+                        </details>
                       </li>
                     )
                   })}
@@ -474,6 +530,7 @@ export function TreatmentJournal({
                 session={editing ? selected : undefined}
                 timezone={timezone}
                 treatmentTypes={treatmentTypes}
+                questionnaires={questionnaires}
                 onCancel={() => (editing ? setEditing(false) : closeCreate())}
                 onSaved={(saved) => {
                   setEditing(false)

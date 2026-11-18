@@ -1,4 +1,4 @@
-import type { ContextEventType, TreatmentType } from '@aurboda/api-spec'
+import type { ContextEventType, TreatmentType, QuestionnaireTemplate } from '@aurboda/api-spec'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation } from 'preact-iso'
@@ -17,6 +17,7 @@ import {
   updateQuestionnaire,
   updateTreatmentType,
 } from '../../state/api'
+import { CheckinPlanEditor, defaultCheckinPlan } from './CheckinPlanEditor'
 import { scheduleSummary, treatmentStageLabel, treatmentUrl } from './model'
 import {
   isNutritionQuestionnaire,
@@ -27,27 +28,42 @@ import { QuestionnaireForm } from './QuestionnaireForm'
 import { RegimenForm } from './RegimenForm'
 import { SubstanceForm } from './SubstanceForm'
 
+const typeDefaults = (type?: TreatmentType) => ({
+  display_name: type?.display_name ?? '',
+  key: type?.key ?? '',
+  category: type?.category ?? '',
+  description: type?.description ?? '',
+  active: type?.active ?? true,
+  plan: type?.default_checkin_plan ?? defaultCheckinPlan(),
+  followUps: type?.default_follow_up_hours.join(', ') ?? '24, 168',
+})
+
 function TreatmentTypeForm({
   onCancel,
   onSaved,
   treatmentType,
+  questionnaires = [],
 }: {
+  questionnaires?: QuestionnaireTemplate[]
   onCancel: () => void
   onSaved: (message: string) => void
   treatmentType?: TreatmentType
 }) {
-  const [displayName, setDisplayName] = useState(treatmentType?.display_name ?? '')
-  const [key, setKey] = useState(treatmentType?.key ?? '')
-  const [category, setCategory] = useState(treatmentType?.category ?? '')
-  const [description, setDescription] = useState(treatmentType?.description ?? '')
-  const [active, setActive] = useState(treatmentType?.active ?? true)
-  const [followUps, setFollowUps] = useState(treatmentType?.default_follow_up_hours.join(', ') ?? '24, 168')
+  const defaults = typeDefaults(treatmentType)
+  const [displayName, setDisplayName] = useState(defaults.display_name)
+  const [key, setKey] = useState(defaults.key)
+  const [category, setCategory] = useState(defaults.category)
+  const [description, setDescription] = useState(defaults.description)
+  const [active, setActive] = useState(defaults.active)
+  const [plan, setPlan] = useState(defaults.plan)
+  const [followUps, setFollowUps] = useState(defaults.followUps)
   const [error, setError] = useState('')
   const mutation = useMutation({
     mutationFn: () => {
       const body = {
         active,
         category,
+        default_checkin_plan: plan,
         default_follow_up_hours: followUps
           .split(',')
           .map((value) => Number(value.trim()))
@@ -124,6 +140,10 @@ function TreatmentTypeForm({
         />
         Active
       </label>
+      <CheckinPlanEditor value={plan} onChange={setPlan} questionnaires={questionnaires} />
+      <p class="form-hint">
+        This is the starter plan for new sessions of this type. Existing sessions keep their own plan.
+      </p>
       {error && <p class="form-error">{error}</p>}
       <div class="form-actions">
         <button class="btn-secondary" type="button" onClick={onCancel}>
@@ -540,7 +560,12 @@ export function LibraryView({ notify }: { notify: (message: string, tone?: 'succ
               />
             )}
             {action === 'treatment-type' && (
-              <TreatmentTypeForm treatmentType={selectedTreatmentType} onCancel={close} onSaved={saved} />
+              <TreatmentTypeForm
+                questionnaires={questionnairesQuery.data ?? []}
+                treatmentType={selectedTreatmentType}
+                onCancel={close}
+                onSaved={saved}
+              />
             )}
             {action === 'context-type' && (
               <ContextTypeForm contextType={selectedContextType} onCancel={close} onSaved={saved} />

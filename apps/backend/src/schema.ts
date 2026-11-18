@@ -23,6 +23,7 @@ import { reportsTables } from './schema/reports.ts'
 import { socialTables } from './schema/social.ts'
 import { systemTables } from './schema/system.ts'
 import { tracksTables } from './schema/tracks.ts'
+import { treatmentCheckinTables } from './schema/treatment-checkins.ts'
 
 export {
   aurbodaOnlyMetrics,
@@ -64,6 +65,7 @@ export const createTableStatements: Record<string, string> = {
   ...mealsTables,
   ...metricsTables,
   ...pharmacologyTables,
+  ...treatmentCheckinTables,
   ...notificationsTables,
   ...reminderTables,
   ...productivityTables,
@@ -303,6 +305,10 @@ export const tableCreationOrder = [
   'notifications_indexes',
   'notification_preferences',
   'custom_reminder_state',
+  'treatment_type_checkin_plan',
+  'treatment_checkin_plans',
+  'treatment_checkins',
+  'treatment_checkins_indexes',
   'custom_reminders',
   'custom_reminders_indexes',
 ]

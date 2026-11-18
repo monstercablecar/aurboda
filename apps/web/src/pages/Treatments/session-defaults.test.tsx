@@ -7,6 +7,8 @@ import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+vi.mock('./TreatmentCheckins', () => ({ TreatmentCheckins: () => null }))
+
 import { TreatmentJournal, TreatmentSessionForm } from './TreatmentJournal'
 
 const mocks = vi.hoisted(() => ({ create: vi.fn().mockResolvedValue({}), query: { treatment: 'saved' } }))
@@ -124,7 +126,7 @@ const templates: QuestionnaireTemplate[] = (
 }))
 
 test.each(['chamomile', 'meditation', 'custom'])(
-  '%s sessions show neutral and custom prompts without ketamine questionnaires',
+  '%s sessions do not acquire unscheduled questionnaires from the library',
   (key) => {
     mount(
       <TreatmentJournal
@@ -139,17 +141,17 @@ test.each(['chamomile', 'meditation', 'custom'])(
         treatmentTypes={[type(key)]}
       />,
     )
-    expect(container.textContent).toContain('Session preparation')
-    expect(container.textContent).toContain('Session reflection')
-    expect(container.textContent).toContain('Next-day reflection')
-    expect(container.textContent).toContain('My custom reflection')
+    expect(container.textContent).not.toContain('Session preparation')
+    expect(container.textContent).not.toContain('Session reflection')
+    expect(container.textContent).not.toContain('Next-day reflection')
+    expect(container.textContent).not.toContain('My custom reflection')
     expect(container.textContent).not.toContain('Ketamine')
     expect(container.textContent).toContain('Substance record (optional)')
     expect(container.textContent).not.toContain('Not recorded')
   },
 )
 
-test('ketamine sessions retain their dedicated and custom questionnaires', () => {
+test('ketamine sessions do not automatically assign unrelated library questionnaires', () => {
   mount(
     <TreatmentJournal
       administrations={[]}
@@ -163,10 +165,10 @@ test('ketamine sessions retain their dedicated and custom questionnaires', () =>
       treatmentTypes={[type('ketamine')]}
     />,
   )
-  expect(container.textContent).toContain('Ketamine pre-session')
-  expect(container.textContent).toContain('Ketamine post-session')
-  expect(container.textContent).toContain('Ketamine next-day integration')
-  expect(container.textContent).toContain('My custom reflection')
+  expect(container.textContent).not.toContain('Ketamine pre-session')
+  expect(container.textContent).not.toContain('Ketamine post-session')
+  expect(container.textContent).not.toContain('Ketamine next-day integration')
+  expect(container.textContent).not.toContain('My custom reflection')
   expect(container.textContent).not.toContain('Session preparation')
 })
 

@@ -9,6 +9,7 @@ import { baseResponseSchema, iso8601DateTimeSchema, queryBooleanSchema, UUID_RE 
  */
 export const notificationTypes = [
   'reminder',
+  'treatment_checkin',
   'admin_signup',
   'feed_follow_request',
   'feed_new_follower',
@@ -53,6 +54,12 @@ export interface NotificationTypeInfo {
 }
 
 export const notificationTypeInfo: Record<NotificationType, NotificationTypeInfo> = {
+  treatment_checkin: {
+    admin_only: false,
+    description: 'Optional session check-ins with quiet hours and bounded reminders',
+    group: 'reminders',
+    label: 'Treatment check-ins',
+  },
   reminder: {
     admin_only: false,
     description: 'Your custom scheduled reminders',
