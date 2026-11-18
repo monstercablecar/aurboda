@@ -151,7 +151,7 @@ const insertFixture = async (db: UserDb, table: string, row: Record<string, unkn
   const keys = Object.keys(row)
   const result = await db.query<{ id: string }>(
     format(
-      'INSERT INTO %I (%s) VALUES (%s) RETURNING id',
+      'INSERT INTO %I (%s) VALUES (%s) RETURNING *',
       table,
       keys.map((key) => format('%I', key)).join(','),
       keys.map((_, i) => `$${i + 1}`).join(','),
