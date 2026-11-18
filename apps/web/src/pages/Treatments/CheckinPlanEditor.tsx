@@ -1,5 +1,7 @@
 import type { QuestionnaireTemplate, TreatmentCheckinPlanBody } from '@aurboda/api-spec'
 
+import { AssessmentAbout } from '../../components/AssessmentLibrary/AssessmentAbout'
+
 export const defaultCheckinPlan = (): TreatmentCheckinPlanBody => ({
   before: true,
   after: true,
@@ -80,8 +82,16 @@ export function CheckinPlanEditor({
           <details>
             <summary>Choose your own questionnaires and timing</summary>
             <p>
-              Create questionnaires in Treatments → Library, then select them here. Each selection keeps the
-              question version used when this session is created.
+              Use the shared assessment library or build a questionnaire in + Add, then select it here. Each
+              selection keeps the question version used when this session is created.
+            </p>
+            <p>
+              <a href="/assessments">Mental assessment library</a> ·{' '}
+              <a href="/physical-assessments">Physical assessment library</a>
+            </p>
+            <p>
+              Deeper assessments are optional. Leave this list empty to decline; no overdue entry will be
+              created. Multi-day recall describes that whole period, not an immediate treatment effect.
             </p>
             {value.additional.map((entry, index) => (
               <fieldset key={index}>
@@ -107,6 +117,9 @@ export function CheckinPlanEditor({
                     ))}
                   </select>
                 </label>
+                {available.find((q) => q.id === entry.template_id) && (
+                  <AssessmentAbout template={available.find((q) => q.id === entry.template_id)!} />
+                )}
                 <label class="field">
                   Hours after the session ends
                   <input

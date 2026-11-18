@@ -33,8 +33,12 @@ import type {
   UpdateTreatmentTypeBody,
 } from '@aurboda/api-spec'
 
+import { instrumentScore, libraryInstrument, isManagedInstrumentKey } from '@aurboda/api-spec'
+
 import type { Queryable } from './pool.ts'
 
+import { httpError } from '../http-error.ts'
+import { validateResponses, validateQuestionDefinitions } from '../services/assessment-validation.ts'
 import { query, withUserTransaction } from './connection.ts'
 
 type DbTarget = string | Queryable
@@ -193,6 +197,7 @@ const patchRecord = async (
       field === 'tags' ||
         field === 'reminder' ||
         field === 'schedule' ||
+        field === 'library' ||
         field === 'metadata' ||
         field === 'adverse_events' ||
         field === 'follow_up_hours' ||
@@ -202,7 +207,7 @@ const patchRecord = async (
         : input[field],
     )
     sets.push(
-      `${column} = $${values.length}${field === 'tags' || field === 'reminder' || field === 'schedule' || field === 'metadata' || field === 'adverse_events' || field === 'follow_up_hours' || field === 'default_follow_up_hours' || field === 'default_checkin_plan' ? '::jsonb' : ''}`,
+      `${column} = $${values.length}${field === 'library' || field === 'tags' || field === 'reminder' || field === 'schedule' || field === 'library' || field === 'metadata' || field === 'adverse_events' || field === 'follow_up_hours' || field === 'default_follow_up_hours' || field === 'default_checkin_plan' ? '::jsonb' : ''}`,
     )
   }
   sets.push(...extraSet)
@@ -940,10 +945,8 @@ const questionFromRow = (row: Row): AssessmentQuestion =>
     anchors: json<Record<string, unknown>>(row.anchors, {}),
     config: json<Record<string, unknown>>(row.config, {}),
   })
-const QUESTION_COLUMNS =
-  'id, template_id, stable_key, version, prompt, response_type, required, enabled, sort_order, metric_name, unit, anchors, config'
 const TEMPLATE_COLUMNS =
-  'id, stable_key, display_name, description, moment, enabled, version, created_at, updated_at'
+  'id, stable_key, display_name, description, moment, library, enabled, version, created_at, updated_at'
 const QUESTION_VERSION_COLUMNS = `id, template_id, stable_key, version, prompt, response_type,
   required, enabled, sort_order, metric_name, unit, anchors, config`
 const templateFromRow = (row: Row, questions: AssessmentQuestion[]): QuestionnaireTemplate =>
@@ -953,53 +956,36 @@ const templateFromRow = (row: Row, questions: AssessmentQuestion[]): Questionnai
     display_name: String(row.display_name),
     description: row.description as string | null,
     moment: row.moment as QuestionnaireTemplate['moment'],
+    ...(row.library ? { library: row.library as QuestionnaireTemplate['library'] } : {}),
     enabled: Boolean(row.enabled),
     version: Number(row.version),
     questions,
     created_at: iso(row.created_at),
     updated_at: iso(row.updated_at),
   })
-const getQuestions = async (
-  db: DbTarget,
-  templateIds: string[],
-): Promise<Map<string, AssessmentQuestion[]>> => {
-  const map = new Map<string, AssessmentQuestion[]>()
-  if (templateIds.length === 0) return map
+const TEMPLATE_WITH_QUESTIONS = `${TEMPLATE_COLUMNS}, COALESCE((SELECT jsonb_agg(to_jsonb(q) ORDER BY q.sort_order,q.created_at) FROM assessment_questions q WHERE q.template_id=questionnaire_templates.id),'[]'::jsonb) AS questions`
+export const getQuestionnaire = async (db: DbTarget, id: string): Promise<QuestionnaireTemplate | null> => {
   const result = await query(
     db,
-    `SELECT ${QUESTION_COLUMNS} FROM assessment_questions WHERE template_id = ANY($1::uuid[]) ORDER BY sort_order, created_at`,
-    [templateIds],
+    `SELECT ${TEMPLATE_WITH_QUESTIONS} FROM questionnaire_templates WHERE id=$1`,
+    [id],
   )
-  for (const row of result.rows) {
-    const id = String(row.template_id)
-    const values = map.get(id) ?? []
-    values.push(questionFromRow(row))
-    map.set(id, values)
-  }
-  return map
-}
-export const getQuestionnaire = async (db: DbTarget, id: string): Promise<QuestionnaireTemplate | null> => {
-  const result = await query(db, `SELECT ${TEMPLATE_COLUMNS} FROM questionnaire_templates WHERE id = $1`, [
-    id,
-  ])
-  if (!result.rows[0]) return null
-  const questions = await getQuestions(db, [id])
-  return templateFromRow(result.rows[0], questions.get(id) ?? [])
+  const row = result.rows[0]
+  return row ? templateFromRow(row, (row.questions as Row[]).map(questionFromRow)) : null
 }
 export const listQuestionnaires = async (db: DbTarget): Promise<QuestionnaireTemplate[]> => {
   const result = await query(
     db,
-    `SELECT ${TEMPLATE_COLUMNS} FROM questionnaire_templates ORDER BY moment, CASE WHEN stable_key IN ('ketamine_pre_session', 'ketamine_post_session', 'ketamine_next_day') THEN 1 ELSE 0 END, display_name`,
+    `SELECT ${TEMPLATE_WITH_QUESTIONS} FROM questionnaire_templates ORDER BY moment, CASE WHEN stable_key IN ('ketamine_pre_session','ketamine_post_session','ketamine_next_day') THEN 1 ELSE 0 END,display_name`,
   )
-  const ids = result.rows.map((row) => String(row.id))
-  const questions = await getQuestions(db, ids)
-  return result.rows.map((row) => templateFromRow(row, questions.get(String(row.id)) ?? []))
+  return result.rows.map((row) => templateFromRow(row, (row.questions as Row[]).map(questionFromRow)))
 }
 const replaceQuestions = async (
   db: DbTarget,
   templateId: string,
   questions: CreateQuestionnaireBody['questions'],
 ): Promise<void> => {
+  validateQuestionDefinitions(questions)
   const retained = questions.flatMap((question) => (question.id ? [question.id] : []))
   const disabled = await query(
     db,
@@ -1062,6 +1048,34 @@ const replaceQuestions = async (
     )
   }
 }
+const saveTemplateSnapshot = async (tx: Queryable, template: QuestionnaireTemplate) => {
+  await tx.query(
+    'INSERT INTO questionnaire_template_versions(template_id,version,snapshot) VALUES ($1,$2,$3::jsonb) ON CONFLICT DO NOTHING',
+    [template.id, template.version, JSON.stringify(template)],
+  )
+  return template
+}
+const frozenTemplate = async (
+  tx: Queryable,
+  id: string,
+  version?: number,
+): Promise<QuestionnaireTemplate> => {
+  await tx.query('SELECT id FROM questionnaire_templates WHERE id=$1 FOR UPDATE', [id])
+  const current = await getQuestionnaire(tx, id)
+  if (!current) throw httpError(404, 'Questionnaire not found')
+  if (version === undefined || version === current.version) return saveTemplateSnapshot(tx, current)
+  const result = await tx.query(
+    'SELECT snapshot FROM questionnaire_template_versions WHERE template_id=$1 AND version=$2',
+    [id, version],
+  )
+  if (!result.rows[0]) {
+    throw httpError(
+      409,
+      'This historical questionnaire definition is unavailable. Your saved answers are unchanged.',
+    )
+  }
+  return result.rows[0].snapshot as QuestionnaireTemplate
+}
 export const createQuestionnaire = async (
   user: string,
   input: CreateQuestionnaireBody,
@@ -1069,14 +1083,22 @@ export const createQuestionnaire = async (
   withUserTransaction(user, async (tx) => {
     const result = await query(
       tx,
-      `INSERT INTO questionnaire_templates (stable_key, display_name, description, moment, enabled) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [input.stable_key, input.display_name, input.description ?? null, input.moment, input.enabled],
+      `INSERT INTO questionnaire_templates (stable_key, display_name, description, moment, enabled, library) VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING id`,
+      [
+        input.stable_key,
+        input.display_name,
+        input.description ?? null,
+        input.moment,
+        input.enabled,
+        JSON.stringify(input.library ?? null),
+      ],
     )
     const id = String(result.rows[0].id)
     await replaceQuestions(tx, id, input.questions)
-    return (await getQuestionnaire(tx, id))!
+    return saveTemplateSnapshot(tx, (await getQuestionnaire(tx, id))!)
   })
 const TEMPLATE_PATCH_COLUMNS = {
+  library: 'library',
   stable_key: 'stable_key',
   display_name: 'display_name',
   description: 'description',
@@ -1089,17 +1111,38 @@ export const updateQuestionnaire = async (
   input: UpdateQuestionnaireBody,
 ): Promise<QuestionnaireTemplate | null> =>
   withUserTransaction(user, async (tx) => {
-    if (!(await getQuestionnaire(tx, id))) return null
+    await tx.query('SELECT id FROM questionnaire_templates WHERE id=$1 FOR UPDATE', [id])
+    const previous = await getQuestionnaire(tx, id)
+    if (!previous) return null
+    if (
+      isManagedInstrumentKey(previous.stable_key) ||
+      (input.stable_key && isManagedInstrumentKey(input.stable_key))
+    ) {
+      throw httpError(400, 'Standardized library instruments are read-only. Create a custom copy instead.')
+    }
+    await saveTemplateSnapshot(tx, previous)
+    if (input.questions) {
+      const keys = new Set<string>()
+      for (const q of input.questions) {
+        if (
+          keys.has(q.stable_key) ||
+          (q.id && !previous.questions.some((old) => old.id === q.id && old.stable_key === q.stable_key))
+        ) {
+          throw httpError(400, 'Question identities must match this questionnaire.')
+        }
+        keys.add(q.stable_key)
+      }
+    }
     await patchRecord(tx, 'questionnaire_templates', id, input, TEMPLATE_PATCH_COLUMNS, TEMPLATE_COLUMNS, [
       'version = version + 1',
       'updated_at = NOW()',
     ])
     if (input.questions) await replaceQuestions(tx, id, input.questions)
-    return getQuestionnaire(tx, id)
+    return saveTemplateSnapshot(tx, (await getQuestionnaire(tx, id))!)
   })
 
-const assessmentFromRow = (row: Row, responses: AssessmentAnswer[]): Assessment =>
-  present({
+const assessmentFromRow = (row: Row, responses: AssessmentAnswer[]): Assessment => {
+  const assessment: Assessment = present({
     id: String(row.id),
     template_id: String(row.template_id),
     template_version: Number(row.template_version),
@@ -1113,6 +1156,27 @@ const assessmentFromRow = (row: Row, responses: AssessmentAnswer[]): Assessment 
     updated_at: iso(row.updated_at),
     deleted_at: nullableIso(row.deleted_at),
   })
+  const template = row.template_snapshot as QuestionnaireTemplate | undefined
+  if (template) {
+    const instrument = libraryInstrument(template.stable_key)
+    const value = instrumentScore(template, assessment)
+    assessment.definition = {
+      display_name: template.display_name,
+      ...(template.library ? { library: template.library } : {}),
+      ...(instrument
+        ? {
+            score: {
+              value,
+              maximum: instrument.score_max,
+              scoring_version: template.stable_key,
+              complete: value !== null,
+            },
+          }
+        : {}),
+    }
+  }
+  return assessment
+}
 const ASSESSMENT_COLUMNS =
   'id, template_id, template_version, treatment_session_id, stage, assessed_at, timezone, notes, created_at, updated_at, deleted_at'
 const responsesFor = async (
@@ -1139,8 +1203,9 @@ const responsesFor = async (
   }
   return map
 }
+const ASSESSMENT_WITH_DEFINITION = `${ASSESSMENT_COLUMNS}, (SELECT snapshot FROM questionnaire_template_versions v WHERE v.template_id=assessments.template_id AND v.version=assessments.template_version) AS template_snapshot`
 export const getAssessment = async (db: DbTarget, id: string): Promise<Assessment | null> => {
-  const result = await query(db, `SELECT ${ASSESSMENT_COLUMNS} FROM assessments WHERE id = $1`, [id])
+  const result = await query(db, `SELECT ${ASSESSMENT_WITH_DEFINITION} FROM assessments WHERE id = $1`, [id])
   if (!result.rows[0]) return null
   const responses = await responsesFor(db, [id])
   return assessmentFromRow(result.rows[0], responses.get(id) ?? [])
@@ -1164,7 +1229,7 @@ export const listAssessments = async (
   values.push(limit)
   const result = await query(
     db,
-    `SELECT ${ASSESSMENT_COLUMNS} FROM assessments WHERE ${clauses.join(' AND ')} ORDER BY assessed_at DESC LIMIT $${values.length}`,
+    `SELECT ${ASSESSMENT_WITH_DEFINITION} FROM assessments WHERE ${clauses.join(' AND ')} ORDER BY assessed_at DESC LIMIT $${values.length}`,
     values,
   )
   const ids = result.rows.map((row) => String(row.id))
@@ -1179,17 +1244,19 @@ const writeAssessmentProjection = async (db: DbTarget, assessment: Assessment): 
     `UPDATE time_series SET deleted_at = NOW(), updated_at = NOW() WHERE source = $1 AND deleted_at IS NULL`,
     [source],
   )
-  if (assessment.deleted_at) return
+  if (assessment.deleted_at || assessment.stage === 'draft') return
   const ids = assessment.responses.map((response) => response.question_id)
   if (ids.length === 0) return
   const questions = await query(
     db,
-    `SELECT id, response_type, metric_name, unit, prompt, config FROM assessment_questions WHERE id = ANY($1::uuid[])`,
+    `SELECT question_id, version, snapshot FROM assessment_question_versions WHERE question_id = ANY($1::uuid[])`,
     [ids],
   )
-  const byId = new Map(questions.rows.map((row) => [String(row.id), row]))
+  const byId = new Map(
+    questions.rows.map((row) => [`${row.question_id}:${row.version}`, row.snapshot as Row]),
+  )
   for (const response of assessment.responses) {
-    const question = byId.get(response.question_id)
+    const question = byId.get(`${response.question_id}:${response.question_version}`)
     if (!question || !question.metric_name) continue
     let value: number | null = null
     if (
@@ -1239,9 +1306,10 @@ export const createAssessmentInTransaction = async (
   tx: Queryable,
   input: SubmitAssessmentBody,
   project = true,
+  scheduledTemplate?: QuestionnaireTemplate,
 ): Promise<Assessment> => {
-  const template = await getQuestionnaire(tx, input.template_id)
-  if (!template) throw new Error('Questionnaire not found')
+  const template = scheduledTemplate ?? (await frozenTemplate(tx, input.template_id, input.template_version))
+  validateResponses(template, input.responses, input.stage !== 'draft')
   const result = await query(
     tx,
     `INSERT INTO assessments (template_id, template_version, treatment_session_id, stage, assessed_at, timezone, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -1269,10 +1337,26 @@ export const updateAssessment = async (
   input: CorrectAssessmentBody,
 ): Promise<Assessment | null> =>
   withUserTransaction(user, async (tx) => {
-    if (!(await getAssessment(tx, id))) return null
-    const template = input.template_id ? await getQuestionnaire(tx, input.template_id) : null
-    if (input.template_id && !template) throw new Error('Questionnaire not found')
-    const update = template ? { ...input, template_version: template.version } : input
+    await tx.query('SELECT id FROM assessments WHERE id=$1 FOR UPDATE', [id])
+    const previous = await getAssessment(tx, id)
+    if (!previous) return null
+    if (input.template_id && input.template_id !== previous.template_id) {
+      throw httpError(400, 'Create a new assessment to use a different questionnaire.')
+    }
+    if (input.template_version && input.template_version !== previous.template_version) {
+      throw httpError(400, 'Corrections retain the original questionnaire version.')
+    }
+    if (
+      input.responses ||
+      (previous.stage === 'draft' && input.stage !== undefined && input.stage !== 'draft')
+    ) {
+      validateResponses(
+        await frozenTemplate(tx, previous.template_id, previous.template_version),
+        input.responses ?? previous.responses,
+        (input.stage === undefined ? previous.stage : input.stage) !== 'draft',
+      )
+    }
+    const update = input
     const columns = {
       template_id: 'template_id',
       template_version: 'template_version',
@@ -1515,6 +1599,7 @@ const EXPORT_TABLES = [
   'treatment_types',
   'treatment_sessions',
   'questionnaire_templates',
+  'questionnaire_template_versions',
   'assessment_questions',
   'assessment_question_versions',
   'assessments',

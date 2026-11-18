@@ -115,6 +115,7 @@ const savedTables = [
   'goals',
   'activity_type_definitions',
   'questionnaire_templates',
+  'questionnaire_template_versions',
   'assessment_questions',
   'assessment_question_versions',
   'assessments',
@@ -331,6 +332,16 @@ const seedSavedFeatures = async (db: UserDb, user: string) => {
         },
       })
     }
+    await insertFixture(db, 'questionnaire_template_versions', {
+      template_id: template,
+      version: 2,
+      snapshot: {
+        id: template,
+        version: 2,
+        display_name: 'Saved custom fixture',
+        questions: [{ id: question, version: 2, prompt: 'Edited fixture question?' }],
+      },
+    })
     const assessment = await insertFixture(db, 'assessments', {
       template_id: template,
       template_version: 2,

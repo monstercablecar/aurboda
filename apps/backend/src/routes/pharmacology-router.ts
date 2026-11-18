@@ -1,4 +1,5 @@
 import type {
+  QuestionnaireCatalogResponse,
   AdministrationResponse,
   AdministrationsResponse,
   AssessmentResponse,
@@ -365,6 +366,11 @@ export const createPharmacologyRouter = (authMiddleware: AnyMiddleware): TypedRo
     },
   )
 
+  router.get<Record<string, never>, QuestionnaireCatalogResponse>(
+    '/questionnaires/catalog',
+    authMiddleware,
+    async (_req, res) => res.json({ success: true, data: pharmacology.getQuestionnaireCatalog() }),
+  )
   router.get<Record<string, never>, QuestionnairesResponse>(
     '/questionnaires',
     authMiddleware,

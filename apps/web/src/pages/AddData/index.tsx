@@ -7,6 +7,7 @@ import { useCallback, useState } from 'preact/hooks'
 
 import { definitionOrCatalogEntry } from '../../components/activityTypeCatalog'
 import { ActivityTypePicker } from '../../components/ActivityTypePicker'
+import { QuestionnaireBuilder } from '../../components/AssessmentLibrary/QuestionnaireBuilder'
 import { useImportCelebration } from '../../components/ImportCelebrationProvider'
 import { ListFieldEditor } from '../../components/ListFieldEditor'
 import { MetricPicker } from '../../components/MetricPicker'
@@ -27,7 +28,7 @@ import { buildActivityData, newTypeToCreate } from './activityData'
 import { catalogUnitOptions, chosenCatalogUnit, metricLabel, plainMetricUnit } from './metricUnit'
 import './style.css'
 
-type Tab = 'activity' | 'metric'
+type Tab = 'activity' | 'metric' | 'questionnaire'
 
 const STORAGE_KEY = 'addData.addMore'
 const getAddMore = (): boolean => localStorage.getItem(STORAGE_KEY) !== 'false'
@@ -542,7 +543,9 @@ export const AddData = () => {
   // Read once on mount: `?tab=` picks the initial tab and `?time=` seeds the
   // time fields. Later edits to the form must not be clobbered by the URL.
   const [initialTime] = useState(() => parsePrefillTime(query.time))
-  const [activeTab, setActiveTab] = useState<Tab>(() => (query.tab === 'metric' ? 'metric' : 'activity'))
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    query.tab === 'questionnaire' ? 'questionnaire' : query.tab === 'metric' ? 'metric' : 'activity',
+  )
   const [addMore, setAddMoreState] = useState(getAddMore)
 
   const handleTabClick = useCallback((tab: Tab) => {
@@ -586,9 +589,10 @@ export const AddData = () => {
         </label>
       </div>
 
-      <div class="add-data-tabs">
+      <div class="add-data-tabs" role="group" aria-label="Choose what to add">
         <button
           class={`add-data-tab ${activeTab === 'activity' ? 'active' : ''}`}
+          aria-pressed={activeTab === 'activity'}
           onClick={() => handleTabClick('activity')}
           type="button"
         >
@@ -596,10 +600,19 @@ export const AddData = () => {
         </button>
         <button
           class={`add-data-tab ${activeTab === 'metric' ? 'active' : ''}`}
+          aria-pressed={activeTab === 'metric'}
           onClick={() => handleTabClick('metric')}
           type="button"
         >
           Metric
+        </button>
+        <button
+          class={`add-data-tab ${activeTab === 'questionnaire' ? 'active' : ''}`}
+          aria-pressed={activeTab === 'questionnaire'}
+          onClick={() => handleTabClick('questionnaire')}
+          type="button"
+        >
+          Questionnaire
         </button>
       </div>
 
@@ -610,6 +623,7 @@ export const AddData = () => {
           <AddActivityForm onCreated={handleCreated} initialTime={initialTime} />
         </>
       )}
+      {activeTab === 'questionnaire' && <QuestionnaireBuilder />}
       {activeTab === 'metric' && <AddMetricForm onCreated={handleCreated} initialTime={initialTime} />}
     </div>
   )

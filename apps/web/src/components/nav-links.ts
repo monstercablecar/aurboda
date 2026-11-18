@@ -42,6 +42,12 @@ export const NAV_LINKS_PRIMARY: NavigationLink[] = [
     description: 'Record questionnaires, personality scores and mental check-ins.',
   },
   {
+    href: '/physical-assessments',
+    label: 'Physical assessments',
+    icon: '🚶',
+    description: 'Record pain, physical function and everyday difficulties.',
+  },
+  {
     href: '/treatments',
     label: 'Treatments',
     icon: '💊',

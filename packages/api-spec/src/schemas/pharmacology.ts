@@ -440,6 +440,16 @@ export type AssessmentQuestion = z.infer<typeof assessmentQuestionSchema>
 export const questionnaireMomentSchema = z
   .enum(['morning', 'midday', 'evening', 'pre_treatment', 'post_treatment', 'follow_up', 'custom'])
   .meta({ id: 'QuestionnaireMoment', description: 'Intended assessment moment.' })
+export const questionnaireLibrarySchema = z
+  .object({
+    domain: z.enum(['mental', 'physical', 'general']),
+    recall_period: z.string().max(300),
+    estimated_minutes: z.number().int().min(1).max(120),
+  })
+  .meta({
+    id: 'QuestionnaireLibrary',
+    description: 'Purpose category, recall instructions and approximate effort for a custom questionnaire.',
+  })
 export const questionnaireTemplateSchema = z
   .object({
     id: uuid,
@@ -447,6 +457,7 @@ export const questionnaireTemplateSchema = z
     display_name: z.string().min(1).max(200),
     description: z.string().nullable().optional(),
     moment: questionnaireMomentSchema,
+    library: questionnaireLibrarySchema.optional(),
     enabled: z.boolean(),
     version: z.number().int().positive(),
     questions: z.array(assessmentQuestionSchema),
@@ -465,7 +476,7 @@ export const createQuestionnaireBodySchema = questionnaireTemplateSchema
 export type CreateQuestionnaireBody = z.infer<typeof createQuestionnaireBodySchema>
 export const updateQuestionnaireBodySchema = createQuestionnaireBodySchema
   .partial()
-  .extend({ description: nullableText })
+  .extend({ description: nullableText, questions: z.array(questionInputSchema).optional() })
   .meta({
     id: 'UpdateQuestionnaireBody',
     description: 'Patch a questionnaire and optionally replace questions.',
@@ -481,11 +492,30 @@ export const assessmentAnswerSchema = z
   })
   .meta({ id: 'AssessmentAnswer', description: 'Raw response bound to an immutable question version.' })
 export type AssessmentAnswer = z.infer<typeof assessmentAnswerSchema>
+export const assessmentDefinitionSchema = z
+  .object({
+    display_name: z.string(),
+    library: questionnaireLibrarySchema.optional(),
+    score: z
+      .object({
+        value: z.number().nullable(),
+        maximum: z.number(),
+        scoring_version: z.string(),
+        complete: z.boolean(),
+      })
+      .optional(),
+  })
+  .meta({
+    id: 'AssessmentDefinition',
+    description:
+      'Historical definition metadata and optional derived instrument score; missing items never become zero.',
+  })
 export const assessmentSchema = z
   .object({
     id: uuid,
     template_id: uuid,
     template_version: z.number().int().positive(),
+    definition: assessmentDefinitionSchema.optional(),
     treatment_session_id: uuid.nullable().optional(),
     stage: z.string().nullable().optional(),
     assessed_at: dateTimeSchema,
@@ -501,6 +531,7 @@ export type Assessment = z.infer<typeof assessmentSchema>
 export const submitAssessmentBodySchema = z
   .object({
     template_id: uuid,
+    template_version: z.number().int().positive().optional(),
     treatment_session_id: uuid.optional(),
     stage: z.string().max(100).optional(),
     assessed_at: dateTimeSchema,
@@ -693,6 +724,7 @@ export const pharmacologyExportSchema = z
     treatment_types: z.array(z.unknown()),
     treatment_sessions: z.array(z.unknown()),
     questionnaire_templates: z.array(z.unknown()),
+    questionnaire_template_versions: z.array(z.unknown()).optional(),
     assessment_questions: z.array(z.unknown()),
     assessment_question_versions: z.array(z.unknown()),
     assessments: z.array(z.unknown()),
@@ -797,3 +829,8 @@ export const pharmacologyDeleteResponseSchema = baseResponseSchema.meta({
   description: 'Successful archive or soft deletion.',
 })
 export type PharmacologyDeleteResponse = z.infer<typeof pharmacologyDeleteResponseSchema>
+
+export const questionnaireCatalogResponseSchema = createDataArrayResponseSchema(
+  createQuestionnaireBodySchema,
+).meta({ id: 'QuestionnaireCatalogResponse' })
+export type QuestionnaireCatalogResponse = z.infer<typeof questionnaireCatalogResponseSchema>

@@ -3,6 +3,7 @@ import type { AssessmentAnswer, BriefTreatmentAnswers, TreatmentCheckin } from '
 import axios from 'axios'
 import { useEffect, useRef, useState } from 'preact/hooks'
 
+import { AssessmentAbout } from '../../components/AssessmentLibrary/AssessmentAbout'
 import { pharmacologyErrorMessage } from '../../state/api/pharmacology'
 import { saveTreatmentCheckin } from '../../state/api/treatment-checkins'
 import { currentSessionGeneration } from '../../state/sessionBoundary'
@@ -167,8 +168,15 @@ export function BriefCheckinForm({
           : 'Record what is true for you at this time. Leave anything you cannot answer blank.'}
       </p>
       <p class="form-hint">
-        Personal observations, without a composite score. Entries are not monitored by a clinician.
+        Personal observations. Brief check-ins have no composite score. Entries are not monitored by a
+        clinician.
       </p>
+      {entry.questionnaire && (
+        <>
+          <AssessmentAbout template={entry.questionnaire} />
+          <p>{entry.questionnaire.description}</p>
+        </>
+      )}
       <fieldset disabled={busy} class="checkin-fields">
         <label class="field">
           {entry.kind === 'reflection' ? 'Reflection made at' : 'Observed at'} (your device’s local time)

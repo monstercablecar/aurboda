@@ -1,5 +1,7 @@
 import {
   confirmRegimenBodySchema,
+  createQuestionnaireBodySchema,
+  updateQuestionnaireBodySchema,
   correctAssessmentBodySchema,
   createAdministrationBodySchema,
   createContextEventBodySchema,
@@ -175,6 +177,28 @@ export const registerPharmacologyTools = (server: McpServer, user: string): void
     async ({ id, ...params }) => {
       const data = await pharmacology.updateTreatment(user, id, params)
       return data ? jsonResponse({ success: true, data }) : errorResponse('Treatment session not found')
+    },
+  )
+  server.tool(
+    'list_assessment_instruments',
+    'List unchanged standardized definitions available for optional installation using create_questionnaire. Listing schedules nothing.',
+    {},
+    async () => jsonResponse({ success: true, data: pharmacology.getQuestionnaireCatalog() }),
+  )
+  server.tool(
+    'create_questionnaire',
+    'Save a reusable custom questionnaire, or install an unchanged instrument from the assessment catalog. Saved answers retain their versions.',
+    createQuestionnaireBodySchema.shape,
+    async (params) =>
+      jsonResponse({ success: true, data: await pharmacology.createQuestionnaire(user, params) }),
+  )
+  server.tool(
+    'update_questionnaire',
+    'Edit a custom questionnaire using a new immutable version. Standardized library instruments cannot be edited.',
+    { id: uuid, ...updateQuestionnaireBodySchema.shape },
+    async ({ id, ...params }) => {
+      const data = await pharmacology.updateQuestionnaire(user, id, params)
+      return data ? jsonResponse({ success: true, data }) : errorResponse('Questionnaire not found')
     },
   )
   server.tool(
