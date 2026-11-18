@@ -59,6 +59,7 @@ export const MUTATING_MCP_TOOL_PREFIXES = [
   'skip_',
   'start_',
   'submit_',
+  'test_reminder_',
   'sync_',
   'unboost_',
   'unfollow_',

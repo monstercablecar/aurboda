@@ -5,6 +5,7 @@ import { useCallback, useState } from 'preact/hooks'
 import type { BiologicalSex, HrZoneThresholds, UpdateSettingsInput } from '../../state/api'
 
 import { AvatarSettings } from '../../components/AvatarSettings'
+import { CustomRemindersSettings } from '../../components/CustomRemindersSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
 import { FeatureControl } from '../../components/FeatureControl'
@@ -366,6 +367,8 @@ export function Settings() {
       </SettingsSection>
 
       <NotificationSettings />
+
+      <CustomRemindersSettings />
 
       <SharingSettings />
 

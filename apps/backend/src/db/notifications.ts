@@ -1,5 +1,6 @@
 import type { NotificationAction } from '@aurboda/api-spec'
 
+import type { Queryable } from './pool.ts'
 import type { NotificationPageRow, NotificationPreferenceRecord, NotificationRecord } from './types.ts'
 
 import { query } from './connection.ts'
@@ -21,7 +22,7 @@ export interface NotificationInsert {
 
 /** Null when `dedupe_key` was already used: the earlier notification stands. */
 export const insertNotification = async (
-  user: string,
+  user: string | Queryable,
   input: NotificationInsert,
 ): Promise<NotificationRecord | null> => {
   const result = await query<NotificationRecord>(
@@ -45,7 +46,10 @@ export const insertNotification = async (
   return result.rows[0] ?? null
 }
 
-export const getNotificationById = async (user: string, id: string): Promise<NotificationRecord | null> => {
+export const getNotificationById = async (
+  user: string | Queryable,
+  id: string,
+): Promise<NotificationRecord | null> => {
   const result = await query<NotificationRecord>(
     user,
     `SELECT ${NOTIFICATION_COLUMNS} FROM notifications WHERE id = $1`,
@@ -89,7 +93,7 @@ const revisionSets = (patch: NotificationRevisionPatch): { sets: string[]; param
  * deliver the revised row again. Null when nothing matched.
  */
 export const reviseNotification = async (
-  user: string,
+  user: string | Queryable,
   target: NotificationTarget,
   patch: NotificationRevisionPatch,
 ): Promise<NotificationRecord | null> => {
@@ -110,7 +114,7 @@ export const reviseNotification = async (
  * finds nothing to revise.
  */
 export const reviseOpenNotifications = async (
-  user: string,
+  user: string | Queryable,
   dedupeKeys: string[],
   patch: NotificationRevisionPatch,
 ): Promise<NotificationRecord[]> => {
@@ -128,7 +132,7 @@ export const reviseOpenNotifications = async (
 
 /** The notifications of a type that still offer actions and whose `data` contains `data`. */
 export const listOpenNotifications = async (
-  user: string,
+  user: string | Queryable,
   type: string,
   data: Record<string, unknown>,
 ): Promise<NotificationRecord[]> => {
@@ -164,7 +168,7 @@ export interface ListNotificationsOptions {
  * the microseconds, and the row it came from must not be served again.
  */
 export const listNotifications = async (
-  user: string,
+  user: string | Queryable,
   options: ListNotificationsOptions,
 ): Promise<NotificationPageRow[]> => {
   const result = await query<NotificationPageRow>(
@@ -199,7 +203,10 @@ export const countUnreadNotifications = async (user: string): Promise<number> =>
 }
 
 /** Keeps the first `read_at` of an already read row. Null when there is no such row. */
-export const markNotificationRead = async (user: string, id: string): Promise<NotificationRecord | null> => {
+export const markNotificationRead = async (
+  user: string | Queryable,
+  id: string,
+): Promise<NotificationRecord | null> => {
   const result = await query<NotificationRecord>(
     user,
     `UPDATE notifications SET read_at = COALESCE(read_at, NOW())
@@ -215,7 +222,10 @@ export const markAllNotificationsRead = async (user: string): Promise<number> =>
   return result.rowCount ?? 0
 }
 
-export const markNotificationsReadByType = async (user: string, type: string): Promise<number> => {
+export const markNotificationsReadByType = async (
+  user: string | Queryable,
+  type: string,
+): Promise<number> => {
   const result = await query(
     user,
     'UPDATE notifications SET read_at = NOW() WHERE type = $1 AND read_at IS NULL',
@@ -226,7 +236,7 @@ export const markNotificationsReadByType = async (user: string, type: string): P
 
 /** Deletes read rows created before `readBefore` and every row created before `anyBefore`. */
 export const pruneNotifications = async (
-  user: string,
+  user: string | Queryable,
   readBefore: Date,
   anyBefore: Date,
 ): Promise<number> => {
@@ -248,7 +258,7 @@ export const listNotificationPreferences = async (user: string): Promise<Notific
 }
 
 export const getNotificationPreference = async (
-  user: string,
+  user: string | Queryable,
   type: string,
 ): Promise<NotificationPreferenceRecord | null> => {
   const result = await query<NotificationPreferenceRecord>(
@@ -266,7 +276,7 @@ export interface NotificationPreferencePatch {
 
 /** A side left out keeps its stored value, or the default (on) for a new row. */
 export const upsertNotificationPreference = async (
-  user: string,
+  user: string | Queryable,
   type: string,
   patch: NotificationPreferencePatch,
 ): Promise<NotificationPreferenceRecord> => {

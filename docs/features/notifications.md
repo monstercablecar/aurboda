@@ -145,3 +145,7 @@ deleted.
 
 5. For buttons, give `actions: [{ key, label }]` when raising, and register a handler for
    `(type, key)` in the `runNotificationAction` handlers in `apps/backend/src/api.ts`.
+
+## Custom reminders (fork addition)
+
+Settings includes a compact custom reminder editor below Notifications, using this same private delivery system. See [custom reminders](reminders.md) for scheduling, phone-delivery limits, tests and optional calendar copies.

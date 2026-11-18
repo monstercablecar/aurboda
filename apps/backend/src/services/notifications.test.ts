@@ -248,7 +248,7 @@ describe('listNotificationTypeSettings', () => {
     ).toBe(true)
   })
 
-  test('lists the groups in order (feed, data sources, admin), each in registry order', () => {
+  test('lists the groups in order (feed, data sources, admin, reminders), each in registry order', () => {
     expect(listNotificationTypeSettings(true, []).map((setting) => setting.type)).toEqual([
       'feed_follow_request',
       'feed_new_follower',
@@ -261,6 +261,7 @@ describe('listNotificationTypeSettings', () => {
       'autoshare_pending',
       'garmin_key_expiring',
       'admin_signup',
+      'reminder',
     ])
   })
 

@@ -112,6 +112,7 @@ import { createPublicBannerRouter } from '../routes/public-banner-router.ts'
 import { createPublicFeedImageRouter } from '../routes/public-feed-image-router.ts'
 import { createPublicSharesRouter } from '../routes/public-shares-router.ts'
 import { createRawRecordsRouter } from '../routes/raw-records-router.ts'
+import { createRemindersRouter } from '../routes/reminders-router.ts'
 import { createReportsRouter } from '../routes/reports-router.ts'
 import { createResourcesRouter } from '../routes/resources-router.ts'
 import { createRoutesRouter } from '../routes/routes-router.ts'
@@ -356,6 +357,7 @@ export const mountRestRouters = ({
     createAutoshareRulesRouter(authMiddleware, autosharePreviewDeps, skipAutoshare),
   )
   httpd.use('/locations', createLocationsRouter(authMiddleware, onNamedLocationsChanged))
+  httpd.use('/reminders', createRemindersRouter(authMiddleware))
   httpd.use('/notifications/web-push', createBrowserPushRouter(authMiddleware))
   httpd.use(
     '/home-assistant',

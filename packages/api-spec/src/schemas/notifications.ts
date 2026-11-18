@@ -8,6 +8,7 @@ import { baseResponseSchema, iso8601DateTimeSchema, queryBooleanSchema, UUID_RE 
  * changes, since a stored notification's `type` is plain text.
  */
 export const notificationTypes = [
+  'reminder',
   'admin_signup',
   'feed_follow_request',
   'feed_new_follower',
@@ -32,11 +33,12 @@ export const notificationTypeSchema = z.enum(notificationTypes).meta({
 export const isNotificationType = (value: string): value is NotificationType =>
   (notificationTypes as readonly string[]).includes(value)
 
-export const notificationGroups = ['feed', 'data_sources', 'admin'] as const
+export const notificationGroups = ['feed', 'data_sources', 'admin', 'reminders'] as const
 
 export type NotificationGroup = (typeof notificationGroups)[number]
 
 export const notificationGroupLabels: Record<NotificationGroup, string> = {
+  reminders: 'Reminders',
   admin: 'Admin',
   data_sources: 'Data sources',
   feed: 'Feed',
@@ -51,6 +53,12 @@ export interface NotificationTypeInfo {
 }
 
 export const notificationTypeInfo: Record<NotificationType, NotificationTypeInfo> = {
+  reminder: {
+    admin_only: false,
+    description: 'Your custom scheduled reminders',
+    group: 'reminders',
+    label: 'Custom reminders',
+  },
   admin_signup: {
     admin_only: true,
     description: 'Someone created an account on this server',
