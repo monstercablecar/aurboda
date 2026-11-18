@@ -35,3 +35,7 @@ eb9e7cd272ec98d924cc1e158945ef98a539c006:apps/backend/src/catalog/exercises/exer
 # Public GAD-7 and PEG catalogue identifiers, not credentials.
 198b07361050d83e3422b2539cd226a3be21b172:packages/api-spec/src/assessment-catalog.ts:generic-api-key:38
 198b07361050d83e3422b2539cd226a3be21b172:packages/api-spec/src/assessment-catalog.ts:generic-api-key:89
+
+# Same public GAD-7 and PEG identifiers in the connector-published source snapshot.
+037894de763ea0caba7138e7195223ddf2e1a0cd:packages/api-spec/src/assessment-catalog.ts:generic-api-key:38
+037894de763ea0caba7138e7195223ddf2e1a0cd:packages/api-spec/src/assessment-catalog.ts:generic-api-key:89
