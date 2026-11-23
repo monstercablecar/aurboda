@@ -67,4 +67,16 @@ describe('initSentry', () => {
     expect(keptNames).not.toContain('OnUnhandledRejection')
     expect(keptNames).toHaveLength(defaults.length - 2)
   })
+  test('drops private family events before external reporting', async () => {
+    await initSentry(makeCentralDb('https://abc@o1.ingest.sentry.io/2'))
+    const filter = vi.mocked(Sentry.init).mock.calls[0]?.[0]?.beforeSend
+    if (!filter) throw new Error('Missing private-event filter')
+    const event = {
+      type: undefined,
+      request: { url: 'https://private.example/api/family-photos/upload', data: 'private caption' },
+    }
+    expect(filter(event, {})).toBeNull()
+    const normal = { type: undefined, request: { url: 'https://private.example/api/status' } }
+    expect(filter(normal, {})).toBe(normal)
+  })
 })

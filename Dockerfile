@@ -31,7 +31,7 @@ FROM node:26-alpine
 # rasterize SVG <text> in server-rendered images — the base image ships none).
 # postgresql16-client provides pg_dump for the per-user data export; its major
 # must be at least the database server's (postgis/postgis:16 in docker-compose.yml).
-RUN apk add --no-cache nginx fontconfig postgresql16-client
+RUN apk add --no-cache nginx fontconfig postgresql16-client ffmpeg libheif-tools util-linux
 
 # Install pnpm
 RUN npm install -g pnpm@10

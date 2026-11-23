@@ -52,6 +52,8 @@ The REST API and MCP tools should have the same capabilities:
 
 When adding new features, implement both the MCP tool and REST API endpoint.
 
+Local privacy exception: Family Photos (`docs/family-photos.md`) is REST-only. Never add it to MCP, public OpenAPI paths, personal exports, Feed or federation. Membership stays outside broad account serialization.
+
 ## Native (Android) and Web Parity
 
 The Android app should offer the same functionality as the web app. To avoid

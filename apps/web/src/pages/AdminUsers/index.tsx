@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'preact-iso'
 import { useMemo, useState } from 'preact/hooks'
 
+import { FamilyMembership } from '../../components/FamilyMembership'
 import { fetchAdminUsers } from '../../state/api'
 import { auth } from '../../state/auth'
 import { AdminAccessDenied } from './AccessDenied'
@@ -55,6 +56,9 @@ function UserRow({ user, now }: { user: AdminUserOverview; now: Date }) {
           {user.username}
         </a>
         {user.is_admin && <span class="au-badge">admin</span>}
+        <div>
+          <FamilyMembership username={user.username} />
+        </div>
         {user.email && <div class="au-sub">{user.email}</div>}
       </td>
       <td>

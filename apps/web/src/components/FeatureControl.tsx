@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'preact/hooks'
 
 import { fetchUserSettings, updateUserSettings } from '../state/api'
+import { useFamilyAccess } from '../state/api/family-photos'
 import { auth } from '../state/auth'
 import { currentSessionGeneration } from '../state/sessionBoundary'
 import { featurePages, isPageVisible, setPageVisibility } from './feature-control'
@@ -16,6 +17,7 @@ export function FeatureControl({
   disabled?: boolean
   onBusyChange?: (busy: boolean) => void
 }) {
+  const { data: family } = useFamilyAccess()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['userSettings'], queryFn: fetchUserSettings })
   const [busy, setBusy] = useState(false)
@@ -81,30 +83,32 @@ export function FeatureControl({
         </p>
       ) : (
         <div class="feature-control-list">
-          {featurePages(Boolean(auth.value.is_admin)).map((page) => {
-            const locked = page.href === '/settings'
-            const description = page.description ?? `Show ${page.label} in your menus.`
-            return (
-              <label class="feature-control-row" key={page.href} title={description}>
-                <span class="feature-control-page">
-                  <span>
-                    {page.icon} {page.label}
+          {featurePages(Boolean(auth.value.is_admin))
+            .filter((page) => page.href !== '/family-photos' || family?.allowed === true)
+            .map((page) => {
+              const locked = page.href === '/settings'
+              const description = page.description ?? `Show ${page.label} in your menus.`
+              return (
+                <label class="feature-control-row" key={page.href} title={description}>
+                  <span class="feature-control-page">
+                    <span>
+                      {page.icon} {page.label}
+                    </span>
+                    <small id={`feature-${encodeURIComponent(page.href)}`}>{description}</small>
                   </span>
-                  <small id={`feature-${encodeURIComponent(page.href)}`}>{description}</small>
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={`Show ${page.label}`}
-                  aria-describedby={`feature-${encodeURIComponent(page.href)}`}
-                  checked={isPageVisible(page.href, query.data?.hidden_pages)}
-                  disabled={locked || busy || disabled}
-                  onChange={(event) => void change(page.href, event.currentTarget.checked)}
-                />
-                {locked && <small>Always available</small>}
-              </label>
-            )
-          })}
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label={`Show ${page.label}`}
+                    aria-describedby={`feature-${encodeURIComponent(page.href)}`}
+                    checked={isPageVisible(page.href, query.data?.hidden_pages)}
+                    disabled={locked || busy || disabled}
+                    onChange={(event) => void change(page.href, event.currentTarget.checked)}
+                  />
+                  {locked && <small>Always available</small>}
+                </label>
+              )
+            })}
         </div>
       )}
       <p role={failed ? 'alert' : 'status'} class="feature-control-status">

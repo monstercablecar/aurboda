@@ -484,3 +484,7 @@ come from the same store:
 Admin Settings → **Tag page moderation** lists the blocks (kind, value, when added, **Remove**)
 with a form to add one, and the hidden posts (link to the post, author, when hidden, **Unhide**).
 Every route and tool is admin-only.
+
+## Private Family Photos (local deployment)
+
+When enabled locally, Admin Users and each account details page include an independent **Family Member** checkbox. It defaults false and changes no administrative or billing privileges. Administrators have full access to the Marcroft Family channel; members browse and download optimized media. See [Family Photos](family-photos.md) for the privacy boundary, storage, limits and restoration procedure.

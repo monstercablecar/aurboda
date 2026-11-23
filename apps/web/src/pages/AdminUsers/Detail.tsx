@@ -3,6 +3,7 @@ import { useLocation, useRoute } from 'preact-iso'
 import { useMemo } from 'preact/hooks'
 
 import { DeleteAccountConfirm } from '../../components/DeleteAccountConfirm'
+import { FamilyMembership } from '../../components/FamilyMembership'
 import { deleteAdminUser, fetchAdminUserUsage } from '../../state/api'
 import { auth } from '../../state/auth'
 import { AdminAccessDenied } from './AccessDenied'
@@ -73,6 +74,9 @@ export function AdminUserDetail() {
             </div>
           </dl>
 
+          <div>
+            <FamilyMembership username={username} />
+          </div>
           <PlanEditor key={username} username={username} plan={usage} />
 
           <section class="au-section">

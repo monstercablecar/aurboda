@@ -61,6 +61,16 @@ All 66 focused SCRAM/connection/account-email tests pass. Sixteen cases exercise
 
 Astra's bounded final review found no other blockers in its scope. This correction and dependency patch were applied afterward; no claim is made that Astra re-reviewed the corrected head. Both automatic specialist consultations are used. The required current-head GitHub review must cover the correction before merge/deployment.
 
+## Concurrent live Family Photos preservation
+
+Deployment preflight found a newer live release, `local-family-photos-20261123-03`, installed while this integration was underway. Its immutable manifest was verified against source; it differs from the original canonical baseline in exactly 35 files. Those files are preserved through an additive merge rather than replacing the live feature with the older baseline. Three conflicts retain both navigation entries, both due-check-in and Family upload cards, and both sets of schema exports.
+
+Family Photos remains source-disabled by default, REST-only and independent of personal People/Journal storage. Preserve current membership authority and media-cookie/session revocation, private/no-store responses, Sentry exclusion, original/derivative bytes, worker reservation/recovery limits and runtime FFmpeg/HEIF/prlimit tools. It remains absent from MCP, public OpenAPI paths, personal exports, Feed and federation. Existing Android browser-download handoff is retained; this integration does not add a native media downloader.
+
+The current deployment's central metadata and dedicated backing-media volume must be backed up together with Resources in a matched paused snapshot and verified by restore before cutover. Current worker environment, volume mounts, disabled auto-update/legacy updater guard, proxy body/range/no-cache rules and container limits are leases against the newer live release, which is now the rollback baseline. Any new live release or config change invalidates preflight. No live data or settings are changed during reconciliation tests.
+
+Reconciliation requires new bounded privacy/media review on its exact source and refreshed GitHub gates. Prior review of the earlier source does not approve this additive change. The inherited media tests run with actual deployment codecs rather than relaxing assertions for a host FFmpeg lacking H.264 encoding; CI installs its explicit media test tools.
+
 ## Release gates
 
 Freeze source and obtain final Astra security/isolation review after validation. Preserve GitHub current-head review, all required checks, resolved threads and clean mergeability; architectural advice is not final approval. Deploy only an immutable reviewed commit with the existing protected validated database/Resources backups, deployment lock, rollback image, unchanged mounts/auth/proxy/resources and exact-version local/public health/schema/authentication checks. Update the canonical fork branch through its review gate; fork main remains outside this integration's scope.

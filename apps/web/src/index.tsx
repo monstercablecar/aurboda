@@ -124,6 +124,7 @@ const Timeline = lazyPage(() => import('./pages/Timeline/index.jsx'), 'Timeline'
 const Assessments = lazyPage(() => import('./pages/Assessments/index'), 'Assessments')
 const Treatments = lazyPage(() => import('./pages/Treatments/index'), 'Treatments')
 const CPAP = lazyPage(() => import('./pages/CPAP/index'), 'CPAP')
+const FamilyPhotos = lazyPage(() => import('./pages/FamilyPhotos/index'), 'FamilyPhotos')
 const Resources = lazyPage(() => import('./pages/Resources/index'), 'Resources')
 const Journal = lazyPage(() => import('./pages/Journal/index'), 'Journal')
 const People = lazyPage(() => import('./pages/People/index'), 'People')
@@ -178,6 +179,7 @@ function AppShell() {
             <Route path="/people" component={People} />
             <Route path="/journal" component={Journal} />
             <Route path="/journal/prompted" component={Journal} />
+            <Route path="/family-photos" component={FamilyPhotos} />
             <Route path="/resources" component={Resources} />
             <Route path="/assessments" component={Assessments} />
             <Route path="/check-ins/new" component={CheckInEditor} />

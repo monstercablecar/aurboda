@@ -17,6 +17,12 @@ export const NAV_LINKS_PRIMARY: NavigationLink[] = [
     icon: '✓',
     description: 'Optional reusable reflections and routines, with due slots and history.',
   },
+  {
+    href: '/family-photos',
+    label: 'Family Photos',
+    icon: '📷',
+    description: 'Browse the private Marcroft Family channel.',
+  },
   { href: '/', label: 'Home', icon: '🏠', description: 'Your overview, dashboards and setup guide.' },
   { href: '/goals', label: 'Tasks', icon: '🎯', description: 'Organize tasks, goals and Kanban boards.' },
   { href: '/sleep', label: 'Sleep', icon: '🌙', description: 'Review sleep, track naps and add a check-in.' },

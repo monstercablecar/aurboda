@@ -32,6 +32,7 @@ export const initSentry = async (centralDb: CentralDb): Promise<boolean> => {
     integrations: (defaults) =>
       defaults.filter((integration) => !OWN_PROCESS_HANDLER_INTEGRATIONS.includes(integration.name)),
     sendDefaultPii: true,
+    beforeSend: (event) => (event.request?.url?.includes('/family-photos') ? null : event),
   })
   console.info('🛡️ Sentry error reporting enabled')
   return true

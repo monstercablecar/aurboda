@@ -6,6 +6,7 @@ import { useState } from 'preact/hooks'
 
 import { DueTodayCard } from '../../components/DueTodayCard'
 import { EditableDashboard } from '../../components/EditableDashboard'
+import { FamilyPhotoQuickLink } from '../../components/FamilyPhotoQuickLink'
 import { FoghouseGames } from '../../components/FoghouseGames'
 import { GetStartedGuide } from '../../components/GetStartedGuide'
 import { PeriodDashboardBar } from '../../components/PeriodSwitcher'
@@ -115,6 +116,7 @@ export function Dashboard() {
         <>
           <GetStartedGuide />
           <DueTodayCard />
+          <FamilyPhotoQuickLink />
           <FoghouseGames />
         </>
       )}

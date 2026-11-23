@@ -81,6 +81,7 @@ import { createDataSourcesRouter } from '../routes/data-sources-router.ts'
 import { createDeductionRulesRouter } from '../routes/deduction-rules-router.ts'
 import { createExerciseCatalogRouter } from '../routes/exercise-catalog-router.ts'
 import { createExportRouter } from '../routes/export-router.ts'
+import { createFamilyPhotosRouter, familyErrorHandler } from '../routes/family-photos-router.ts'
 import { createFeedFollowedTagsRouter } from '../routes/feed-followed-tags-router.ts'
 import { createFeedFollowersRouter } from '../routes/feed-followers-router.ts'
 import { createFeedFollowingRouter } from '../routes/feed-following-router.ts'
@@ -308,6 +309,8 @@ export const mountRestRouters = ({
   httpd.use(createMetricsRouter(authMiddleware, syncProvider))
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))
+  httpd.use('/family-photos', createFamilyPhotosRouter(authMiddleware, centralDb, apiBaseUrl))
+  httpd.use('/family-photos', familyErrorHandler)
   httpd.use('/resources', createResourcesRouter(authMiddleware, centralDb, apiBaseUrl))
   httpd.use('/journal', createJournalRouter(authMiddleware))
   httpd.use('/work', createWorkRouter(authMiddleware, activityNotifier))
