@@ -1,5 +1,6 @@
 import type {
   AuthActionResponse,
+  CompleteOAuthBody,
   ConnectGarminPersonalKeyBody,
   GarminLoginResponse,
   OAuthConnectUrlResponse,
@@ -128,6 +129,30 @@ export const getGarminOAuthConnectUrl = async (): Promise<string> => {
   })
   if (!response.data.url) throw new Error(response.data.error ?? 'Garmin sign-in is not available')
   return response.data.url
+}
+
+export type OAuthProvider = 'garmin' | 'gravl' | 'oura' | 'strava'
+
+const OAUTH_COMPLETE_PATHS: Record<OAuthProvider, string> = {
+  garmin: '/auth/garmin/oauth/complete',
+  gravl: '/auth/gravl/complete',
+  oura: '/auth/oura/complete',
+  strava: '/auth/strava/complete',
+}
+
+/** Finishes a sign-in the provider's callback handed to the page, as the signed-in user. */
+export const completeOAuth = async (
+  provider: OAuthProvider,
+  code: string,
+  state: string,
+): Promise<AuthActionResponse> => {
+  const { token } = auth.value
+  const body: CompleteOAuthBody = { code, state }
+  const response = await axios.post<AuthActionResponse>(`${API_URL}${OAUTH_COMPLETE_PATHS[provider]}`, body, {
+    headers: { Authorization: `Bearer ${token}` },
+    validateStatus: () => true,
+  })
+  return response.data
 }
 
 export const disconnectGarminOAuth = async (): Promise<AuthActionResponse> => {

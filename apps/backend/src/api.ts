@@ -153,6 +153,8 @@ import { createChallengeDiscovery, defaultChallengeDiscoveryDeps } from './servi
 import { createChallengeResultsQueue } from './services/challenge-results-queue.ts'
 import { publishFinishedChallengeResults } from './services/challenge-results.ts'
 import { getChallengeStandings } from './services/challenge-standings.ts'
+import { checkInDueActionHandlers } from './services/check-in-actions.ts'
+import { checkInDeps } from './services/check-ins.ts'
 import { createDefaultEngineDeps } from './services/deduction-deps.ts'
 import { buildFullWindow, evaluateAllRules } from './services/deduction-engine.ts'
 import {
@@ -194,6 +196,7 @@ import { createInvitationAuth } from './services/invitation.ts'
 import { getPlaceVisits, type NamedLocationsChanged } from './services/locations.ts'
 import { createLoginMethodCounter } from './services/login-methods.ts'
 import { runNotificationAction } from './services/notification-actions.ts'
+import { createNotificationCoordinator } from './services/notification-coordinator.ts'
 import { notificationStore, notifier } from './services/notifications.ts'
 import {
   ensureDefaultOfficialFeed,
@@ -203,7 +206,6 @@ import {
 import { allowHttpIssuer, createDiscoveryCache, createOidcClient } from './services/oidc-client.ts'
 import { createOidcProviderAdmin, oidcRedirectUri } from './services/oidc-providers.ts'
 import { createOidcService } from './services/oidc.ts'
-import { createPeopleReminderScheduler } from './services/people-reminders.ts'
 import { createPgBoss } from './services/pg-boss.ts'
 import { installProcessGuards } from './services/process-guards.ts'
 import { createPublicTagModeration } from './services/public-tag-moderation.ts'
@@ -226,7 +228,6 @@ import {
   relayRecipients,
   retryErroredRelays,
 } from './services/relays.ts'
-import { createReminderScheduler } from './services/reminders.ts'
 import { safeFetchGet } from './services/safe-fetch.ts'
 import { initSentry, Sentry } from './services/sentry.ts'
 import {
@@ -256,7 +257,7 @@ import {
   type TrackAnalyseQueue,
   type TrackBackfillQueue,
 } from './services/track-queues.ts'
-import { createTreatmentCheckinScheduler, actOnTreatmentCheckin } from './services/treatment-checkins.ts'
+import { actOnTreatmentCheckin } from './services/treatment-checkins.ts'
 import {
   createUsageRecorder,
   installUsageRecorder,
@@ -663,6 +664,7 @@ const main = async () => {
     createSessionToken: (user) => auth.createToken(user),
     isValidUsername,
     mailer,
+    pruneAuditLog: async (user) => pruneAuditLog(user, await centralDb.getAuditLogRetentionDays()),
     recoveryLimiter: createTokenBucketLimiter(RATE_LIMITS.recovery_mails, Date.now),
     setPassword: async (user, password) => {
       await setUserPassword(userDb, user, password)
@@ -697,8 +699,13 @@ const main = async () => {
       },
     }),
     service: createOidcService({
+      audit: (user, message, details) => auditError(user, 'auth', message, details),
       createAccount: (input) => createAccount(signupDeps, input),
       createSessionToken: (user) => auth.createToken(user),
+      discardAccount: async (user) => {
+        await dropUserDb(userDb, user)
+        await centralDb.deleteAllCentralUserData(user)
+      },
       discover: createDiscoveryCache(oidcClient),
       invitationAuth,
       loginMethods,
@@ -992,6 +999,7 @@ const main = async () => {
   const notificationActionRunner = runNotificationAction({
     get: notificationStore.get,
     handlers: {
+      check_in_due: checkInDueActionHandlers(checkInDeps),
       autoshare_pending: { skip: autosharePendingSkipHandler(skipAutoshareActivity) },
       treatment_checkin: Object.fromEntries(
         (['skip', 'snooze'] as const).map((action) => [
@@ -1120,18 +1128,9 @@ const main = async () => {
 
   if (boss) {
     try {
-      await createPeopleReminderScheduler(boss, () => listUserNames(userDb))
+      await createNotificationCoordinator(boss, () => listUserNames(userDb))
     } catch {
-      console.warn('People reminders unavailable: scheduler could not start.')
-    }
-  }
-
-  if (boss) {
-    try {
-      await createReminderScheduler(boss, () => listUserNames(userDb))
-      await createTreatmentCheckinScheduler(boss, () => listUserNames(userDb))
-    } catch {
-      console.warn('Custom reminders unavailable: scheduler could not start.')
+      console.warn('Notification scheduler unavailable; reminder setup is not ready.')
     }
   }
 

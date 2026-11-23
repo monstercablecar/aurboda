@@ -1,5 +1,7 @@
 import type { PeopleEventBody } from '@aurboda/api-spec'
 
+import type { Queryable } from './pool.ts'
+
 import { query, withUserTransaction } from './connection.ts'
 
 export interface ReminderCandidate {
@@ -33,7 +35,7 @@ export const withPeopleReminderClaim = async (
   user: string,
   candidate: ReminderCandidate,
   now: Date,
-  dispatch: (claim: ReminderClaim) => Promise<ReminderOutcome>,
+  dispatch: (claim: ReminderClaim, tx?: Queryable) => Promise<ReminderOutcome>,
 ): Promise<boolean> =>
   withUserTransaction(user, async (tx) => {
     const parent = await query(tx, 'SELECT id FROM people WHERE id=$1 FOR UPDATE SKIP LOCKED', [
@@ -68,7 +70,7 @@ export const withPeopleReminderClaim = async (
       return false
     }
     const attempts = previous?.attempts ?? 0
-    const outcome = await dispatch({ ...event, attempts })
+    const outcome = await dispatch({ ...event, attempts }, tx)
     await query(
       tx,
       `INSERT INTO people_reminder_deliveries(event_id,revision,reminder_at,status,attempts,retry_after)

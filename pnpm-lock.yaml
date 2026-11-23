@@ -5,14 +5,19 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  ajv@>=8.0.0 <8.18.0: 8.20.0
-  fast-uri@>=3.0.0 <3.1.9: 3.1.9
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
-  satori>fflate: 0.7.5
+  ajv@>=8.0.0 <8.18.0: 8.20.0
+  archiver-utils>glob: 14.0.4
+  dockerode>uuid: 11.1.1
+  fast-uri@>=3.0.0 <3.1.9: 3.1.9
   get-uri>basic-ftp: 6.2.4
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
-  dockerode>uuid: 11.1.1
-  archiver-utils>glob: 14.0.4
+  satori>fflate: 0.7.5
+
+patchedDependencies:
+  pg@8.23.1:
+    hash: 5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800
+    path: patches/pg@8.23.1.patch
 
 importers:
 
@@ -113,7 +118,7 @@ importers:
         version: 6.8.8
       pg:
         specifier: ^8.23.1
-        version: 8.23.1
+        version: 8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800)
       pg-boss:
         specifier: ^12.38.2
         version: 12.38.2(@opentelemetry/api@1.9.1)
@@ -7854,7 +7859,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       cron-parser: 5.10.4
-      pg: 8.23.1
+      pg: 8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800)
       rrule-temporal: 2.2.8
       serialize-error: 13.1.0
     transitivePeerDependencies:
@@ -7869,9 +7874,9 @@ snapshots:
 
   pg-int8@1.0.1: {}
 
-  pg-pool@3.14.0(pg@8.23.1):
+  pg-pool@3.14.0(pg@8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800)):
     dependencies:
-      pg: 8.23.1
+      pg: 8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800)
 
   pg-protocol@1.16.1: {}
 
@@ -7883,10 +7888,10 @@ snapshots:
       postgres-date: 1.0.7
       postgres-interval: 1.2.0
 
-  pg@8.23.1:
+  pg@8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800):
     dependencies:
       pg-connection-string: 2.14.1
-      pg-pool: 3.14.0(pg@8.23.1)
+      pg-pool: 3.14.0(pg@8.23.1(patch_hash=5f75f7ea7fb0bc8152c685a7ec1ead6835e018560c84285e441629c05f610800))
       pg-protocol: 1.16.1
       pg-types: 2.2.0
       pgpass: 1.0.5

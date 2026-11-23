@@ -24,7 +24,7 @@ import { GarminPersonalKey } from './GarminPersonalKey'
 import {
   type DataTypeItem,
   DataTypesList,
-  LoginRequired,
+  LoginRequiredToFinish,
   StatusBanner,
   SyncIntervalField,
   SyncStatusBar,
@@ -510,7 +510,7 @@ export function GarminSource() {
     }
   }, [queryClient])
 
-  if (!isLoggedIn) return <LoginRequired />
+  if (!isLoggedIn) return <LoginRequiredToFinish provider="garmin" providerName="Garmin" />
 
   return (
     <div class="data-sources-page">

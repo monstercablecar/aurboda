@@ -1,3 +1,4 @@
+import './integration-theme.css'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import axios from 'axios'
 import { render } from 'preact'
@@ -52,6 +53,9 @@ const HomeAssistantSource = lazyPage(
   () => import('./pages/DataSources/HomeAssistantSource.jsx'),
   'HomeAssistantSource',
 )
+const CheckIns = lazyPage(() => import('./pages/CheckIns/index.jsx'), 'CheckIns')
+const CheckInEditor = lazyPage(() => import('./pages/CheckIns/Editor.jsx'), 'CheckInEditor')
+const CheckInFill = lazyPage(() => import('./pages/CheckIns/FillIn.jsx'), 'CheckInFill')
 const DataSources = lazyPage(() => import('./pages/DataSources/index.jsx'), 'DataSources')
 const LastFmSource = lazyPage(() => import('./pages/DataSources/LastFmSource.jsx'), 'LastFmSource')
 const OuraSource = lazyPage(() => import('./pages/DataSources/OuraSource.jsx'), 'OuraSource')
@@ -176,6 +180,10 @@ function AppShell() {
             <Route path="/journal/prompted" component={Journal} />
             <Route path="/resources" component={Resources} />
             <Route path="/assessments" component={Assessments} />
+            <Route path="/check-ins/new" component={CheckInEditor} />
+            <Route path="/check-ins/:id/edit" component={CheckInEditor} />
+            <Route path="/check-ins/:id" component={CheckInFill} />
+            <Route path="/check-ins" component={CheckIns} />
             <Route path="/treatments" component={Treatments} />
             <Route path="/simple-food" component={SimpleFood} />
             <Route path="/timeline" component={Timeline} />

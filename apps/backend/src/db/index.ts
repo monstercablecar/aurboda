@@ -42,6 +42,7 @@ export type {
 
 export {
   _setDbForUser,
+  createUserRole,
   dropUserDb,
   getDbForUser,
   initializeSchema,
@@ -718,6 +719,8 @@ export {
 
 export { getDataPresence } from './data-presence.ts'
 
+export { getRecentSourceActivity, type RecentSourceActivity } from './data-source-activity.ts'
+
 export {
   deleteExpiredMcpSessions,
   deleteMcpSession,
@@ -871,3 +874,7 @@ export {
   moveItemValueIdentity,
   upsertItemValueIdentity,
 } from './item-value-identities.ts'
+
+export * from './check-ins.ts'
+
+export { markCheckInDueNotificationsRead } from './notifications.ts'

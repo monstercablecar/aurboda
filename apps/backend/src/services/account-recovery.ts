@@ -67,6 +67,8 @@ export interface AccountRecoveryDeps {
   recoveryLimiter: TokenBucketLimiter
   /** Writes an entry to the user's own audit log. */
   audit: (username: string, message: string) => Promise<void>
+  /** Trims the user's audit log to its retention, as every sign-in does. */
+  pruneAuditLog: (username: string) => Promise<unknown>
   now?: () => Date
   newToken?: () => string
   log?: Pick<Console, 'error'>
@@ -86,6 +88,7 @@ export const createAccountRecovery = ({
   verificationLimiter,
   recoveryLimiter,
   audit,
+  pruneAuditLog,
   now = () => new Date(),
   newToken = newEmailLinkToken,
   log = console,
@@ -136,18 +139,22 @@ export const createAccountRecovery = ({
 
   return {
     completeRecovery: async (token, newPassword) => {
-      const consumed = await centralDb.consumeAccountEmailToken(hashEmailLinkToken(token), 'reset')
-      if (!consumed || !isValidUsername(consumed.username)) return { ok: false }
-      const account = await centralDb.getUserAccount(consumed.username)
-      if (!isVerified(account) || account.email !== consumed.email) return { ok: false }
+      const recovered: { account?: UserAccount & { email: string } } = {}
+      await centralDb.consumeAccountEmailToken(hashEmailLinkToken(token), 'reset', async (consumed) => {
+        if (!isValidUsername(consumed.username)) return
+        const found = await centralDb.getUserAccount(consumed.username)
+        if (!isVerified(found) || found.email !== consumed.email) return
+        if (newPassword !== undefined) await setPassword(found.username, newPassword)
+        recovered.account = found
+      })
+      const { account } = recovered
+      if (!account) return { ok: false }
       const { username } = account
-      if (newPassword !== undefined) {
-        await setPassword(username, newPassword)
-        clearFailedLogins(username)
-      }
+      if (newPassword !== undefined) clearFailedLogins(username)
       const kind: RecoveryNoticeKind = newPassword !== undefined ? 'password_reset' : 'recovery_sign_in'
       await audit(username, kind === 'password_reset' ? 'Password reset by email' : 'Recovery sign-in')
       sendNotice(account.email, username, kind)
+      void pruneAuditLog(username).catch(() => log.error(`⚠️ Pruning the audit log of ${username} failed`))
       return {
         is_admin: await centralDb.isAdmin(username),
         ok: true,

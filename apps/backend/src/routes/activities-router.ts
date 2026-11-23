@@ -24,6 +24,9 @@ import {
   mergeActivitiesBodySchema,
   type MergeActivitiesResponse,
   type NearbyActivitiesResponse,
+  type RecentActivitiesQuery,
+  recentActivitiesQuerySchema,
+  type RecentActivitiesResponse,
   type ResyncActivityDetailResponse,
   type UpdateActivityBody,
   updateActivityBodySchema,
@@ -63,6 +66,7 @@ import {
   getActivityFullDetail,
   getActivityNeighbors,
   getCommentsMap,
+  getRecentActivities,
   parseActivityId,
   parseDataFilter,
   parseMetricsParam,
@@ -72,6 +76,7 @@ import {
   type SyncProvider,
 } from '../services/queries/index.ts'
 import { activitySegmentEfforts } from '../services/segments.ts'
+import { getUserTimezone } from '../services/settings.ts'
 import { serializeActivityTrack } from '../services/tracks.ts'
 import { type AnyMiddleware, type TypedRouter, typedRouter } from '../typed-router.ts'
 import { receiveUpload } from '../upload.ts'
@@ -245,6 +250,23 @@ export const createActivitiesRouter = (
         category,
       )
       res.json({ data: activities, success: true })
+    },
+  )
+
+  router.get<Record<string, never>, RecentActivitiesResponse, unknown, RecentActivitiesQuery>(
+    '/activities/recent',
+    authMiddleware,
+    validateQuery(recentActivitiesQuerySchema),
+    async (req, res) => {
+      const user = req.user!
+      const { exclude_types, limit, lookback_days, manual_only, types, tz, window } = req.query
+      const list = (value: string | undefined) => value?.split(',').filter((t) => t.length > 0)
+      const data = await getRecentActivities(
+        user,
+        { exclude_types: list(exclude_types), limit, lookback_days, manual_only, types: list(types), window },
+        { tz: tz ?? (await getUserTimezone(user)) },
+      )
+      res.json({ data, success: true })
     },
   )
 

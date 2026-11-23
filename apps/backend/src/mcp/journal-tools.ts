@@ -7,6 +7,18 @@ import * as service from '../services/journal.ts'
 import { jsonResponse, type McpServer } from './helpers.ts'
 
 export const registerJournalTools = (server: McpServer, user: string) => {
+  server.tool(
+    'merge_journal_tags',
+    'Merge an exact Journal tag, including trashed entries; each changed entry retains a revision.',
+    { ...spec.mergeJournalTagsBodySchema.shape },
+    async (body) => jsonResponse({ success: true, data: await service.mergeJournalTags(user, body) }),
+  )
+  server.tool(
+    'get_journal_neighbors',
+    'Get the previous and next private live Journal entry by occurrence time.',
+    { id: z.uuid() },
+    async ({ id }) => jsonResponse({ success: true, data: await service.getJournalNeighbors(user, id) }),
+  )
   server.tool('get_journal_catalog', 'List sourced guided journal workbooks and exercises.', {}, async () =>
     jsonResponse({ success: true, data: JOURNAL_CATALOG }),
   )

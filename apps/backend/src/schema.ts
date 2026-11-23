@@ -9,6 +9,7 @@ import { activitiesTables } from './schema/activities.ts'
  * See docs/data-storage.md for design decisions and data flow documentation.
  */
 import { activityFeaturesTables } from './schema/activity-features.ts'
+import { checkInsTables } from './schema/check-ins.ts'
 import { journalTables } from './schema/journal.ts'
 import { locationsTables } from './schema/locations.ts'
 import { mealsTables } from './schema/meals.ts'
@@ -17,6 +18,7 @@ import { nativeTaskTables } from './schema/native-tasks.ts'
 import { notificationsTables } from './schema/notifications.ts'
 import { peopleTables } from './schema/people.ts'
 import { pharmacologyTables } from './schema/pharmacology.ts'
+import { privateLinkTables } from './schema/private-links.ts'
 import { productivityTables } from './schema/productivity.ts'
 import { reminderTables } from './schema/reminders.ts'
 import { reportsTables } from './schema/reports.ts'
@@ -57,8 +59,10 @@ export const SCHEMA_VERSION = 1
  * Assembled from per-domain SQL modules under `schema/`.
  */
 export const createTableStatements: Record<string, string> = {
+  ...checkInsTables,
   ...journalTables,
   ...peopleTables,
+  ...privateLinkTables,
   ...activitiesTables,
   ...activityFeaturesTables,
   ...locationsTables,
@@ -88,6 +92,11 @@ export const createTableStatements: Record<string, string> = {
  *  - activities before activity_tracks, routes, activity_routes, segments, segment_efforts (FK)
  */
 export const tableCreationOrder = [
+  'check_in_forms',
+  'check_in_form_versions',
+  'check_ins',
+  'check_in_requests',
+  'check_ins_indexes',
   ...Object.keys(journalTables),
   ...Object.keys(nativeTaskTables),
   ...Object.keys(peopleTables),
@@ -104,6 +113,9 @@ export const tableCreationOrder = [
   'activities_created_at',
   'activities_updated_at',
   'activities_indexes',
+  'check_in_metric_outputs',
+  'check_in_activity_outputs',
+  ...Object.keys(privateLinkTables),
   'activity_override_targets',
   'activity_override_targets_indexes',
   'activity_override_targets_trigger',
@@ -303,6 +315,9 @@ export const tableCreationOrder = [
   'notifications',
   'notifications_actions',
   'notifications_indexes',
+  'notifications_live_events',
+  'notification_delivery_state',
+  'notification_browser_deliveries',
   'notification_preferences',
   'custom_reminder_state',
   'treatment_type_checkin_plan',

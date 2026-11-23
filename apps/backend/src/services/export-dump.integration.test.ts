@@ -1,4 +1,5 @@
 import {
+  checkInsQuerySchema,
   builtInRecruitingProfile,
   createTaskItemBodySchema,
   computeWorkDayTotals,
@@ -21,11 +22,13 @@ import { _setDbForUser, initializeSchema, migrateSchemaIfNeeded, userDbName } fr
 import { createRolePool, type UserDb } from '../db/pool.ts'
 import { createExportRouter } from '../routes/export-router.ts'
 import { restoreDumpAsDocumented } from '../test/restore-dump.ts'
+import { addCheckInForm, checkInDeps, submitCheckIn, queryCheckIns } from './check-ins.ts'
 import { createDumpExporter, createDumpLinkIssuer, type PgConnection } from './export-dump.ts'
 import { createExportTokens } from './export-token.ts'
 import * as journal from './journal.ts'
 import * as tasks from './native-tasks.ts'
 import * as people from './people.ts'
+import { getActivityPeople, setActivityPeople } from './private-links.ts'
 import { saveWorkDay } from './work-day.ts'
 
 const adminUri = () => {
@@ -91,6 +94,13 @@ const counts = async (db: UserDb) =>
   )
 
 const savedTables = [
+  'check_in_forms',
+  'check_in_form_versions',
+  'check_ins',
+  'check_in_requests',
+  'check_in_metric_outputs',
+  'check_in_activity_outputs',
+  'activity_people',
   'journal_settings',
   'journal_areas',
   'journal_entries',
@@ -468,6 +478,38 @@ describe('database export', () => {
        VALUES ('owntracks', '2026-11-01T09:30:00Z', ST_SetSRID(ST_MakePoint(18.07, 59.33), 4326)::geography)`,
     )
     await seedSavedFeatures(db, source)
+    const form = await addCheckInForm(checkInDeps, source, {
+      name: 'Synthetic exported form',
+      notify: false,
+      outputs_enabled: true,
+      questions: [
+        {
+          key: 'value',
+          type: 'number',
+          required: false,
+          prompt: 'Value',
+          logs_to: { metric: 'exported_checkin_metric' },
+        },
+        {
+          key: 'walk',
+          type: 'yes_no',
+          required: false,
+          prompt: 'Walk',
+          logs_to: { activity_type: 'walking' },
+        },
+      ],
+    })
+    if (!form.ok) throw new Error(form.error)
+    const response = await submitCheckIn(checkInDeps, source, {
+      form_id: form.value.id,
+      answered_at: '2026-11-23T10:00:00Z',
+      answers: { value: 7, walk: true },
+      request_id: crypto.randomUUID(),
+    })
+    if (!response.ok) throw new Error(response.error)
+    const owner = (await db.query<{ id: string }>('SELECT id FROM people ORDER BY id LIMIT 1')).rows[0]!
+    await setActivityPeople(source, response.value.activities.walk!.activity_id, { person_ids: [owner.id] })
+
     const otherDb = await createUser(other)
     pools.push(otherDb)
     await tasks.createTaskItem(other, createTaskItemBodySchema.parse({ title: 'OTHER TENANT TASK' }))
@@ -565,7 +607,7 @@ describe('database export', () => {
     _setDbForUser(target, restored)
 
     expect(await counts(restored)).toEqual(await counts(pools[0]))
-    expect(await counts(restored)).toMatchObject({ activities: 2, locations: 1 })
+    expect(await counts(restored)).toMatchObject({ activities: 3, locations: 1 })
     const tableInventory = "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
     expect((await restored.query(tableInventory)).rows).toEqual((await pools[0].query(tableInventory)).rows)
     const expected = await savedRows(pools[0])
@@ -573,6 +615,16 @@ describe('database export', () => {
       expect(expected[table], `${table} fixture must contain saved data`).not.toHaveLength(0)
     }
     expect(await savedRows(restored)).toEqual(expected)
+    const restoredResponses = await queryCheckIns(checkInDeps, target, checkInsQuerySchema.parse({}))
+    expect(restoredResponses.check_ins[0]!.answers).toEqual({ value: 7, walk: true })
+    expect(
+      (await getActivityPeople(target, restoredResponses.check_ins[0]!.activities.walk!.activity_id)).length,
+    ).toBe(1)
+    const restoredJournal = (
+      await journal.listJournalEntries(target, { deleted: 'false', page: 1, per_page: 100 })
+    ).data
+    expect(restoredJournal.some((e) => e.title === 'Synthetic backup reflection')).toBe(true)
+
     expect(
       (await restored.query("SELECT profile FROM people WHERE profile->>'name'='OTHER TENANT ONLY'")).rows,
     ).toEqual([])

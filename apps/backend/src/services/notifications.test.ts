@@ -261,6 +261,8 @@ describe('listNotificationTypeSettings', () => {
       'autoshare_pending',
       'garmin_key_expiring',
       'admin_signup',
+      'check_in_due',
+      'people_event',
       'reminder',
       'treatment_checkin',
     ])

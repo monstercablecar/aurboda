@@ -26,7 +26,11 @@ const withClient = async (connectionString: string, fn: (client: Client) => Prom
 }
 
 export default async (project: TestProject) => {
-  const container = await new PostgreSqlContainer('postgis/postgis:16-3.4-alpine')
+  let candidate = new PostgreSqlContainer('postgis/postgis:16-3.4-alpine')
+  if (process.env.AURBODA_TEST_FAST_DISK === '1') {
+    candidate = candidate.withCommand(['postgres', '-c', 'fsync=off', '-c', 'synchronous_commit=off'])
+  }
+  const container = await candidate
     .withDatabase('test_db')
     .withUsername('test_user')
     .withPassword('test_pass')

@@ -384,7 +384,7 @@ export const getTimeSeriesStats = async (
 }
 
 export const getDailyAggregates = async (
-  user: string,
+  user: string | Queryable,
   metrics: string[],
   start: Date,
   end: Date,

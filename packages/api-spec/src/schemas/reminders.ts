@@ -65,3 +65,6 @@ export const reminderTestResponseSchema = baseResponseSchema
   .extend({ queued: z.boolean() })
   .meta({ id: 'ReminderTestResponse' })
 export type ReminderTestResponse = z.infer<typeof reminderTestResponseSchema>
+
+export const allWeekdays = [1, 2, 3, 4, 5, 6, 7] as const
+export const reminderTimeOfDayRe = /^([01]\d|2[0-3]):[0-5][05]$/

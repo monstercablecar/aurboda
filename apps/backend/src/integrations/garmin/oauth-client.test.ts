@@ -78,6 +78,7 @@ const makeClient = (
   const deleteGarminUserMappingByUsername = vi.fn(async () => true)
   const auditInfo = vi.fn(async () => {})
   const auditWarn = vi.fn(async () => {})
+  const ensureUserSchema = vi.fn(async () => {})
   const http = {
     delete: vi.fn().mockResolvedValue({ data: '' }),
     get: getAnswering({}),
@@ -92,7 +93,7 @@ const makeClient = (
       auditWarn,
       deleteGarminUserMappingByUsername,
       deleteOAuthToken,
-      ensureUserSchema: vi.fn(),
+      ensureUserSchema,
       getGarminUserIdByUsername,
       getOAuthToken: async () => options.grant ?? null,
       http,
@@ -110,6 +111,7 @@ const makeClient = (
     clock,
     deleteGarminUserMappingByUsername,
     deleteOAuthToken,
+    ensureUserSchema,
     http,
     markOAuthTokenRefused,
     resetSyncState,
@@ -177,9 +179,124 @@ describe('getAuthorizeUrl', () => {
 })
 
 describe('authCb', () => {
+  it('hands the code and state to the page, with no request to Garmin and no write', async () => {
+    const setup = makeClient()
+    const state = sealedFor('bob')
+    const target = await callback(setup.client, { code: 'fake-code&x=1', state })
+    const url = new URL(target, 'https://web.example.test')
+    expect(url.pathname).toBe('/data-sources/garmin')
+    expect([...url.searchParams.keys()]).toEqual(['garmin_code', 'garmin_state'])
+    expect(url.searchParams.get('garmin_code')).toBe('fake-code&x=1')
+    expect(url.searchParams.get('garmin_state')).toBe(state)
+    expect(setup.http.post).not.toHaveBeenCalled()
+    expect(setup.http.get).not.toHaveBeenCalled()
+    expect(setup.ensureUserSchema).not.toHaveBeenCalled()
+    expect(setup.upsertOAuthToken).not.toHaveBeenCalled()
+    expect(setup.upsertGarminUserMapping).not.toHaveBeenCalled()
+    expect(setup.auditInfo).not.toHaveBeenCalled()
+    expect(setup.auditWarn).not.toHaveBeenCalled()
+  })
+
+  it('answers auth_failed without a code or state, or with an error parameter', async () => {
+    const { client, http } = makeClient()
+    expect(await callback(client, { state: sealedFor('alice') })).toBe(
+      '/data-sources/garmin?error=auth_failed',
+    )
+    expect(await callback(client, { code: 'fake-code' })).toBe('/data-sources/garmin?error=auth_failed')
+    expect(
+      await callback(client, { code: 'fake-code', error: 'access_denied', state: sealedFor('alice') }),
+    ).toBe('/data-sources/garmin?error=auth_failed')
+    expect(http.post).not.toHaveBeenCalled()
+  })
+
+  it('answers auth_failed for a repeated code or state, which arrives as an array', async () => {
+    const { client, http } = makeClient()
+    const state = sealedFor('alice')
+    const repeated = async (query: Record<string, unknown>) => {
+      const redirect = vi.fn()
+      await client.authCb({ query } as unknown as Request, { redirect } as unknown as Response)
+      return redirect.mock.calls[0]?.[0] as string
+    }
+    expect(await repeated({ code: ['fake-code', 'fake-other'], state })).toBe(
+      '/data-sources/garmin?error=auth_failed',
+    )
+    expect(await repeated({ code: 'fake-code', state: [state, state] })).toBe(
+      '/data-sources/garmin?error=auth_failed',
+    )
+    expect(http.post).not.toHaveBeenCalled()
+  })
+
+  it('answers not_configured without server credentials', async () => {
+    const { client } = makeClient({ configured: false })
+    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
+      '/data-sources/garmin?error=not_configured',
+    )
+  })
+
+  it('answers invalid_state for a state sealed for another secret or older than ten minutes', async () => {
+    const { client, http } = makeClient()
+    expect(
+      await callback(client, { code: 'fake-code', state: sealedFor('alice', 'another-fake-secret') }),
+    ).toBe('/data-sources/garmin?error=invalid_state')
+    expect(
+      await callback(client, {
+        code: 'fake-code',
+        state: sealedFor('alice', SECRET, NOW.getTime() - 11 * 60_000),
+      }),
+    ).toBe('/data-sources/garmin?error=invalid_state')
+    expect(http.post).not.toHaveBeenCalled()
+  })
+})
+
+describe('complete', () => {
+  it('refuses a sign-in started by another account before touching anything', async () => {
+    const setup = makeClient()
+    expect(await setup.client.complete('alice', 'fake-code', sealedFor('bob'))).toEqual({
+      ok: false,
+      reason: 'wrong_user',
+    })
+    expect(setup.ensureUserSchema).not.toHaveBeenCalled()
+    expect(setup.http.post).not.toHaveBeenCalled()
+    expect(setup.http.get).not.toHaveBeenCalled()
+    expect(setup.http.delete).not.toHaveBeenCalled()
+    expect(setup.upsertOAuthToken).not.toHaveBeenCalled()
+    expect(setup.upsertGarminUserMapping).not.toHaveBeenCalled()
+    expect(setup.deleteOAuthToken).not.toHaveBeenCalled()
+    expect(setup.auditInfo).not.toHaveBeenCalled()
+    expect(setup.auditWarn.mock.calls).toEqual([
+      ['alice', 'auth', 'Garmin sign-in started by another account was refused'],
+    ])
+    expect(everythingSaid([setup.auditWarn])).not.toContain('bob')
+  })
+
+  it('answers not_configured without server credentials', async () => {
+    const { client, ensureUserSchema } = makeClient({ configured: false })
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({
+      ok: false,
+      reason: 'not_configured',
+    })
+    expect(ensureUserSchema).not.toHaveBeenCalled()
+  })
+
+  it('answers invalid_state for a tampered or an expired state', async () => {
+    const { client, ensureUserSchema, http } = makeClient()
+    const bytes = Buffer.from(sealedFor('alice'), 'base64url')
+    bytes[bytes.length - 1] ^= 1
+    const tampered = bytes.toString('base64url')
+    expect(await client.complete('alice', 'fake-code', tampered)).toEqual({
+      ok: false,
+      reason: 'invalid_state',
+    })
+    expect(
+      await client.complete('alice', 'fake-code', sealedFor('alice', SECRET, NOW.getTime() - 11 * 60_000)),
+    ).toEqual({ ok: false, reason: 'invalid_state' })
+    expect(ensureUserSchema).not.toHaveBeenCalled()
+    expect(http.post).not.toHaveBeenCalled()
+  })
+
   it('exchanges the code, stores the grant with the permissions and maps the Garmin user', async () => {
     const { auditInfo, client, http, upsertGarminUserMapping, upsertOAuthToken } = makeClient()
-    const target = await callback(client, { code: 'fake-code', state: sealedFor('alice') })
+    const answer = await client.complete('alice', 'fake-code', sealedFor('alice'))
 
     const [url, body] = (http.post as ReturnType<typeof vi.fn>).mock.calls[0] as [string, URLSearchParams]
     expect(url).toBe('https://connectapi.garmin.com/di-oauth2-service/oauth/token')
@@ -205,41 +322,8 @@ describe('authCb', () => {
     expect(auditInfo).toHaveBeenCalledWith('alice', 'auth', 'Garmin connected through OAuth', {
       permissions: ['HEALTH_EXPORT', 'ACTIVITY_EXPORT'],
     })
-    expect(target).toBe('/data-sources/garmin?connected=oauth')
+    expect(answer).toEqual({ ok: true })
     expect(everythingSaid([auditInfo])).not.toContain(GARMIN_USER_ID)
-  })
-
-  it('answers auth_failed without a code or state, or with an error parameter', async () => {
-    const { client, http } = makeClient()
-    expect(await callback(client, { state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=auth_failed',
-    )
-    expect(await callback(client, { code: 'fake-code' })).toBe('/data-sources/garmin?error=auth_failed')
-    expect(
-      await callback(client, { code: 'fake-code', error: 'access_denied', state: sealedFor('alice') }),
-    ).toBe('/data-sources/garmin?error=auth_failed')
-    expect(http.post).not.toHaveBeenCalled()
-  })
-
-  it('answers not_configured without server credentials', async () => {
-    const { client } = makeClient({ configured: false })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=not_configured',
-    )
-  })
-
-  it('answers invalid_state for a state sealed for another secret or older than ten minutes', async () => {
-    const { client, http } = makeClient()
-    expect(
-      await callback(client, { code: 'fake-code', state: sealedFor('alice', 'another-fake-secret') }),
-    ).toBe('/data-sources/garmin?error=invalid_state')
-    expect(
-      await callback(client, {
-        code: 'fake-code',
-        state: sealedFor('alice', SECRET, NOW.getTime() - 11 * 60_000),
-      }),
-    ).toBe('/data-sources/garmin?error=invalid_state')
-    expect(http.post).not.toHaveBeenCalled()
   })
 
   it('stores nothing when the exchange fails, and audits no secret', async () => {
@@ -249,9 +333,10 @@ describe('authCb', () => {
         axiosFailure(400, { error: 'invalid_grant', error_description: `bad code fake-code for ${SECRET}` }),
       )
     const { auditWarn, client, upsertOAuthToken } = makeClient({ http: { post } })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=auth_failed',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({
+      ok: false,
+      reason: 'auth_failed',
+    })
     expect(upsertOAuthToken).not.toHaveBeenCalled()
     const said = everythingSaid([auditWarn])
     expect(said).toContain('invalid_grant')
@@ -266,9 +351,10 @@ describe('authCb', () => {
       },
     })
     const { client, upsertGarminUserMapping, upsertOAuthToken } = makeClient({ http: { get } })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=auth_failed',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({
+      ok: false,
+      reason: 'auth_failed',
+    })
     expect(upsertOAuthToken).not.toHaveBeenCalled()
     expect(upsertGarminUserMapping).not.toHaveBeenCalled()
   })
@@ -276,9 +362,10 @@ describe('authCb', () => {
   it('stores nothing when Garmin answers no user id', async () => {
     const get = getAnswering({ userId: () => ({}) })
     const { client, upsertOAuthToken } = makeClient({ http: { get } })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=auth_failed',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({
+      ok: false,
+      reason: 'auth_failed',
+    })
     expect(upsertOAuthToken).not.toHaveBeenCalled()
   })
 
@@ -289,17 +376,13 @@ describe('authCb', () => {
       },
     })
     const { client, upsertOAuthToken } = makeClient({ http: { get } })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?connected=oauth',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({ ok: true })
     expect(upsertOAuthToken).toHaveBeenCalledWith('alice', expect.objectContaining({ scopes: [] }))
   })
 
   it('clears the previous owner’s grant when the Garmin account moves to this user', async () => {
     const { auditWarn, client, deleteOAuthToken, http } = makeClient({ previousOwner: 'bob' })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?connected=oauth',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({ ok: true })
     expect(deleteOAuthToken).toHaveBeenCalledWith('bob', GARMIN_OAUTH_PROVIDER)
     expect(auditWarn).toHaveBeenCalledWith(
       'bob',
@@ -311,9 +394,10 @@ describe('authCb', () => {
 
   it('removes the grant again when the mapping cannot be written', async () => {
     const { auditWarn, client, deleteOAuthToken, upsertOAuthToken } = makeClient({ mappingFails: true })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?error=auth_failed',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({
+      ok: false,
+      reason: 'auth_failed',
+    })
     expect(upsertOAuthToken).toHaveBeenCalledTimes(1)
     expect(deleteOAuthToken).toHaveBeenCalledWith('alice', GARMIN_OAUTH_PROVIDER)
     expect(auditWarn).toHaveBeenCalledWith('alice', 'auth', 'Garmin OAuth connection failed', {
@@ -326,9 +410,7 @@ describe('authCb', () => {
       grant: liveGrant,
       mappedGarminUserId: 'another-garmin-user',
     })
-    expect(await callback(client, { code: 'fake-code', state: sealedFor('alice') })).toBe(
-      '/data-sources/garmin?connected=oauth',
-    )
+    expect(await client.complete('alice', 'fake-code', sealedFor('alice'))).toEqual({ ok: true })
     expect(http.delete).toHaveBeenCalledWith('https://apis.garmin.com/wellness-api/rest/user/registration', {
       headers: { Authorization: 'Bearer fake-access-live' },
     })
@@ -338,7 +420,7 @@ describe('authCb', () => {
 
   it('does not deregister when the same Garmin account reconnects', async () => {
     const { client, http } = makeClient({ grant: liveGrant, mappedGarminUserId: GARMIN_USER_ID })
-    await callback(client, { code: 'fake-code', state: sealedFor('alice') })
+    await client.complete('alice', 'fake-code', sealedFor('alice'))
     expect(http.delete).not.toHaveBeenCalled()
   })
 })

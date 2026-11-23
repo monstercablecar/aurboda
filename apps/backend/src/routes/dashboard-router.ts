@@ -41,6 +41,7 @@ export const createDashboardRouter = (authMiddleware: RequestHandler): TypedRout
           user,
           settings.dashboard ?? defaultDashboardConfig,
           req.query.period,
+          'owner',
         )
         res.json({ ...view, success: true })
       } catch (error) {
@@ -74,7 +75,7 @@ export const createDashboardRouter = (authMiddleware: RequestHandler): TypedRout
 
   router.post<Record<string, never>, DashboardResponse>('/reset', authMiddleware, async (req, res) => {
     const user = req.user!
-    await upsertUserSettings(user, { dashboard: undefined })
+    await upsertUserSettings(user, {}, ['dashboard'])
     res.json({ dashboard: defaultDashboardConfig, success: true })
   })
 

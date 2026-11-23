@@ -231,3 +231,17 @@ export const reminderActions = {
   test: testReminderNotification,
   ready: reminderSchedulerReady,
 }
+
+/** Check-in wall-clock slots use the first real instant after a DST gap. */
+export const occurrenceAt = (date: string, time: string, timezone: string): Date => {
+  const local = Temporal.PlainDateTime.from(`${date}T${time}`)
+  const earlier = local.toZonedDateTime(timezone, { disambiguation: 'earlier' })
+  const zoned = earlier.toPlainDateTime().equals(local)
+    ? earlier
+    : (earlier.getTimeZoneTransition('next') ?? local.toZonedDateTime(timezone, { disambiguation: 'later' }))
+  return new Date(zoned.epochMilliseconds)
+}
+
+export const setReminderSchedulerReady = (value: boolean) => {
+  schedulerReady = value
+}

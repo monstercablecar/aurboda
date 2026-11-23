@@ -17,13 +17,15 @@ const mapRow = (row: Record<string, unknown>): CustomMetricDefinition => ({
   ...(row.max_value != null ? { max_value: row.max_value as number } : {}),
 })
 
-export const getCustomMetricDefinitions = async (user: string): Promise<CustomMetricDefinition[]> => {
+export const getCustomMetricDefinitions = async (
+  user: string | Queryable,
+): Promise<CustomMetricDefinition[]> => {
   const result = await query(user, `SELECT ${COLUMNS} FROM custom_metrics ORDER BY name`)
   return result.rows.map(mapRow)
 }
 
 export const getCustomMetricByName = async (
-  user: string,
+  user: string | Queryable,
   name: string,
 ): Promise<CustomMetricDefinition | null> => {
   const result = await query(user, `SELECT ${COLUMNS} FROM custom_metrics WHERE name = $1`, [name])
@@ -32,7 +34,7 @@ export const getCustomMetricByName = async (
 }
 
 export const insertCustomMetricDefinition = async (
-  user: string,
+  user: string | Queryable,
   definition: CustomMetricDefinition,
 ): Promise<void> => {
   await query(
@@ -58,7 +60,7 @@ export type CustomMetricDefinitionUpdates = Partial<
 
 /** `undefined` leaves a field as it is; `null` clears min_value/max_value. */
 export const updateCustomMetricDefinition = async (
-  user: string,
+  user: string | Queryable,
   name: string,
   updates: CustomMetricDefinitionUpdates,
 ): Promise<CustomMetricDefinition | null> => {
@@ -110,7 +112,10 @@ export const updateCustomMetricDefinition = async (
   return mapRow(result.rows[0])
 }
 
-export const deleteCustomMetricDefinition = async (user: string, name: string): Promise<boolean> => {
+export const deleteCustomMetricDefinition = async (
+  user: string | Queryable,
+  name: string,
+): Promise<boolean> => {
   const result = await query(user, `DELETE FROM custom_metrics WHERE name = $1`, [name])
   return (result.rowCount ?? 0) > 0
 }
@@ -120,7 +125,7 @@ export const deleteCustomMetricDefinition = async (user: string, name: string): 
  * source custom metric definition is deleted.
  */
 export const mergeCustomMetric = async (
-  user: string,
+  user: string | Queryable,
   sourceName: string,
   targetName: string,
   targetUnit: string,
@@ -184,7 +189,7 @@ const insertIfAbsent = async (db: Queryable | string, def: CustomMetricDefinitio
 
 /** Used during migration from settings JSONB. */
 export const bulkInsertCustomMetricDefinitions = async (
-  user: string,
+  user: string | Queryable,
   definitions: CustomMetricDefinition[],
 ): Promise<void> => {
   for (const def of definitions) await insertIfAbsent(user, def)

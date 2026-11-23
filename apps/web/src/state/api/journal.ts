@@ -1,4 +1,6 @@
 import type {
+  MergeJournalTagsBody,
+  JournalNeighborsResponse,
   CreateJournalEntryBody,
   UpdateJournalEntryBody,
   JournalEntry,
@@ -29,6 +31,8 @@ const remove = async (path: string, expected_updated_at?: string) => {
   await axios.delete(url(path), { ...config(), params: { expected_updated_at } })
 }
 export const journalApi = {
+  mergeTags: (body: MergeJournalTagsBody) => post<{ updated: number }>('/tags/merge', body),
+  neighbors: (id: string) => get<JournalNeighborsResponse['data']>(`/entries/${id}/neighbors`),
   entries: async (params: Partial<JournalEntriesQuery> = {}) =>
     (await axios.get<{ data: JournalEntry[]; total: number }>(url('/entries'), { ...config(), params })).data,
   entry: (id: string) => get<JournalEntry>(`/entries/${encodeURIComponent(id)}`),

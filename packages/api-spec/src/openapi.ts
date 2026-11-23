@@ -4,6 +4,7 @@ import { z } from 'zod'
 /** Generates the OpenAPI 3.1 specification from the Zod schemas: pnpm generate:openapi */
 import { createDocument } from 'zod-openapi'
 
+import { integrationPaths } from './integration-paths.ts'
 import { journalPaths } from './journal-paths.ts'
 import { nativeTaskPaths } from './native-tasks-paths.ts'
 import { peoplePaths } from './people-paths.ts'
@@ -55,6 +56,7 @@ import {
   timeWeightedAveragesNote,
 } from './schemas/common.ts'
 import { dailySummaryQuerySchema, dailySummaryResponseSchema } from './schemas/daily-summary.ts'
+import { dataSourcesOverviewResponseSchema } from './schemas/data-sources-overview.ts'
 import {
   exerciseCatalogEntryResponseSchema,
   exerciseCatalogQuerySchema,
@@ -382,6 +384,7 @@ const openApiDocument = createDocument({
     },
     ...resourcesPaths,
     ...journalPaths,
+    ...integrationPaths,
     ...nativeTaskPaths,
     '/challenges': {
       get: {
@@ -3374,6 +3377,19 @@ const openApiDocument = createDocument({
       },
     },
 
+    '/data-sources/overview': {
+      get: {
+        summary: 'Get data sources, data kinds and overlap',
+        tags: ['Data sources'],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Source overview',
+            content: { 'application/json': { schema: dataSourcesOverviewResponseSchema } },
+          },
+        },
+      },
+    },
     '/treatment-checkins': {
       get: {
         summary: 'List optional session check-ins',

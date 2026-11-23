@@ -32,6 +32,8 @@ jobs:
               - 'packages/api-spec/**'
               - 'scripts/**'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - '.github/workflows/ci.yml'
             android:
               - 'apps/android/**'

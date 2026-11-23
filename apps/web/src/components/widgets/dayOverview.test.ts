@@ -1,3 +1,4 @@
+import { isSleepType } from '@aurboda/api-spec'
 import { describe, expect, it } from 'vitest'
 
 import { CHART_PRIMARY } from '../../theme'
@@ -10,8 +11,10 @@ import {
   contiguousRuns,
   dayOverviewEmptyMessage,
   dayOverviewRange,
+  dayStatus,
+  formatAt,
+  formatRangeLabel,
   hourTicks,
-  isSleepType,
   latestValue,
   metricSeries,
   resolveDayOverviewConfig,
@@ -164,11 +167,68 @@ describe('hourTicks', () => {
   })
 })
 
+describe('in the owner timezone', () => {
+  const at = new Date('2026-03-14T23:30:00.000Z')
+
+  it('formats hours, times and days in the given zone', () => {
+    expect(formatAt(at, 'HH', 'Asia/Tokyo')).toBe('08')
+    expect(formatAt(at, 'HH:mm', 'Asia/Tokyo')).toBe('08:30')
+    expect(formatAt(at, 'HH:mm', 'America/New_York')).toBe('19:30')
+    expect(formatAt(at, 'EEE d MMM HH:mm', 'Asia/Tokyo')).toBe('Sun 15 Mar 08:30')
+    expect(formatAt(at, 'EEEE d MMMM', 'America/New_York')).toBe('Saturday 14 March')
+  })
+
+  it('labels the range in the given zone', () => {
+    const range = { end: at, start: new Date(at.getTime() - 24 * 3_600_000) }
+    expect(formatRangeLabel('rolling_24h', range, 'Asia/Tokyo')).toBe('Sat 14 Mar 08:30 – Sun 15 Mar 08:30')
+    expect(formatRangeLabel('today', range, 'America/New_York')).toBe('Friday 13 March')
+  })
+
+  it('ticks on whole hours of the given zone, also with a half-hour offset', () => {
+    const range = { end: new Date('2026-03-15T12:00:00.000Z'), start: new Date('2026-03-15T00:00:00.000Z') }
+    const hoursIn = (tz: string) => hourTicks(range, 800, tz).map((d) => formatAt(d, 'HH:mm', tz))
+    expect(hoursIn('Asia/Tokyo')).toEqual(['09:00', '12:00', '15:00', '18:00', '21:00'])
+    expect(hoursIn('Asia/Kolkata')).toEqual(['06:00', '09:00', '12:00', '15:00'])
+  })
+})
+
 describe('isSleepType', () => {
   it('counts sleep, naps and sleep subtypes', () => {
     expect(isSleepType('sleep', undefined)).toBe(true)
     expect(isSleepType('nap', undefined)).toBe(true)
     expect(isSleepType('power_nap', 'sleep')).toBe(true)
     expect(isSleepType('running', 'exercise')).toBe(false)
+  })
+})
+
+describe('dayStatus', () => {
+  const none = { activities: false, metrics: false }
+  const loaded = { bars: [1], icons: [] }
+  const nothing = { bars: [], icons: [] }
+
+  it('is loading while either query loads', () => {
+    expect(dayStatus(true, none, loaded)).toEqual({ status: 'loading' })
+  })
+
+  it('fails only when both queries failed', () => {
+    expect(dayStatus(false, { activities: true, metrics: true }, nothing)).toEqual({ status: 'failed' })
+  })
+
+  it('shows what loaded with a hint when the metrics failed', () => {
+    expect(dayStatus(false, { activities: false, metrics: true }, { bars: [], icons: [1] })).toEqual({
+      hint: 'The metrics could not be loaded',
+      status: 'ready',
+    })
+  })
+
+  it('shows what loaded with a hint when the activities failed', () => {
+    expect(dayStatus(false, { activities: true, metrics: false }, loaded)).toEqual({
+      hint: 'The activities could not be loaded',
+      status: 'ready',
+    })
+  })
+
+  it('is empty without a hint when nothing failed and nothing loaded', () => {
+    expect(dayStatus(false, none, nothing)).toEqual({ status: 'empty' })
   })
 })

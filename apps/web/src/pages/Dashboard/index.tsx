@@ -4,6 +4,7 @@ import { defaultDashboardConfig } from '@aurboda/api-spec'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'preact/hooks'
 
+import { DueTodayCard } from '../../components/DueTodayCard'
 import { EditableDashboard } from '../../components/EditableDashboard'
 import { FoghouseGames } from '../../components/FoghouseGames'
 import { GetStartedGuide } from '../../components/GetStartedGuide'
@@ -113,6 +114,7 @@ export function Dashboard() {
       {!isEditing && (
         <>
           <GetStartedGuide />
+          <DueTodayCard />
           <FoghouseGames />
         </>
       )}

@@ -11,6 +11,8 @@ on:
       - 'apps/web/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'patches/**'
       - 'Dockerfile'
       - 'nginx.conf'
       - 'entrypoint.sh'
