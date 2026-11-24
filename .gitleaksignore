@@ -31,3 +31,11 @@ a1d6b31710510c48a90fa0336a4b6fd70d1118bb:docs/data-access.md:generic-api-key:42
 
 # Public exercise catalogue identifier Landmine 180s; same entry, new upstream source snapshot.
 eb9e7cd272ec98d924cc1e158945ef98a539c006:apps/backend/src/catalog/exercises/exercise-catalog.json:generic-api-key:15731
+
+# Public VAPID application-server key in upstream base64 round-trip test; no private signing key.
+45e85cf5abb8af1de14e9b480af2ec4d1965b5a3:apps/web/src/components/push.test.ts:generic-api-key:152
+# Public assessment catalogue stable identifiers, moved to the shared API package upstream.
+037894de763ea0caba7138e7195223ddf2e1a0cd:packages/api-spec/src/assessment-catalog.ts:generic-api-key:38
+037894de763ea0caba7138e7195223ddf2e1a0cd:packages/api-spec/src/assessment-catalog.ts:generic-api-key:89
+198b07361050d83e3422b2539cd226a3be21b172:packages/api-spec/src/assessment-catalog.ts:generic-api-key:38
+198b07361050d83e3422b2539cd226a3be21b172:packages/api-spec/src/assessment-catalog.ts:generic-api-key:89

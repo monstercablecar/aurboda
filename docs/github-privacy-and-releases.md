@@ -29,3 +29,7 @@ Deploy an immutable checkout of the reviewed commit, not the older dirty source 
 The merged upstream release can seed a public Feed relay on HTTPS instances. Review that setting as part of deployment; publishing code does not subscribe the running server. Official APK and container publishing remain restricted to upstream.
 
 The Feature Control PR's full-history scan also inspected the concurrently published privacy branch. It flagged `docs/data-access.md` at `a1d6b317` line 42: a documentation table row describing client/code/token persistence and linking to the central database source file. The entire line is ordinary prose and a source path, with no credential. Its exact fingerprint is recorded in `.gitleaksignore`; no path, rule or commit range is excluded.
+
+## November 23 integration scan
+
+The all-fetched-history scan additionally inspected the released upstream source. Five candidates were reviewed at their original commits: one public VAPID application-server key in a base64 round-trip test (no private signing key), and the public GAD-7/PEG catalogue stable identifiers in two upstream snapshots after their move to the shared API package. Only the exact commit/file/rule/line fingerprints are added to `.gitleaksignore`; no file, rule or commit range is excluded. Runtime settings, synthetic browser sessions, screenshots and raw validation logs remain outside Git.

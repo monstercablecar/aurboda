@@ -8,6 +8,8 @@ import { baseResponseSchema, iso8601DateTimeSchema, queryBooleanSchema, UUID_RE 
  * changes, since a stored notification's `type` is plain text.
  */
 export const notificationTypes = [
+  'check_in_due',
+  'people_event',
   'reminder',
   'treatment_checkin',
   'admin_signup',
@@ -54,6 +56,18 @@ export interface NotificationTypeInfo {
 }
 
 export const notificationTypeInfo: Record<NotificationType, NotificationTypeInfo> = {
+  check_in_due: {
+    admin_only: false,
+    description: 'Optional reusable form and routine reminders',
+    group: 'reminders',
+    label: 'Check-ins',
+  },
+  people_event: {
+    admin_only: false,
+    description: 'Private People event reminders',
+    group: 'reminders',
+    label: 'People reminders',
+  },
   treatment_checkin: {
     admin_only: false,
     description: 'Optional session check-ins with quiet hours and bounded reminders',

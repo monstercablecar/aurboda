@@ -1,6 +1,7 @@
 import type { NotificationsResponse } from '@aurboda/api-spec'
 
 import { type InfiniteData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'preact/hooks'
 
 import {
   fetchNotifications,
@@ -9,6 +10,7 @@ import {
   runNotificationAction,
 } from '../state/api'
 import { auth } from '../state/auth'
+import { subscribeLiveEvents } from '../state/live-events'
 import { markAllReadInPage, markReadInPage } from './notifications'
 
 export const LATEST_NOTIFICATIONS_KEY = ['notifications', 'latest'] as const
@@ -16,8 +18,16 @@ export const NOTIFICATION_PAGES_KEY = ['notifications', 'pages'] as const
 const LATEST_LIMIT = 20
 
 /** The newest notifications and the unread count, shared by the badge, the dropdown and the mobile bar. */
-export const useLatestNotifications = () =>
-  useQuery({
+export const useLatestNotifications = () => {
+  const client = useQueryClient()
+  useEffect(
+    () =>
+      subscribeLiveEvents(() => {
+        void client.invalidateQueries({ queryKey: ['notifications'] })
+      }),
+    [client],
+  )
+  return useQuery({
     enabled: Boolean(auth.value.token),
     queryFn: () => fetchNotifications({ limit: LATEST_LIMIT }),
     queryKey: LATEST_NOTIFICATIONS_KEY,
@@ -25,6 +35,7 @@ export const useLatestNotifications = () =>
     refetchOnWindowFocus: true,
     staleTime: 30_000,
   })
+}
 
 type Update = (page: NotificationsResponse) => NotificationsResponse
 

@@ -199,6 +199,7 @@ const settingsWithDefaultsSchema = userSettingsResponseSchema.pick({
   food_sensitivity_map: true,
   garmin_disabled_data_types: true,
   hidden_pages: true,
+  sidebar_order: true,
   home_assistant_entity_id: true,
   home_assistant_url: true,
   item_icons: true,

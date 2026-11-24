@@ -12,9 +12,11 @@ import type {
   JournalAttachment,
   JournalRevision,
   JournalWorkbookState,
+  MergeJournalTagsBody,
 } from '@aurboda/api-spec'
 
 import {
+  mergeJournalTagsBodySchema,
   createJournalEntryBodySchema,
   updateJournalEntryBodySchema,
   journalEntriesQuerySchema,
@@ -32,6 +34,7 @@ import type { Queryable } from '../db/pool.ts'
 import { withUserTransaction } from '../db/connection.ts'
 import { httpError } from '../http-error.ts'
 import { JOURNAL_CATALOG } from './journal-catalog.ts'
+import { validateJournalLinks } from './private-links.ts'
 
 const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
   const result = schema.safeParse(input)
@@ -134,6 +137,7 @@ export const createJournalEntry = (user: string, input: CreateJournalEntryBody) 
     }
     if (body.workbook) throw httpError(400, 'Choose a workbook from the catalog.')
     if (body.workbook_id && body.template_id) throw httpError(400, 'Choose either a workbook or a template.')
+    await validateJournalLinks(tx, body.links)
     await validateArea(tx, body.area_id)
     const { workbook_id, template_id, id: _id, ...payload } = body
     if (workbook_id) {
@@ -166,6 +170,7 @@ export const updateJournalEntry = (user: string, id: string, input: UpdateJourna
     const body = parse(updateJournalEntryBodySchema, input)
     const old = await getEntry(tx, id)
     checkVersion(old.updated_at, body.expected_updated_at)
+    if (body.links) await validateJournalLinks(tx, body.links, old.links)
     if (body.area_id !== undefined && body.area_id !== old.area_id) await validateArea(tx, body.area_id)
     if (body.workbook !== undefined) validateJournalWorkbook(body.workbook, old.workbook)
     const { expected_updated_at: _expected, deleted, ...changes } = body
@@ -186,6 +191,14 @@ export const deleteJournalEntry = (user: string, id: string, expected: string) =
     if (!old.deleted_at) throw httpError(409, 'Move this entry to trash before permanently deleting it.')
     await tx.query('DELETE FROM journal_entries WHERE id=$1', [id])
   })
+const journalRelatedFilter = (q: JournalEntriesQuery, add: (sql: string, value: unknown) => void) => {
+  if (Boolean(q.related_kind) !== Boolean(q.related_id)) {
+    throw httpError(400, 'Choose both related record kind and identifier.')
+  }
+  if (q.related_kind && q.related_id) {
+    add("e.payload->'links' @> ?::jsonb", JSON.stringify([{ kind: q.related_kind, record_id: q.related_id }]))
+  }
+}
 export const listJournalEntries = (user: string, input: JournalEntriesQuery) =>
   transact(user, async (tx) => {
     const q = parse(journalEntriesQuerySchema, input)
@@ -206,6 +219,7 @@ export const listJournalEntries = (user: string, input: JournalEntriesQuery) =>
         `%${q.search.replaceAll(/[\\%_]/g, '\\$&')}%`,
       )
     }
+    journalRelatedFilter(q, add)
     if (q.tag) add("jsonb_exists(e.payload->'tags', ?)", q.tag)
     if (q.from) add("(e.payload->>'occurred_at')::timestamptz >= ?", q.from)
     if (q.to) add("(e.payload->>'occurred_at')::timestamptz <= ?", q.to)
@@ -455,4 +469,35 @@ export const deleteJournalAttachment = (user: string, id: string) =>
     if (!(await tx.query('DELETE FROM journal_attachments WHERE id=$1', [uuid(id)])).rowCount) {
       throw httpError(404, 'Journal attachment not found.')
     }
+  })
+
+export const mergeJournalTags = (user: string, input: MergeJournalTagsBody) =>
+  transact(user, async (tx) => {
+    const body = parse(mergeJournalTagsBodySchema, input)
+    if (body.from === body.to) return { updated: 0 }
+    const rows = await tx.query<EntryRow>(
+      "SELECT * FROM journal_entries WHERE jsonb_exists(payload->'tags',$1) FOR UPDATE",
+      [body.from],
+    )
+    for (const row of rows.rows) {
+      const old = entry(row),
+        now = nextJournalTimestamp(old.updated_at)
+      const tags = [...new Set(old.tags.map((tag) => (tag === body.from ? body.to : tag)))]
+      await revision(tx, old, now)
+      await saveEntry(tx, { ...old, tags, updated_at: now })
+    }
+    return { updated: rows.rows.length }
+  })
+export const getJournalNeighbors = (user: string, entryId: string) =>
+  transact(user, async (tx) => {
+    const old = await getEntry(tx, entryId)
+    if (old.deleted_at) return { previous: null, next: null }
+    const find = async (direction: '<' | '>') => {
+      const result = await tx.query<EntryRow>(
+        `SELECT * FROM journal_entries WHERE deleted_at IS NULL AND ((payload->>'occurred_at')::timestamptz,id) ${direction} ($1::timestamptz,$2::uuid) ORDER BY (payload->>'occurred_at')::timestamptz ${direction === '<' ? 'DESC' : 'ASC'},id ${direction === '<' ? 'DESC' : 'ASC'} LIMIT 1`,
+        [old.occurred_at, old.id],
+      )
+      return result.rows[0] ? entry(result.rows[0]) : null
+    }
+    return { previous: await find('<'), next: await find('>') }
   })

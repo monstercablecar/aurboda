@@ -42,9 +42,11 @@ describe('native private task persistence', () => {
       { title: 'Completion wins', done: true, workflow_status: 'in_progress' },
       { title: 'Open wins', done: false, workflow_status: 'done' },
     ]
-    for (const payload of payloads) {
-      await getTestDbClient().query('INSERT INTO task_items (payload) VALUES ($1)', [
+    for (const [index, payload] of payloads.entries()) {
+      // Explicit instants make pagination independent of millisecond clock ties.
+      await getTestDbClient().query('INSERT INTO task_items (payload, created_at) VALUES ($1, $2)', [
         JSON.stringify({ description: '', due_date: null, priority: 0, completed_at: null, ...payload }),
+        new Date(Date.UTC(2026, 10, 20, 10, 0, index)),
       ])
     }
     const todo = await tasks.listTaskItems(user, {

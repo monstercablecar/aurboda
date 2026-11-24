@@ -17,6 +17,7 @@ import {
 } from '../../components/charts/sleep-utils'
 import { dropBlankListRows } from '../../components/listFieldRows'
 import { stillUploading } from '../../components/MarkdownEditor/image-upload'
+import { PrivateActivityPeople } from '../../components/PrivateActivityPeople'
 import {
   categoricalFields,
   categoricalItemFields,
@@ -43,6 +44,7 @@ import { toDisplayName } from '../../utils/displayName'
 import { resolveItemIcon } from '../../utils/emojiLookup'
 import { hrZoneColors } from '../../utils/hrZones'
 import { renderMarkdown } from '../../utils/markdown'
+import { ActivityCheckIns } from '../CheckIns/ActivityCheckIns'
 import { ActivityChart } from './ActivityChart'
 import { ActivityNeighborsNav } from './ActivityNeighborsNav'
 import {
@@ -915,6 +917,8 @@ const ActivityContent = ({ entityId }: { entityId: string }) => {
           start={activity.merged_start_time ?? activity.start_time}
         />
       )}
+      <PrivateActivityPeople activityId={rawEntityId} activityIds={allEntityIds} />
+      <ActivityCheckIns activityId={rawEntityId} />
       <NotesSection entityType="activity" entityId={rawEntityId} allEntityIds={allEntityIds} />
     </>
   )

@@ -293,3 +293,19 @@ export const upsertNotificationPreference = async (
   )
   return result.rows[0]!
 }
+
+export const markCheckInDueNotificationsRead = async (
+  user: string | Queryable,
+  formId: string,
+  scheduledFor: readonly string[],
+): Promise<number> => {
+  if (scheduledFor.length === 0) return 0
+  const result = await query(
+    user,
+    `UPDATE notifications SET read_at = COALESCE(read_at, NOW()), actions = '[]'::jsonb
+     WHERE type = 'check_in_due' AND (read_at IS NULL OR actions <> '[]'::jsonb) AND data->>'form_id' = $1
+       AND data->>'scheduled_for' = ANY($2::text[])`,
+    [formId, scheduledFor],
+  )
+  return result.rowCount ?? 0
+}

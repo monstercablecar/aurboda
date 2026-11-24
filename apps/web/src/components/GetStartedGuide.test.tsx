@@ -391,8 +391,8 @@ it('skips feature selection without altering menu preferences', async () => {
 
 it.each([
   { hiddenPages: [], destination: '/goals?view=board', hidden: false },
-  { hiddenPages: ['/goals'], destination: '/settings', hidden: true },
-  { hiddenPages: ['/goals/?view=board', '/future-page'], destination: '/settings', hidden: true },
+  { hiddenPages: ['/goals'], destination: '/goals?view=board', hidden: true },
+  { hiddenPages: ['/goals/?view=board', '/future-page'], destination: '/goals?view=board', hidden: true },
   { hiddenPages: ['/future-page'], destination: '/goals?view=board', hidden: false },
 ])(
   'offers optional Tasks guidance using current visibility: $hiddenPages',
@@ -412,7 +412,7 @@ it.each([
   },
 )
 
-it('does not offer a Tasks link until settings confirm visibility', async () => {
+it('waits for settings before offering the optional Tasks handoff', async () => {
   let resolveSettings!: (value: unknown) => void
   settings.hidden_pages = ['/goals']
   api.fetchUserSettings.mockImplementationOnce(
@@ -426,7 +426,9 @@ it('does not offer a Tasks link until settings confirm visibility', async () => 
   await act(async () => resolveSettings(settings))
   await flush()
   await click('Explore your workspace')
-  expect(root.querySelector('[aria-label="Optional next steps"] a')?.getAttribute('href')).toBe('/settings')
+  expect(root.querySelector('[aria-label="Optional next steps"] a')?.getAttribute('href')).toBe(
+    '/goals?view=board',
+  )
   expect(api.updateUserSettings).not.toHaveBeenCalled()
 })
 
@@ -461,5 +463,5 @@ it.each([false, true])('supports optional handoff navigation in previews (hidden
     link.dispatchEvent(event)
   })
   expect(event.defaultPrevented).toBe(true)
-  expect(navigate).toHaveBeenCalledWith(hidden ? '/settings' : '/goals?view=board')
+  expect(navigate).toHaveBeenCalledWith('/goals?view=board')
 })

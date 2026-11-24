@@ -27,6 +27,20 @@ import { RelationshipStates } from './RelationshipStates'
 import { StatusEpisodeForm } from './StatusEpisodeForm'
 import { StatusEpisodes } from './StatusEpisodes'
 
+vi.mock('../../state/api/private-links', () => ({
+  privateLinks: {
+    timeWith: vi.fn(async () => ({
+      person_id: '00000000-0000-4000-8000-000000000001',
+      days: [],
+      activities: [],
+      total_minutes: 0,
+      correlation: null,
+      paired_days: 0,
+      metric_aggregation: null,
+    })),
+  },
+}))
+
 vi.mock('axios', () => ({
   default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), isAxiosError: () => false },
 }))

@@ -57,3 +57,29 @@ test('existing notification test still opens Settings', async () => {
   })
   expect(openWindow).toHaveBeenCalledWith('/settings')
 })
+
+test('durable notifications ignore caller text and destinations and open the signed-in notification page', async () => {
+  const { handlers, showNotification, openWindow } = await setup()
+  handlers.get('push')?.({
+    data: {
+      json: () => ({
+        kind: 'notification',
+        tag: '00000000-0000-4000-8000-000000000001',
+        title: 'private',
+        body: 'secret',
+        url: 'https://evil.example',
+      }),
+    },
+    waitUntil: () => {},
+  })
+  expect(showNotification).toHaveBeenCalledWith('Aurboda', {
+    body: 'You have a new notification.',
+    data: { kind: 'notification' },
+    tag: '00000000-0000-4000-8000-000000000001',
+  })
+  handlers.get('notificationclick')?.({
+    notification: { close: () => {}, data: { kind: 'notification', url: 'https://evil.example' } },
+    waitUntil: () => {},
+  })
+  expect(openWindow).toHaveBeenCalledWith('/notifications')
+})

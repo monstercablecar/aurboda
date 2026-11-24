@@ -61,7 +61,9 @@ import { registerAdminUserTools } from './mcp/admin-user-tools.ts'
 import { registerAutoshareRuleTools } from './mcp/autoshare-rule-tools.ts'
 import { registerChallengeTools } from './mcp/challenge-tools.ts'
 import { registerChartTools } from './mcp/chart-tools.ts'
+import { registerCheckInTools } from './mcp/check-in-tools.ts'
 import { registerCorrelationTools } from './mcp/correlation-tools.ts'
+import { registerDataSourceTools } from './mcp/data-source-tools.ts'
 import { registerDebugTools } from './mcp/debug-tools.ts'
 import { registerDeductionRuleTools } from './mcp/deduction-rule-tools.ts'
 import { registerExerciseCatalogTools } from './mcp/exercise-catalog-tools.ts'
@@ -80,6 +82,7 @@ import { registerNotificationTools } from './mcp/notification-tools.ts'
 import { registerNutrientRecommendationTools } from './mcp/nutrient-recommendation-tools.ts'
 import { registerPeopleTools } from './mcp/people-tools.ts'
 import { registerPharmacologyTools } from './mcp/pharmacology-tools.ts'
+import { registerPrivateLinkTools } from './mcp/private-link-tools.ts'
 import { registerQueryTools } from './mcp/query-tools.ts'
 import { refuseMutatingTools } from './mcp/read-only-gate.ts'
 import { registerReminderTools } from './mcp/reminder-tools.ts'
@@ -252,6 +255,8 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerChartTools(server, user)
   registerJournalTools(server, user)
   registerWorkTools(server, user, deps.onActivityMutated)
+  registerCheckInTools(server, user)
+  registerPrivateLinkTools(server, user)
   registerPeopleTools(server, user)
   registerNativeTasksTools(server, user)
   registerResourcesTools(server, user, deps.centralDb)
@@ -281,6 +286,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerRouteTools(server, user)
   registerSegmentTools(server, user)
   registerSharedDashboardTools(server, user)
+  registerDataSourceTools(server, user)
   registerSharedExerciseTools(server, user, deps.webHost)
   registerExerciseCatalogTools(server)
   registerFeedTools(server, user, {
@@ -338,6 +344,12 @@ export function createMcpRouter(auth: Auth, deps: McpDeps = {}): Router {
   router.post('/', json({ limit: '4mb' }), async (req: Request, res: Response) => {
     const user = await getAuthenticatedUser(req)
     if (!user) {
+      if (deps.webHost) {
+        res.set(
+          'WWW-Authenticate',
+          `Bearer resource_metadata="${deps.webHost}/.well-known/oauth-protected-resource/mcp"`,
+        )
+      }
       res.status(401).json({ error: 'Unauthorized' })
       return
     }

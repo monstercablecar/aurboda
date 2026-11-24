@@ -152,6 +152,7 @@ export const displayCategorySchema = z.enum(displayCategories).meta({
 
 export const dataSourceSchema = z
   .enum([
+    'check_in',
     'activitywatch',
     'aurboda',
     'aurboda_gap_fill',

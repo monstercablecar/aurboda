@@ -1,3 +1,5 @@
+import type { FamilyAccess } from '@aurboda/api-spec'
+
 import { signal } from '@preact/signals'
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -13,6 +15,8 @@ import { Sidebar } from './Sidebar'
 
 const api = vi.hoisted(() => ({ fetchUserSettings: vi.fn(), updateUserSettings: vi.fn() }))
 vi.mock('../state/api', () => api)
+let familyAccess: FamilyAccess
+vi.mock('../state/api/family-photos', () => ({ useFamilyAccess: () => ({ data: familyAccess }) }))
 vi.mock('../state/auth', () => ({
   auth: signal({ token: 'test', user: 'test', is_admin: true }),
   signupMode: signal('open'),
@@ -59,6 +63,13 @@ beforeEach(() => {
   root = document.createElement('div')
   document.body.append(root)
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  familyAccess = {
+    enabled: true,
+    allowed: false,
+    is_admin: false,
+    originals_enabled: false,
+    max_upload_bytes: 1024,
+  }
   settings = { hidden_pages: ['/future-page'] }
   api.fetchUserSettings.mockImplementation(async () => settings)
   api.updateUserSettings.mockImplementation(async (update) => {
@@ -182,4 +193,20 @@ it('renders a usable switch for a newly registered page without a description', 
   } finally {
     NAV_LINKS_PRIMARY.pop()
   }
+})
+
+it('keeps Check-ins available independently of Family membership and visibility preferences', async () => {
+  await mount(true)
+  expect(root.querySelector('.sidebar a[href="/check-ins"]')).not.toBeNull()
+  expect(root.querySelector('.sidebar a[href="/family-photos"]')).toBeNull()
+  expect(root.querySelector('input[aria-label="Show Family Photos"]')).toBeNull()
+  await act(() => render(null, root))
+  familyAccess = { ...familyAccess, allowed: true }
+  await mount(true)
+  expect(root.querySelector('.sidebar a[href="/family-photos"]')).not.toBeNull()
+  expect(root.querySelector('.sidebar a[href="/check-ins"]')).not.toBeNull()
+  await toggle('Check-ins')
+  expect(root.querySelector('.sidebar a[href="/check-ins"]')).toBeNull()
+  expect(root.querySelector('.sidebar a[href="/family-photos"]')).not.toBeNull()
+  expect(api.updateUserSettings).toHaveBeenLastCalledWith({ hidden_pages: ['/future-page', '/check-ins'] })
 })

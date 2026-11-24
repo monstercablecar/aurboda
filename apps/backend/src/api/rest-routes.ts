@@ -74,11 +74,14 @@ import { createChallengeDataRouter } from '../routes/challenge-data-router.ts'
 import { createChallengeQuantpubRouter } from '../routes/challenge-quantpub-router.ts'
 import { createChallengesRouter } from '../routes/challenges-router.ts'
 import { createChartDataRouter } from '../routes/chart-data-router.ts'
+import { createCheckInsRouter } from '../routes/check-ins-router.ts'
 import { createCorrelationsRouter } from '../routes/correlations-router.ts'
 import { createDashboardRouter } from '../routes/dashboard-router.ts'
+import { createDataSourcesRouter } from '../routes/data-sources-router.ts'
 import { createDeductionRulesRouter } from '../routes/deduction-rules-router.ts'
 import { createExerciseCatalogRouter } from '../routes/exercise-catalog-router.ts'
 import { createExportRouter } from '../routes/export-router.ts'
+import { createFamilyPhotosRouter, familyErrorHandler } from '../routes/family-photos-router.ts'
 import { createFeedFollowedTagsRouter } from '../routes/feed-followed-tags-router.ts'
 import { createFeedFollowersRouter } from '../routes/feed-followers-router.ts'
 import { createFeedFollowingRouter } from '../routes/feed-following-router.ts'
@@ -105,6 +108,7 @@ import { createOgImageRouter } from '../routes/og-image-router.ts'
 import { createOidcRouter } from '../routes/oidc-router.ts'
 import { createPeopleRouter } from '../routes/people-router.ts'
 import { createPharmacologyRouter } from '../routes/pharmacology-router.ts'
+import { createPrivateLinksRouter } from '../routes/private-links-router.ts'
 import { createProductivityRouter } from '../routes/productivity-router.ts'
 import { createProfileRouter } from '../routes/profile-router.ts'
 import { createPublicAvatarRouter } from '../routes/public-avatar-router.ts'
@@ -305,9 +309,13 @@ export const mountRestRouters = ({
   httpd.use(createMetricsRouter(authMiddleware, syncProvider))
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))
+  httpd.use('/family-photos', createFamilyPhotosRouter(authMiddleware, centralDb, apiBaseUrl))
+  httpd.use('/family-photos', familyErrorHandler)
   httpd.use('/resources', createResourcesRouter(authMiddleware, centralDb, apiBaseUrl))
   httpd.use('/journal', createJournalRouter(authMiddleware))
   httpd.use('/work', createWorkRouter(authMiddleware, activityNotifier))
+  httpd.use('/', createCheckInsRouter(authMiddleware))
+  httpd.use('/', createPrivateLinksRouter(authMiddleware))
   httpd.use('/people', createPeopleRouter(authMiddleware))
   httpd.use('/tasks', createNativeTasksRouter(authMiddleware))
   httpd.use('/notes', createNotesRouter(authMiddleware))
@@ -372,6 +380,7 @@ export const mountRestRouters = ({
   httpd.use('/account', createAccountRecoveryRouter(accountRecovery))
   httpd.use(createRawRecordsRouter(authMiddleware))
   httpd.use('/dashboard', createDashboardRouter(authMiddleware))
+  httpd.use('/data-sources', createDataSourcesRouter(authMiddleware))
   httpd.use('/shared-dashboards', createSharedDashboardsRouter(authMiddleware, webHost))
   httpd.use('/shared-exercises', createSharedExercisesRouter(authMiddleware, webHost))
   httpd.use('/activity-type-catalog', createActivityTypeCatalogRouter(authMiddleware))

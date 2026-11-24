@@ -24,7 +24,7 @@ describe('optional onboarding catalog', () => {
       expect(card.description).toContain('Done when:')
       expect(card.description).toContain('complete or delete this card')
       expect(card.description).toContain('If you already did this, move the card to a Done-category column')
-      expect(card.description).toContain('[Settings](/settings)')
+      expect(card.description).toContain('Reorganize')
       expect(card.description).not.toMatch(/\/admin|PHQ-9|GAD-7/)
     }
   })
@@ -91,9 +91,9 @@ describe('optional onboarding catalog', () => {
     const registered = new Set([...router.matchAll(/<Route path="([^"]+)"/g)].map((match) => match[1]))
     for (const card of cards) {
       const urls = [...card.description.matchAll(/\]\((\/[^)]*)\)/g)].map((match) => match[1])
-      expect(urls.length).toBeGreaterThan(0)
+      if (card.key !== 'feature_control') expect(urls.length).toBeGreaterThan(0)
       for (const url of urls) expect(registered.has(url), `${card.key}: ${url}`).toBe(true)
-      expect(card.description).toContain('Feature Control')
+      expect(card.description).toContain('Reorganize')
       expect(card.description).toContain('visibility only')
     }
   })

@@ -8,6 +8,7 @@ import { API_URL } from '../config'
 import { readNativeAuth } from '../embed'
 import { apiErrorText } from '../utils/profile'
 import { clearCachedDashboards } from './dashboardCache'
+import { initializeFamilyIdentity, rotateFamilyIdentity } from './familyIdentity'
 import { clearPeriodData } from './periodDataCache'
 import { resetQuerySession } from './queryClient'
 import { currentSessionGeneration, installSessionResponseFence } from './sessionBoundary'
@@ -36,11 +37,13 @@ export const acceptSessionResponse = (
 }
 
 installSessionResponseFence(axios)
+initializeFamilyIdentity(Boolean(nativeAuth && savedAuth !== JSON.stringify(nativeAuth)))
 let sessionIdentity = JSON.stringify([auth.value.user, auth.value.token])
 auth.subscribe((value) => {
   const identity = JSON.stringify([value.user, value.token])
   if (identity !== sessionIdentity) {
     sessionIdentity = identity
+    rotateFamilyIdentity()
     resetQuerySession()
     clearCachedDashboards(() => localStorage)
     clearPeriodData(() => sessionStorage)

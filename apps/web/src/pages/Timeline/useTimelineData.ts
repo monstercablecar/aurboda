@@ -1,4 +1,5 @@
 import {
+  ACTIVITY_LANE_CATEGORIES,
   defaultTimelineDailyMetrics,
   isLocationVisitActivity,
   isMusicScrobbleActivity,
@@ -31,7 +32,6 @@ import { auth } from '../../state/auth'
 import { parseBucketedResponse } from '../../utils/chart'
 import { packLanes } from '../../utils/lanePacking'
 import {
-  ACTIVITY_LANE_CATEGORIES,
   buildActivityColumnItems,
   collapseToParentType,
   EXCLUDED_ACTIVITY_PREFIXES,

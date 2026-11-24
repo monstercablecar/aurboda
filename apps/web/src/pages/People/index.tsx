@@ -18,6 +18,7 @@ import { CareEthicsGuide } from './CareEthicsGuide'
 import { PersonDashboard } from './Dashboard'
 import { HelpTree } from './HelpTree'
 import { PersonForm } from './PersonForm'
+import { TimeWith } from './TimeWith'
 import { ErrorMessage, PeopleEmptyState } from './ui'
 import './style.css'
 
@@ -221,6 +222,7 @@ function PeopleForUser() {
             <ErrorMessage error={dashboard.error} />
             {dashboard.isPending && <p role="status">Loading dashboard…</p>}
             {dashboard.isError && <button onClick={() => void dashboard.refetch()}>Try again</button>}
+            <TimeWith personId={personId} />
             <ErrorMessage error={sources.error} />
             {dashboard.data && (
               <PersonDashboard

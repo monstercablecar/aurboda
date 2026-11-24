@@ -65,7 +65,7 @@ afterAll(async () => {
 })
 beforeEach(async () => {
   await pool.query(
-    'TRUNCATE resources_items, resources_folders, resources_pending_uploads, resources_pending_deletions, admins',
+    'TRUNCATE resources_items, resources_folders, resources_pending_deletions, resources_pending_uploads, admins',
   )
   await pool.query("INSERT INTO admins VALUES('admin')")
 })

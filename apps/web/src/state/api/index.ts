@@ -12,6 +12,7 @@ export * from './chart-data'
 export * from './correlations'
 export * from './custom-metrics'
 export * from './dashboard'
+export * from './data-sources'
 export * from './deduction-rules'
 export * from './exercise-catalog'
 export * from './feed'
@@ -49,3 +50,5 @@ export * from './types'
 export * from './webauthn'
 
 export * from './people'
+
+export * from './check-ins'

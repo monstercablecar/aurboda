@@ -1,10 +1,13 @@
-import type { ProviderSyncStatus, SyncIntervals } from '@aurboda/api-spec'
+import type { DataSourceId, ProviderSyncStatus, SyncIntervals } from '@aurboda/api-spec'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 
 import { type SaveStatus, SaveStatusIndicator } from '../../components/SaveStatusIndicator'
-import { fetchUserSettings, updateUserSettings } from '../../state/api'
+import { fetchDataSourcesOverview, fetchUserSettings, updateUserSettings } from '../../state/api'
+import { auth } from '../../state/auth'
+import { type OAuthProvider, oauthReturn } from './oauthReturn'
+import { otherSourcesCovering, overlapNoteText } from './overview'
 
 export { type SaveStatus, SaveStatusIndicator }
 
@@ -13,6 +16,27 @@ export function StatusBanner({ connected, label }: { connected: boolean; label: 
     <div class={`status-banner ${connected ? 'connected' : 'not-connected'}`}>
       <span class={`status-dot ${connected ? 'connected' : 'not-connected'}`} />
       {label}
+    </div>
+  )
+}
+
+/** On a source's own page: says when another active source already sends the same data. */
+export function OverlapNote({ sourceId }: { sourceId: DataSourceId }) {
+  const { data: overview } = useQuery({
+    enabled: !!auth.value.token,
+    queryFn: fetchDataSourcesOverview,
+    queryKey: ['dataSourcesOverview'],
+    staleTime: 60 * 1000,
+  })
+  const self = overview?.sources.find((source) => source.id === sourceId)
+  if (!overview || !self) return null
+  const covering = otherSourcesCovering(overview, sourceId)
+  if (covering.length === 0) return null
+  return (
+    <div class="overlap-note" role="note">
+      {covering.map((entry) => (
+        <p key={entry.kind.id}>{overlapNoteText(entry, self)}</p>
+      ))}
     </div>
   )
 }
@@ -48,6 +72,44 @@ export function LoginRequired() {
   return (
     <div class="data-sources-page">
       <p>Please log in to view data source settings.</p>
+    </div>
+  )
+}
+
+export function OAuthFinishLines({
+  error,
+  finishing,
+  providerName,
+}: {
+  error: string | null
+  finishing: boolean
+  providerName: string
+}) {
+  return (
+    <>
+      {finishing && <p class="field-description">Finishing the {providerName} connection…</p>}
+      {error && <p class="garmin-login-error">{error}</p>}
+    </>
+  )
+}
+
+/** For a browser without a login: a sign-in handed back to the page is finished after logging in, on this page. */
+export function LoginRequiredToFinish({
+  provider,
+  providerName,
+}: {
+  provider: OAuthProvider
+  providerName: string
+}) {
+  const { pathname, search } = window.location
+  if (!oauthReturn(search, provider)) return <LoginRequired />
+  return (
+    <div class="data-sources-page">
+      <p>
+        <a href={`/login?next=${encodeURIComponent(pathname + search)}`}>
+          Log in to finish connecting {providerName}
+        </a>
+      </p>
     </div>
   )
 }

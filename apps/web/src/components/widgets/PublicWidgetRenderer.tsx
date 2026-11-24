@@ -12,12 +12,14 @@ import { ActivityTypeCardView } from './ActivityTypeCardWidget'
 import { BarChartView } from './BarChartWidget'
 import { CombinedChartView } from './CombinedChartWidget'
 import { CorrelationView } from './CorrelationWidget'
+import { ResolvedDayOverview } from './DayOverviewWidget'
 import { GoalProgressView } from './GoalProgressWidget'
 import { HrZonesView } from './HrZonesWidget'
 import { LastSleepView } from './LastSleepWidget'
 import { MetricCardView } from './MetricCardWidget'
 import { PlacesCardView } from './PlacesCardWidget'
 import { QuickLinkView } from './QuickLinkWidget'
+import { RecentActivitiesView } from './RecentActivitiesWidget'
 import { RecordCardView } from './RecordCardWidget'
 import { SleepDebtView } from './SleepDebtWidget'
 import { SparklineCardView } from './SparklineCardWidget'
@@ -33,6 +35,8 @@ interface PublicWidgetRendererProps {
   periodLabel?: string
   /** The owner's custom metric definitions, for the trend direction of a custom metric; a visitor has none. */
   customMetrics?: CustomMetricDefinition[]
+  /** Shown on the cards only the owner sees ("Only you see this card"); the owner's own view passes it. */
+  ownerNote?: string
 }
 
 const NotForAPeriod = () => <div class="widget-note">Not available for a period</div>
@@ -43,6 +47,7 @@ export function PublicWidgetRenderer({
   data,
   periodLabel,
   customMetrics,
+  ownerNote,
 }: PublicWidgetRendererProps) {
   switch (widget.type) {
     case 'metric_card':
@@ -116,7 +121,18 @@ export function PublicWidgetRenderer({
     case 'places_card':
       return <PlacesCardView config={widget.config} data={data?.type === 'places_card' ? data.data : null} />
     case 'day_overview':
-      return null
+      return data?.type === 'day_overview' && data.data ? (
+        <ResolvedDayOverview config={widget.config} data={data.data} />
+      ) : null
+    case 'recent_activities':
+      return (
+        <RecentActivitiesView
+          config={widget.config}
+          data={data?.type === 'recent_activities' ? data.data : null}
+          period={Boolean(periodLabel)}
+          note={widget.config.visible_to_visitors === true ? undefined : ownerNote}
+        />
+      )
     default:
       return <div class="widget-unknown">Unknown widget type</div>
   }

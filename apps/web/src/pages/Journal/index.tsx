@@ -9,8 +9,6 @@ import type {
   JournalEntriesQuery,
 } from '@aurboda/api-spec'
 
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
 import { useLocation } from 'preact-iso'
 import { useEffect, useRef, useState } from 'preact/hooks'
 
@@ -18,6 +16,8 @@ import { journalApi } from '../../state/api/journal'
 import { auth } from '../../state/auth'
 import { AudioRecorder, AttachmentView } from './Audio'
 import { JournalDraft, blankEntry, entryFields } from './drafts'
+import { PrivatePreview } from './PrivatePreview'
+import { RelatedRecords } from './RelatedRecords'
 import './journal.css'
 
 const download = (name: string, data: string, type: string) => {
@@ -68,12 +68,14 @@ function Editor({
   record,
   onSaved,
   onClose,
+  onNavigate,
 }: {
   initial: JournalEntry | CreateJournalEntryBody
   areas: JournalArea[]
   record: boolean
   onSaved: () => void
   onClose: () => void
+  onNavigate: (entry: JournalEntry) => void
 }) {
   const [, render] = useState(0)
   const [draft] = useState(
@@ -84,6 +86,10 @@ function Editor({
   const [attachments, setAttachments] = useState<JournalAttachment[]>([])
   const [revisions, setRevisions] = useState<JournalRevision[]>([])
   const [error, setError] = useState('')
+  const [neighbors, setNeighbors] = useState<{ previous: JournalEntry | null; next: JournalEntry | null }>({
+    previous: null,
+    next: null,
+  })
   const pendingMedia = useRef(new Set<string>())
   const mediaPending = (key: string, pending: boolean) => {
     if (pending) pendingMedia.current.add(key)
@@ -126,6 +132,10 @@ function Editor({
     window.addEventListener('beforeunload', warn)
     window.addEventListener('online', online)
     if (draft.server) {
+      void journalApi
+        .neighbors(draft.server.id)
+        .then(setNeighbors)
+        .catch(() => {})
       void journalApi
         .attachments(draft.server.id)
         .then(setAttachments)
@@ -171,12 +181,7 @@ function Editor({
   const section = workbook ? currentSection(workbook) : undefined
   return (
     <section class="journal-editor">
-      <div
-        class="journal-print"
-        dangerouslySetInnerHTML={{
-          __html: DOMPurify.sanitize(marked.parse(markdown(value), { async: false })),
-        }}
-      />
+      <PrivatePreview className="journal-print" content={markdown(value)} attachments={attachments} />
       <div class="journal-row">
         <span class="journal-eyebrow">
           {workbook ? 'Guided reflection' : 'A little room for your thoughts'}
@@ -372,12 +377,7 @@ function Editor({
         <button onClick={() => setPreview(!preview)}>{preview ? 'Edit' : 'Preview'}</button>
       </div>
       {preview ? (
-        <div
-          class="journal-preview"
-          dangerouslySetInnerHTML={{
-            __html: DOMPurify.sanitize(marked.parse(value.content, { async: false })),
-          }}
-        />
+        <PrivatePreview content={value.content} attachments={attachments} />
       ) : (
         <textarea
           ref={textarea}
@@ -427,69 +427,46 @@ function Editor({
         </p>
         <AudioRecorder onSave={upload} onPendingChange={(pending) => mediaPending('entry', pending)} />
         {attachments.map((a) => (
-          <AttachmentView
-            key={a.id}
-            attachment={a}
-            onDelete={async () => {
-              await journalApi.deleteAttachment(a.id)
-              setAttachments((items) => items.filter((x) => x.id !== a.id))
-            }}
-          />
-        ))}
-      </details>
-      <details>
-        <summary>Related records</summary>
-        <p>Link records from your account by their ID.</p>
-        {value.links.map((link, i) => (
-          <div class="journal-row">
-            <select
-              value={link.kind}
-              onChange={(e) =>
-                edit({
-                  links: value.links.map((l, j) =>
-                    j === i ? { ...l, kind: e.currentTarget.value as typeof link.kind } : l,
-                  ),
-                })
-              }
-            >
-              {['person', 'questionnaire', 'event', 'entry'].map((k) => (
-                <option>{k}</option>
-              ))}
-            </select>
-            <input
-              aria-label="Record ID"
-              value={link.record_id}
-              onChange={(e) =>
-                edit({
-                  links: value.links.map((l, j) =>
-                    j === i ? { ...l, record_id: e.currentTarget.value } : l,
-                  ),
-                })
-              }
+          <div key={a.id}>
+            {a.mime_type.startsWith('image/') && (
+              <button
+                onClick={() =>
+                  wrap(`![${a.filename.replaceAll(/[[\]\n]/g, '')}](journal-attachment:${a.id})`)
+                }
+              >
+                Insert image in text
+              </button>
+            )}
+            <AttachmentView
+              key={a.id}
+              attachment={a}
+              onDelete={async () => {
+                await journalApi.deleteAttachment(a.id)
+                setAttachments((items) => items.filter((x) => x.id !== a.id))
+              }}
             />
-            <input
-              aria-label="Link label"
-              value={link.label}
-              onInput={(e) =>
-                edit({
-                  links: value.links.map((l, j) => (j === i ? { ...l, label: e.currentTarget.value } : l)),
-                })
-              }
-            />
-            <button onClick={() => edit({ links: value.links.filter((_, j) => j !== i) })}>Remove</button>
           </div>
         ))}
-        <button
-          onClick={() => {
-            const id = prompt('Record ID')
-            if (id?.trim()) {
-              edit({ links: [...value.links, { kind: 'entry', record_id: id.trim(), label: '' }] })
-            }
-          }}
-        >
-          Add link
-        </button>
       </details>
+      <RelatedRecords links={value.links} onChange={(links) => edit({ links })} />
+      <nav class="journal-row" aria-label="Adjacent entries">
+        {(['previous', 'next'] as const).map(
+          (direction) =>
+            neighbors[direction] && (
+              <button
+                onClick={() =>
+                  void action(async () => {
+                    const saved = await draft.flush()
+                    if (saved) onNavigate(neighbors[direction]!)
+                  })
+                }
+              >
+                {direction === 'previous' ? '← Previous' : 'Next →'}:{' '}
+                {neighbors[direction]!.title || 'Untitled entry'}
+              </button>
+            ),
+        )}
+      </nav>
       <div class="journal-row">
         <button
           onClick={() =>
@@ -611,6 +588,9 @@ export function Journal() {
     per_page: 20,
     deleted: 'false',
     area_id: new URLSearchParams(window.location.search).get('area') || undefined,
+    related_kind:
+      (new URLSearchParams(window.location.search).get('related_kind') as 'person' | 'activity') || undefined,
+    related_id: new URLSearchParams(window.location.search).get('related_id') || undefined,
   })
   const [editor, setEditor] = useState<JournalEntry | CreateJournalEntryBody>()
   const [record, setRecord] = useState(false)
@@ -685,7 +665,7 @@ export function Journal() {
       if (
         record_id &&
         record_id.length <= 200 &&
-        (kind === 'person' || kind === 'questionnaire' || kind === 'event')
+        (kind === 'person' || kind === 'activity' || kind === 'questionnaire' || kind === 'event')
       ) {
         entry.links = [
           {
@@ -696,7 +676,9 @@ export function Journal() {
                 ? 'Related person'
                 : kind === 'questionnaire'
                   ? 'Related assessment'
-                  : 'Related event',
+                  : kind === 'activity'
+                    ? 'Related activity'
+                    : 'Related event',
           },
         ]
       }
@@ -829,6 +811,7 @@ export function Journal() {
       )}
       {editor ? (
         <Editor
+          onNavigate={(entry) => setEditor(entry)}
           key={editor.id}
           initial={editor}
           areas={areas}
@@ -1264,6 +1247,24 @@ export function Journal() {
                   Next
                 </button>
               </div>
+              <details>
+                <summary>Merge tags</summary>
+                <p>Choose exact tag spellings. Existing entries and trash keep their previous versions.</p>
+                <button
+                  onClick={() => {
+                    const from = prompt('Tag to merge')
+                    if (!from) return
+                    const to = prompt('Merge into tag')
+                    if (!to) return
+                    void action(async () => {
+                      await journalApi.mergeTags({ from, to })
+                      refresh()
+                    })
+                  }}
+                >
+                  Merge two tags
+                </button>
+              </details>
               <details>
                 <summary>Export entries</summary>
                 <p>

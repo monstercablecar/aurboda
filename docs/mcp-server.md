@@ -54,6 +54,8 @@ See [Dashboard](features/dashboard.md#period-dashboards).
 | `get_dashboard_data` | The data each widget renders, keyed by widget id, for the home dashboard or a shared one (`dashboard_id`), the same as `GET /dashboard/data` and `GET /shared-dashboards/:id/data`. A period dashboard answers its latest finished period unless `period` (`2026-10`, `2026-W44`, `2026`) is given, with each figure compared against the previous period |
 | `get_data_presence`  | Whether each named metric and activity type (subtypes included) has ever recorded anything, the same as `GET /dashboard/data-presence`; the dashboard leaves out the cards whose sources never have                                                                                                                                                       |
 
+`get_data_sources_overview` returns connection and recent-data signals grouped by data kind, including overlap warnings; REST: `GET /data-sources/overview`.
+
 ### Top list and places tools
 
 See [Media](media.md#querying), [Screentime categories](features/screentime-categories.md#top-apps) and [Places](features/places.md#places-summary).
@@ -211,15 +213,26 @@ The MCP server is available at `/mcp` and uses the Streamable HTTP transport:
 
 Request bodies are limited to 4 MB; a larger body gets HTTP 413 with a JSON-RPC `-32600` error. After authentication, requests are also limited to 20 messages per batch, 100,000 total JSON elements (including the root), and container nesting below depth 64 (root depth 0). These limits are checked before argument trimming, schema validation, or tool execution; exceeding them also returns HTTP 413 with `-32600`. A normal 10,000-point `add_metrics_bulk` request remains supported. Each request uses its own MCP server and transport, which are closed when handling finishes.
 
+A request is also refused before any tool runs, with HTTP 413 and the JSON-RPC error
+`{ "code": -32600, "message": "Request too large" }`, when it is a batch of more than 20 messages,
+nests deeper than 64 levels, or holds more than 100,000 elements in all (every array item and every
+object property counts as one). A 10,000-point `add_metrics_bulk` is about 50,000 elements.
+
 ## Authentication
 
 The MCP server supports two authentication methods:
 
 ### OAuth 2.1 (for Claude.ai Custom Connectors)
 
-The server implements OAuth 2.1 with PKCE (S256) for clients that support it, such as Claude.ai custom connectors.
+The server implements OAuth 2.1 with PKCE (S256) for clients that support it, such as Claude.ai custom connectors and Gemini.
 
-**Discovery:** `GET /.well-known/oauth-authorization-server` returns the authorization server metadata.
+**Discovery** follows the MCP authorization spec:
+
+1. An unauthenticated `POST /mcp` answers `401` with `WWW-Authenticate: Bearer resource_metadata="<host>/.well-known/oauth-protected-resource/mcp"`.
+2. `GET /.well-known/oauth-protected-resource` (and `/mcp` under it) returns the protected resource metadata (RFC 9728), naming the host as the authorization server.
+3. `GET /.well-known/oauth-authorization-server` returns the authorization server metadata (RFC 8414). Clients that predate step 2 go straight here.
+
+Clients register dynamically as public clients: `/register` always answers `token_endpoint_auth_method: none` and issues no client secret, whatever method the client asks for.
 
 **OAuth endpoints:**
 
@@ -237,7 +250,7 @@ The server implements OAuth 2.1 with PKCE (S256) for clients that support it, su
 **Connecting Claude.ai:**
 
 1. In Claude.ai, add a custom connector with the MCP URL: `https://aurboda.net/mcp`
-2. Claude.ai will auto-discover the OAuth endpoints via `/.well-known/oauth-authorization-server`
+2. Claude.ai will auto-discover the OAuth endpoints (see Discovery above)
 3. On first use, you will be redirected to sign in with your Aurboda credentials
 4. Claude.ai handles token refresh automatically
 

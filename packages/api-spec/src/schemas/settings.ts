@@ -258,6 +258,22 @@ const timelineDailyMetricsSchema = z
     message: 'Timeline daily metrics must not repeat',
   })
 
+const sidebarOrderSchema = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^(\/(?!\/)[^\s?#]*|group:[a-z-]+)$/),
+  )
+  .max(256)
+  .refine((keys) => new Set(keys).size === keys.length, { message: 'Sidebar entries must not repeat' })
+  .meta({
+    id: 'SidebarOrder',
+    description:
+      'Ordered top-level menu path keys and group keys; unknown keys are retained for future pages',
+  })
+
 export const updateSettingsInputSchema = z
   .object({
     birth_date: birthDateSchema.nullable().optional().meta({
@@ -275,6 +291,9 @@ export const updateSettingsInputSchema = z
     }),
     goals: goalsSchema.nullable().optional().meta({
       description: 'Goals (set to null to reset to defaults, empty array to clear all)',
+    }),
+    sidebar_order: sidebarOrderSchema.nullable().optional().meta({
+      description: 'Top-level menu order (null or [] restores the default order)',
     }),
     hidden_pages: hiddenPagesSchema.nullable().optional().meta({
       description: 'Hidden menu page paths (set to null or [] to show all pages)',
@@ -469,6 +488,7 @@ export const userSettingsResponseSchema = baseResponseSchema
       .meta({ description: 'Garmin data types currently disabled for sync' }),
     goals: goalsSchema.meta({ description: 'User goals for tracking metrics' }),
     hidden_pages: hiddenPagesSchema.default([]),
+    sidebar_order: sidebarOrderSchema.default([]),
     hr_zone_start: hrZoneThresholdsSchema.meta({ description: 'Effective HR zone thresholds' }),
     hr_zone_start_source: hrZoneSourceSchema.default('default').meta({
       description: 'Source of HR zone thresholds',

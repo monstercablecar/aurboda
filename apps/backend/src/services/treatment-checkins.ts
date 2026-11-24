@@ -713,3 +713,7 @@ export const treatmentCheckinActions = {
     saveTreatmentCheckin(user, id, body, true),
   action: actOnTreatmentCheckin,
 }
+
+export const setTreatmentCheckinSchedulerReady = (value: boolean) => {
+  schedulerReady = value
+}

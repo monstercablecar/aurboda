@@ -2,11 +2,12 @@ import type { GarminOAuthStatus } from '@aurboda/api-spec'
 
 import { useCallback, useState } from 'preact/hooks'
 
-import { disconnectGarminOAuth, getGarminOAuthConnectUrl } from '../../state/api'
-import { garminLastReceivedText, garminPermissionLabel, oauthErrorText } from './garminConnection'
+import { completeOAuth, disconnectGarminOAuth, getGarminOAuthConnectUrl } from '../../state/api'
+import { garminLastReceivedText, garminPermissionLabel } from './garminConnection'
+import { callbackErrorText, useOAuthCompletion } from './oauthReturn'
+import { OAuthFinishLines } from './shared'
 
-const callbackErrorCode = (): string | null =>
-  typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('error')
+const completeGarmin = (code: string, state: string) => completeOAuth('garmin', code, state)
 
 export function GarminOAuth({
   status,
@@ -15,9 +16,16 @@ export function GarminOAuth({
   status: GarminOAuthStatus
   onChanged: () => Promise<void>
 }) {
-  const [error, setError] = useState<string | null>(() => oauthErrorText(callbackErrorCode()))
+  const [error, setError] = useState<string | null>(() => callbackErrorText('Garmin'))
   const [connecting, setConnecting] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const finishing = useOAuthCompletion({
+    complete: completeGarmin,
+    onChanged,
+    provider: 'garmin',
+    providerName: 'Garmin',
+    setError,
+  })
 
   const handleConnect = useCallback(async () => {
     setConnecting(true)
@@ -43,7 +51,15 @@ export function GarminOAuth({
     }
   }, [onChanged])
 
-  if (!status.available && !status.connected) return null
+  if (!status.available && !status.connected) {
+    if (!finishing && !error) return null
+    return (
+      <section class="settings-section">
+        <h2>Connect with Garmin</h2>
+        <OAuthFinishLines error={error} finishing={finishing} providerName="Garmin" />
+      </section>
+    )
+  }
 
   const connectButton = (
     <button
@@ -99,7 +115,7 @@ export function GarminOAuth({
           </p>
         </>
       )}
-      {error && <p class="garmin-login-error">{error}</p>}
+      <OAuthFinishLines error={error} finishing={finishing} providerName="Garmin" />
     </section>
   )
 }

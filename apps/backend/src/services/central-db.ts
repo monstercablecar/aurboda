@@ -87,6 +87,8 @@ import {
   CREATE_USER_USAGE_DAILY_TABLE,
   type UserUsageApi,
 } from './central-user-usage.ts'
+import { CREATE_FAMILY_TABLES } from './family-photos.ts'
+import { familyEnabled } from './family-storage.ts'
 
 export type SignupMode = 'open' | 'invite_only' | 'closed'
 
@@ -559,6 +561,7 @@ export const createCentralDb = (deps: CentralDbDeps): CentralDb => {
       await client.query(CREATE_ACCOUNT_EMAIL_TOKENS_TABLE)
       for (const stmt of CREATE_ACCOUNT_EMAIL_TOKENS_INDEXES) await client.query(stmt)
       await client.query(CREATE_DELETED_USERNAMES_TABLE)
+      if (familyEnabled()) await client.query(CREATE_FAMILY_TABLES)
       await client.query(CREATE_USER_USAGE_DAILY_TABLE)
       for (const stmt of CREATE_USER_USAGE_DAILY_INDEXES) await client.query(stmt)
 

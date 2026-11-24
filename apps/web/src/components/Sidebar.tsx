@@ -2,16 +2,8 @@ import { useLocation } from 'preact-iso'
 import { useEffect, useState } from 'preact/hooks'
 
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
-import {
-  DATA_SOURCE_LINKS,
-  HELP_LINK,
-  isSharingActive,
-  NAV_LINKS_PRIMARY,
-  NAV_LINKS_SECONDARY,
-  SHARING_LINKS,
-} from './nav-links'
 import { NotificationBellDropdown } from './NotificationBell'
-import { usePageVisibility } from './usePageVisibility'
+import { SidebarNavigation } from './SidebarNavigation'
 import './Sidebar.css'
 
 const COLLAPSED_KEY = 'sidebar-collapsed'
@@ -20,12 +12,6 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 export function Sidebar() {
   const { url } = useLocation()
   const isLoggedIn = auth.value.token
-  const isAdmin = auth.value.is_admin
-  const visible = usePageVisibility()
-  const primaryLinks = NAV_LINKS_PRIMARY.filter((link) => visible(link.href))
-  const sharingLinks = SHARING_LINKS.filter((link) => visible(link.href))
-  const secondaryLinks = NAV_LINKS_SECONDARY.filter((link) => visible(link.href))
-  const dataSourceLinks = DATA_SOURCE_LINKS.filter((link) => visible(link.path))
   const canSignup = signupMode.value === 'open'
 
   useEffect(() => {
@@ -33,9 +19,7 @@ export function Sidebar() {
   }, [isLoggedIn])
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === '1')
-  const [dsExpanded, setDsExpanded] = useState(() => url.startsWith('/data-sources'))
-  // Sharing group is open by default so its surfaces stay one click away.
-  const [sharingExpanded, setSharingExpanded] = useState(true)
+  const [editing, setEditing] = useState(false)
 
   const toggleCollapsed = () => {
     const next = !collapsed
@@ -50,11 +34,8 @@ export function Sidebar() {
     logout()
   }
 
-  const isDataSourcesActive = url.startsWith('/data-sources')
-  const sharingActive = isSharingActive(url)
-
   return (
-    <aside class={`sidebar${collapsed ? ' collapsed' : ''}`}>
+    <aside class={`sidebar${collapsed && !editing ? ' collapsed' : ''}`}>
       <div class="sidebar-header">
         <a href="/" class="sidebar-brand" aria-label="Aurboda home">
           Aurboda
@@ -73,121 +54,21 @@ export function Sidebar() {
       <nav class="sidebar-nav">
         {isLoggedIn ? (
           <>
-            {primaryLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                title={collapsed ? link.label : undefined}
-              >
-                <span class="sidebar-icon">{link.icon}</span>
-                <span class="sidebar-label">{link.label}</span>
-              </a>
-            ))}
-
-            {sharingLinks.length > 0 &&
-              (collapsed ? (
-                sharingLinks.map((link) => (
-                  <a
-                    key={link.href}
-                    href={link.href}
-                    class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                    title={link.label}
-                  >
-                    <span class="sidebar-icon">{link.icon}</span>
-                    <span class="sidebar-label">{link.label}</span>
-                  </a>
-                ))
-              ) : (
-                <>
-                  <button
-                    class={`sidebar-section-btn${sharingActive ? ' active' : ''}`}
-                    onClick={() => setSharingExpanded((v) => !v)}
-                    type="button"
-                  >
-                    <span class="sidebar-icon">🌐</span>
-                    <span class="sidebar-label">Sharing</span>
-                    <span class="sidebar-section-arrow">{sharingExpanded ? '▴' : '▾'}</span>
-                  </button>
-                  {sharingExpanded && (
-                    <div class="sidebar-sub-links">
-                      {sharingLinks.map((link) => (
-                        <a
-                          key={link.href}
-                          href={link.href}
-                          class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                        >
-                          <span class="sidebar-icon">{link.icon}</span>
-                          <span class="sidebar-label">{link.label}</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ))}
-
-            {secondaryLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                class={`sidebar-link${url === link.href ? ' active' : ''}`}
-                title={collapsed ? link.label : undefined}
-              >
-                <span class="sidebar-icon">{link.icon}</span>
-                <span class="sidebar-label">{link.label}</span>
-              </a>
-            ))}
-
-            {dataSourceLinks.length > 0 &&
-              (collapsed ? (
-                <a
-                  href={
-                    dataSourceLinks.find((link) => link.path === '/data-sources')?.path ??
-                    dataSourceLinks[0].path
-                  }
-                  class={`sidebar-link${isDataSourcesActive ? ' active' : ''}`}
-                  title="Data Sources"
-                >
-                  <span class="sidebar-icon">📡</span>
-                  <span class="sidebar-label">Data Sources</span>
+            <SidebarNavigation
+              url={url}
+              collapsed={collapsed}
+              onEditingChange={setEditing}
+              beforeReorganize={
+                <a href="/settings" class="sidebar-link sidebar-account" title={auth.value.user}>
+                  <span class="sidebar-icon">👤</span>
+                  <span class="sidebar-label">{auth.value.user}</span>
                 </a>
-              ) : (
-                <>
-                  <button
-                    class={`sidebar-section-btn${isDataSourcesActive ? ' active' : ''}`}
-                    onClick={() => setDsExpanded((v) => !v)}
-                    type="button"
-                  >
-                    <span class="sidebar-icon">📡</span>
-                    <span class="sidebar-label">Data Sources</span>
-                    <span class="sidebar-section-arrow">{dsExpanded ? '▴' : '▾'}</span>
-                  </button>
-                  {dsExpanded && (
-                    <div class="sidebar-sub-links">
-                      {dataSourceLinks.map((link) => (
-                        <a
-                          key={link.path}
-                          href={link.path}
-                          class={`sidebar-link${url === link.path ? ' active' : ''}`}
-                        >
-                          <span class="sidebar-label">{link.label}</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ))}
-
-            {isAdmin && visible('/admin') && (
-              <a
-                href="/admin"
-                class={`sidebar-link${url === '/admin' ? ' active' : ''}`}
-                title={collapsed ? 'Admin' : undefined}
-              >
-                <span class="sidebar-icon">⚙️</span>
-                <span class="sidebar-label">Admin</span>
-              </a>
-            )}
+              }
+            />
+            <a href="#" class="sidebar-link" onClick={handleLogout}>
+              <span class="sidebar-icon">🚪</span>
+              <span class="sidebar-label">Logout</span>
+            </a>
           </>
         ) : (
           <>
@@ -212,41 +93,6 @@ export function Sidebar() {
           </>
         )}
       </nav>
-
-      {isLoggedIn && (
-        <div class="sidebar-footer">
-          {visible(HELP_LINK.href) && (
-            <a
-              href={HELP_LINK.href}
-              class={`sidebar-link${url === HELP_LINK.href ? ' active' : ''}`}
-              title={collapsed ? HELP_LINK.label : undefined}
-            >
-              <span class="sidebar-icon">{HELP_LINK.icon}</span>
-              <span class="sidebar-label">{HELP_LINK.label}</span>
-            </a>
-          )}
-          <a
-            href="/settings"
-            class={`sidebar-link${url === '/settings' ? ' active' : ''}`}
-            title={collapsed ? 'Settings' : undefined}
-          >
-            <span class="sidebar-icon">⚙</span>
-            <span class="sidebar-label">Settings</span>
-          </a>
-          <a
-            href="/settings"
-            class={`sidebar-link${url === '/settings' ? ' active' : ''}`}
-            title={collapsed ? auth.value.user : undefined}
-          >
-            <span class="sidebar-icon">👤</span>
-            <span class="sidebar-label">{auth.value.user}</span>
-          </a>
-          <a href="#" class="sidebar-link" onClick={handleLogout}>
-            <span class="sidebar-icon">🚪</span>
-            <span class="sidebar-label">Logout</span>
-          </a>
-        </div>
-      )}
     </aside>
   )
 }

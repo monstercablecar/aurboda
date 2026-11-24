@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import * as webpush from 'web-push'
 
 import { deleteBrowserPush, getBrowserPush, listBrowserPush, saveBrowserPush } from '../db/browser-push.ts'
+import { query } from '../db/connection.ts'
 import { httpError } from '../http-error.ts'
 
 interface PushConfiguration {
@@ -140,3 +141,35 @@ export const createPeopleReminderSender =
     )
     return outcomes.includes('accepted') ? 'accepted' : outcomes.includes('retry') ? 'retry' : 'unavailable'
   }
+
+export const sendStoredNotification = async (
+  user: string,
+  subscriptionId: string,
+  notificationId: string,
+): Promise<'accepted' | 'retry' | 'unavailable'> => {
+  const config = browserPushConfiguration()
+  if (!config) return 'unavailable'
+  const eligible = await query(
+    user,
+    'SELECT n.id FROM notifications n LEFT JOIN notification_preferences p ON p.type=n.type WHERE n.id=$1 AND n.push AND n.read_at IS NULL AND COALESCE(p.push,true)',
+    [notificationId],
+  )
+  if (!eligible.rowCount) return 'unavailable'
+  const subscription = await getBrowserPush(user, subscriptionId)
+  if (!subscription || !browserPushSubscriptionSchema.safeParse(subscription).success) return 'unavailable'
+  try {
+    await webpush.sendNotification(
+      subscription,
+      JSON.stringify({ kind: 'notification', tag: notificationId }),
+      { vapidDetails: config, TTL: 300, timeout: 5000 },
+    )
+    return 'accepted'
+  } catch (error) {
+    const status = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined
+    if (status === 404 || status === 410) {
+      await deleteBrowserPush(user, subscriptionId)
+      return 'unavailable'
+    }
+    return 'retry'
+  }
+}

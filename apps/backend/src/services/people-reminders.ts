@@ -89,3 +89,7 @@ export const createPeopleReminderScheduler = async (boss: PgBoss, listUsers: () 
   })
   schedulerReady = true
 }
+
+export const setPeopleReminderSchedulerReady = (value: boolean) => {
+  schedulerReady = value
+}

@@ -1,0 +1,24 @@
+:root {
+  --color-surface-raised: var(--color-surface);
+  --color-surface-sunken: var(--color-bg);
+  --color-surface-strong-2: var(--color-border);
+  --color-text-strong: var(--color-text);
+  --color-text-muted-2: var(--color-text-muted);
+  --color-success-soft: var(--color-accent-soft);
+  --color-warning-soft: var(--color-accent-soft);
+  --color-warning-text: var(--color-text);
+  --color-warning-text-2: var(--color-cta);
+  --gray-200: var(--color-border);
+  --gray-300: var(--color-text-muted);
+  --gray-400: var(--color-text-muted);
+  --gray-500: var(--color-text-muted);
+  --gray-600: var(--color-text-muted);
+  --gray-700: var(--color-border);
+  --green-300: var(--color-accent-border);
+  --green-600: var(--color-accent);
+  --green-800: var(--color-accent-border);
+  --red-400: #e06464;
+  --red-600: #b42318;
+  --white: #ffffff;
+  --black-a20: rgb(0 0 0 / 20%);
+}

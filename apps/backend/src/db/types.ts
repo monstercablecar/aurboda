@@ -460,6 +460,7 @@ export interface UserSettings {
   feed_default_tags?: string[] // Hashtags every feed post gets automatically (lowercase, no `#`)
   feed_type_tag?: boolean // Whether a share also gets its activity type / exercise / `challenge` as a hashtag
   hidden_pages?: string[]
+  sidebar_order?: string[]
   hr_zone_start?: { 1: number; 2: number; 3: number; 4: number; 5: number }
   lastfm_username?: string // Last.fm username for scrobble sync
   maf_hr?: number // Low-HR (MAF) ceiling in bpm; falls back to the zone-2 upper bound

@@ -154,6 +154,7 @@ describe('getSettingsResponse', () => {
     expect(result.onboarding_manual_done).toEqual([])
     expect(result.onboarding_progress).toEqual({})
     expect(result.hidden_pages).toEqual([])
+    expect(result.sidebar_order).toEqual([])
   })
 
   test('passes stored get-started guide state through', async () => {
@@ -502,6 +503,35 @@ describe('validateAndUpdateSettings', () => {
     await validateAndUpdateSettings('testuser', { hidden_pages: [] })
     expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', { hidden_pages: [] }, [])
   })
+
+  test('persists sidebar order without resetting visibility or onboarding and clears with null', async () => {
+    vi.mocked(db.getUserSettings).mockResolvedValue({ sidebar_order: ['group:sharing', '/work', '/future'] })
+    vi.mocked(db.upsertUserSettings).mockResolvedValue({
+      sidebar_order: ['group:sharing', '/work', '/future'],
+    })
+    vi.mocked(db.getOAuthToken).mockResolvedValue(null)
+    const result = await validateAndUpdateSettings('testuser', {
+      sidebar_order: ['group:sharing', '/work', '/future'],
+    })
+    expect(result.sidebar_order).toEqual(['group:sharing', '/work', '/future'])
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith(
+      'testuser',
+      { sidebar_order: ['group:sharing', '/work', '/future'] },
+      [],
+    )
+    await validateAndUpdateSettings('testuser', { sidebar_order: null })
+    expect(db.upsertUserSettings).toHaveBeenLastCalledWith('testuser', {}, ['sidebar_order'])
+  })
+
+  test.each([['/work', '/work'], ['relative'], ['//example.com'], ['group:bad key']])(
+    'rejects invalid sidebar order: %s',
+    async (...keys) => {
+      vi.mocked(db.upsertUserSettings).mockClear()
+      const result = await validateAndUpdateSettings('testuser', { sidebar_order: keys })
+      expect(result.success).toBe(false)
+      expect(db.upsertUserSettings).not.toHaveBeenCalled()
+    },
+  )
 
   test.each([['relative'], ['https://example.com'], ['//example.com'], ['/data?query'], ['/white space']])(
     'rejects invalid hidden menu paths: %s',

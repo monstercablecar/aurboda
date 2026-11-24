@@ -3,8 +3,16 @@ import { Client } from 'pg'
 import format from 'pg-format'
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, test } from 'vitest'
 
-import { isInvalidPasswordError, loginToUserDb, setUserPassword, userDbName } from '../db/index.ts'
+import {
+  createUserRole,
+  isInvalidPasswordError,
+  loginToUserDb,
+  setUserPassword,
+  userDbName,
+} from '../db/index.ts'
 import { createRolePool, type UserDb, withTransaction } from '../db/pool.ts'
+import { scramSha256Verifier } from '../db/scram.ts'
+import { scramPasswordCases } from '../test/scram-password-cases.ts'
 import { type CentralDb, createCentralDb } from './central-db.ts'
 
 const CONTAINER_TIMEOUT = 120_000
@@ -118,6 +126,31 @@ describe('account_email_tokens', () => {
     expect(await centralDb.consumeAccountEmailToken('unknown', 'reset')).toBeNull()
   })
 
+  test('a use that fails leaves the token unused', async () => {
+    await issue('h2')
+    await expect(
+      centralDb.consumeAccountEmailToken('h2', 'reset', async () => {
+        throw new Error('password not saved')
+      }),
+    ).rejects.toThrow('password not saved')
+    expect(await centralDb.consumeAccountEmailToken('h2', 'reset')).not.toBeNull()
+  })
+
+  test('two concurrent uses of one token: only one runs and succeeds', async () => {
+    await issue('h3')
+    let uses = 0
+    const use = async () => {
+      uses++
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    const results = await Promise.all([
+      centralDb.consumeAccountEmailToken('h3', 'reset', use),
+      centralDb.consumeAccountEmailToken('h3', 'reset', use),
+    ])
+    expect(results.filter((r) => r !== null)).toHaveLength(1)
+    expect(uses).toBe(1)
+  })
+
   test('an expired token is refused and pruned at the next issue', async () => {
     await issue('old', 'verify', new Date(Date.now() - 1000))
     expect(await centralDb.consumeAccountEmailToken('old', 'verify')).toBeNull()
@@ -147,11 +180,11 @@ describe('account_email_tokens', () => {
   })
 })
 
-describe('setUserPassword', () => {
+describe('createUserRole and setUserPassword', () => {
   const user = `pw_${suffix}`
 
   beforeAll(async () => {
-    await admin.query(format('CREATE USER %I WITH ENCRYPTED PASSWORD %L', user, 'old password'))
+    await createUserRole(admin, user, 'old password')
     await admin.query(format('CREATE DATABASE %I OWNER %I', userDbName(user), user))
   })
 
@@ -184,12 +217,74 @@ describe('setUserPassword', () => {
       ),
     )
 
+  const storedPassword = async () =>
+    (
+      await admin.query<{ rolpassword: string }>('SELECT rolpassword FROM pg_authid WHERE rolname = $1', [
+        user,
+      ])
+    ).rows[0].rolpassword
+
+  test('the server stores SCRAM verifiers, which the role is created with', async () => {
+    const { rows } = await admin.query<{ password_encryption: string }>('SHOW password_encryption')
+    expect(rows[0].password_encryption).toBe('scram-sha-256')
+    expect(await storedPassword()).toMatch(/^SCRAM-SHA-256\$4096:/)
+    expect(await loginError('old password')).toBeNull()
+  })
+
   test('after a reset, the new password signs in and the old one does not', async () => {
     expect(await loginError('old password')).toBeNull()
     await setUserPassword(admin, user, "new 'password'")
     expect(await loginError("new 'password'")).toBeNull()
     expect(isInvalidPasswordError(await loginError('old password'))).toBe(true)
+    expect(await storedPassword()).toMatch(/^SCRAM-SHA-256\$4096:/)
   })
+
+  test('a non-ASCII password signs in', async () => {
+    await setUserPassword(admin, user, 'lösenord ✓')
+    expect(await loginError('lösenord ✓')).toBeNull()
+    await setUserPassword(admin, user, 'old password')
+  })
+
+  test.each(scramPasswordCases)(
+    'create/reset and legacy login: $name',
+    async ({ name, password, prepared }) => {
+      const candidate = `sasl_${suffix}_${scramPasswordCases.findIndex((item) => item.name === name)}`
+      const readVerifier = async () =>
+        (
+          await admin.query<{ rolpassword: string }>('SELECT rolpassword FROM pg_authid WHERE rolname=$1', [
+            candidate,
+          ])
+        ).rows[0].rolpassword
+      const login = (value: string) => withServerEnv(() => loginToUserDb(candidate, value))
+      try {
+        await createUserRole(admin, candidate, password)
+        await admin.query(
+          format('CREATE DATABASE %I OWNER %I TEMPLATE template0', userDbName(candidate), candidate),
+        )
+        await expect(login(password)).resolves.toBeUndefined()
+        await expect(login(prepared)).resolves.toBeUndefined()
+        await setUserPassword(admin, candidate, 'different synthetic previous password')
+        await setUserPassword(admin, candidate, password)
+        await expect(login(password)).resolves.toBeUndefined()
+        await expect(login('different synthetic previous password')).rejects.toMatchObject({ code: '28P01' })
+
+        // The oracle deliberately sends only synthetic fixture passwords to the disposable
+        // server. Production CREATE/ALTER continue to send precomputed verifiers only.
+        await admin.query(format('ALTER USER %I WITH PASSWORD %L', candidate, password))
+        const reference = await readVerifier()
+        const match = /^SCRAM-SHA-256\$(\d+):([^$]+)\$/.exec(reference)
+        if (!match) throw new Error('PostgreSQL did not store a SCRAM verifier')
+        expect(scramSha256Verifier(password, Buffer.from(match[2]!, 'base64'), Number(match[1]))).toBe(
+          reference,
+        )
+        // Previously created PostgreSQL credentials must remain readable by patched pg.
+        await expect(login(password)).resolves.toBeUndefined()
+      } finally {
+        await admin.query(format('DROP DATABASE IF EXISTS %I WITH (FORCE)', userDbName(candidate)))
+        await admin.query(format('DROP USER IF EXISTS %I', candidate))
+      }
+    },
+  )
 
   test('refuses an empty password', async () => {
     await expect(setUserPassword(admin, user, '')).rejects.toThrow('must not be empty')

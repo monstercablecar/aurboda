@@ -55,7 +55,7 @@ export const journalWorkbookStateSchema = z.object({
   status: z.enum(['in_progress', 'completed', 'archived']),
 })
 export const journalLinkSchema = z.object({
-  kind: z.enum(['person', 'questionnaire', 'event', 'entry']),
+  kind: z.enum(['person', 'activity', 'questionnaire', 'event', 'entry']),
   record_id: z.string().min(1).max(200),
   label: z.string().max(200),
 })
@@ -99,6 +99,8 @@ export const updateJournalEntryBodySchema = z
 export const journalEntriesQuerySchema = z
   .object({
     search: z.string().max(200).optional(),
+    related_kind: z.enum(['person', 'activity']).optional(),
+    related_id: id.optional(),
     area_id: z.union([id, z.literal('general')]).optional(),
     tag: z.string().max(50).optional(),
     from: stamp.optional(),
@@ -248,3 +250,19 @@ export const journalAttachmentBytesResponseSchema = z
   .meta({ id: 'JournalAttachmentBytesResponse' })
 export type CreateJournalAttachmentBody = z.infer<typeof createJournalAttachmentBodySchema>
 export type JournalAttachmentBytesResponse = z.infer<typeof journalAttachmentBytesResponseSchema>
+
+export const mergeJournalTagsBodySchema = z
+  .object({ from: z.string().trim().min(1).max(50), to: z.string().trim().min(1).max(50) })
+  .meta({ id: 'MergeJournalTagsBody' })
+export const mergeJournalTagsResponseSchema = z
+  .object({ success: z.literal(true), data: z.object({ updated: z.number().int() }) })
+  .meta({ id: 'MergeJournalTagsResponse' })
+export const journalNeighborsResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: z.object({ previous: journalEntrySchema.nullable(), next: journalEntrySchema.nullable() }),
+  })
+  .meta({ id: 'JournalNeighborsResponse' })
+export type MergeJournalTagsBody = z.infer<typeof mergeJournalTagsBodySchema>
+export type MergeJournalTagsResponse = z.infer<typeof mergeJournalTagsResponseSchema>
+export type JournalNeighborsResponse = z.infer<typeof journalNeighborsResponseSchema>

@@ -25,7 +25,7 @@ Check `git status` and identify the checkout/deployment target before changing a
 
 ## Page visibility
 
-When adding a menu page, add its entry to the shared navigation lists in `apps/web/src/components/nav-links.ts`. Feature Control discovers these entries automatically. A concise `description` is encouraged for hover/focus help, but is optional: an undescribed page must still be hideable. Preserve Settings recovery and do not use visibility preferences as authorization or to stop tracking. See [Feature Control](docs/feature-control.md).
+When adding a menu page, add its entry to the shared navigation lists in `apps/web/src/components/nav-links.ts`. The sidebar Reorganize editor and onboarding Feature Control discover these entries automatically. A concise `description` is encouraged for hover/focus help, but is optional: an undescribed page must still be hideable. Preserve Settings recovery and do not use visibility preferences as authorization or to stop tracking. See [Feature Control](docs/feature-control.md).
 
 ## Repository structure
 
@@ -51,6 +51,8 @@ The REST API and MCP tools should have the same capabilities:
   twin; REST's equivalent is the OpenAPI document
 
 When adding new features, implement both the MCP tool and REST API endpoint.
+
+Local privacy exception: Family Photos (`docs/family-photos.md`) is REST-only. Never add it to MCP, public OpenAPI paths, personal exports, Feed or federation. Membership stays outside broad account serialization.
 
 ## Native (Android) and Web Parity
 

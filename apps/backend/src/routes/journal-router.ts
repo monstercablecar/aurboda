@@ -10,6 +10,21 @@ import { validateBody, validateQuery } from '../validation.ts'
 
 export const createJournalRouter = (auth: AnyMiddleware) => {
   const router = typedRouter()
+  router.post<Record<string, never>, spec.MergeJournalTagsResponse, spec.MergeJournalTagsBody>(
+    '/tags/merge',
+    auth,
+    validateBody(spec.mergeJournalTagsBodySchema),
+    async (req, res) => {
+      res.json({ success: true, data: await service.mergeJournalTags(req.user!, req.body) })
+    },
+  )
+  router.get<{ id: string }, spec.JournalNeighborsResponse>(
+    '/entries/:id/neighbors',
+    auth,
+    async (req, res) => {
+      res.json({ success: true, data: await service.getJournalNeighbors(req.user!, req.params.id) })
+    },
+  )
   const validId: AnyMiddleware = (req, _res, next) => {
     if (!z.uuid().safeParse(req.params.id).success) return next(httpError(400, 'Invalid journal identifier'))
     next()

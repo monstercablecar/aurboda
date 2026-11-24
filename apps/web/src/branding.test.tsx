@@ -12,6 +12,11 @@ import { auth } from './state/auth'
 let currentUrl = '/people'
 vi.mock('preact-iso', () => ({ useLocation: () => ({ url: currentUrl }) }))
 vi.mock('./components/usePageVisibility', () => ({ usePageVisibility: () => () => true }))
+vi.mock('./state/api', () => ({
+  fetchUserSettings: vi.fn(async () => ({ success: true, hidden_pages: [], sidebar_order: [] })),
+  updateUserSettings: vi.fn(),
+}))
+vi.mock('./state/api/family-photos', () => ({ useFamilyAccess: () => ({ data: { allowed: false } }) }))
 vi.mock('./state/auth', () => ({
   auth: signal<{ token?: string; user?: string; is_admin?: boolean }>({}),
   ensureStatusLoaded: vi.fn(),
@@ -69,7 +74,7 @@ test('shell retains Aurboda across login, private and public navigation, and log
   }
   show('/people', true)
   expect(container.querySelector('.sidebar-nav a[href="/people"]')).not.toBeNull()
-  const logout = container.querySelector<HTMLAnchorElement>('.sidebar-footer a[href="#"]')
+  const logout = container.querySelector<HTMLAnchorElement>('.sidebar-nav a[href="#"]')
   if (!logout) throw new Error('Missing logout link')
   act(() => logout.click())
   expect(container.querySelectorAll('a[aria-label="Aurboda home"]')).toHaveLength(2)
@@ -84,8 +89,10 @@ test('sidebar collapse still toggles without changing navigation', () => {
   act(() => container.querySelector<HTMLButtonElement>('.sidebar-toggle')?.click())
   expect(container.querySelector('.sidebar.collapsed')).not.toBeNull()
   expect(container.querySelector('.sidebar-toggle')?.getAttribute('title')).toBe('Expand sidebar')
-  expect([...container.querySelectorAll('.sidebar-nav a')].map((link) => link.getAttribute('href'))).toEqual([
-    ...links,
-    '/data-sources',
-  ])
+  expect(
+    [...container.querySelectorAll('.sidebar-nav a')]
+      .map((link) => link.getAttribute('href'))
+      .filter((href) => href !== '/data-sources'),
+  ).toEqual(links)
+  expect(container.querySelector('.sidebar-nav a[href="/data-sources"]')).not.toBeNull()
 })

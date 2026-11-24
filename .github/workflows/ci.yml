@@ -32,6 +32,8 @@ jobs:
               - 'packages/api-spec/**'
               - 'scripts/**'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
               - '.github/workflows/ci.yml'
             android:
               - 'apps/android/**'
@@ -88,6 +90,17 @@ jobs:
 
       - name: Run TypeScript checks and lint
         run: pnpm check
+
+      - name: Install media test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-x265 libheif-plugin-libde265
+          encoder_probe_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$encoder_probe_dir"' EXIT
+          ffmpeg -nostdin -v error -f lavfi -i color=c=blue:s=40x24:d=0.1 -frames:v 1 -threads 1 "$encoder_probe_dir/input.png"
+          heif-enc -q 70 -o "$encoder_probe_dir/probe.heic" "$encoder_probe_dir/input.png"
+          heif-convert "$encoder_probe_dir/probe.heic" "$encoder_probe_dir/roundtrip.png"
+          test -s "$encoder_probe_dir/roundtrip.png"
 
       - name: Run backend tests
         run: pnpm --filter aurboda-backend test

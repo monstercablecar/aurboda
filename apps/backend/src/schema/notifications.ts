@@ -30,6 +30,9 @@ export const notificationsTables: Record<string, string> = {
   notifications_actions: `
     ALTER TABLE notifications ADD COLUMN IF NOT EXISTS actions JSONB NOT NULL DEFAULT '[]'
   `,
+  notifications_live_events: `CREATE OR REPLACE FUNCTION notify_private_notification_change() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_notify('timeline_updates',''); RETURN NULL; END $$; DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='notifications_live_events' AND tgrelid='notifications'::regclass) THEN CREATE TRIGGER notifications_live_events AFTER INSERT OR UPDATE OR DELETE ON notifications FOR EACH STATEMENT EXECUTE FUNCTION notify_private_notification_change(); END IF; END $$`,
+  notification_delivery_state: `CREATE TABLE IF NOT EXISTS notification_delivery_state(singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK(singleton),not_before TIMESTAMPTZ NOT NULL); INSERT INTO notification_delivery_state(singleton,not_before) VALUES(true,NOW()) ON CONFLICT DO NOTHING`,
+  notification_browser_deliveries: `CREATE TABLE IF NOT EXISTS notification_browser_deliveries(notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,subscription_id UUID NOT NULL REFERENCES browser_push_subscriptions(id) ON DELETE CASCADE,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','delivered','expired')),attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(notification_id,subscription_id))`,
   notifications_indexes: `
     CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications (created_at DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (created_at DESC) WHERE read_at IS NULL

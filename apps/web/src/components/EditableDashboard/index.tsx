@@ -17,10 +17,16 @@ import type { TargetedDragEvent } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 
 import { DashboardEditor } from '../DashboardEditor'
+import {
+  DAY_OVERVIEW_VISITOR_WARNING,
+  RECENT_ACTIVITIES_VISITOR_WARNING,
+  VisibleToVisitorsField,
+} from '../DashboardEditor/VisibleToVisitorsField'
 import { PublicWidgetRenderer, WidgetRenderer } from '../widgets'
 import { useCustomMetricDefinitions } from '../widgets/useMetricBetter'
 import { dropWidget, type DropTarget, moveSection, moveWidget } from './moveWidget'
 import { useVisibleSections } from './useWaitingWidgets'
+import { setVisibleToVisitors } from './visibleToVisitors'
 
 const generateSectionId = () => `section-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
@@ -171,6 +177,26 @@ export const withPeriod = (config: DashboardConfig, granularity: '' | PeriodGran
   return granularity ? { ...rest, period: { granularity } } : rest
 }
 
+/** The in-place "Show to visitors" switch of the cards kept from visitors unless the owner opts in. */
+function VisitorSwitch({
+  onChange,
+  widget,
+}: {
+  onChange: (visible: boolean) => void
+  widget: DashboardWidget
+}) {
+  if (widget.type !== 'day_overview' && widget.type !== 'recent_activities') return null
+  return (
+    <VisibleToVisitorsField
+      checked={widget.config.visible_to_visitors === true}
+      onChange={onChange}
+      warning={
+        widget.type === 'day_overview' ? DAY_OVERVIEW_VISITOR_WARNING : RECENT_ACTIVITIES_VISITOR_WARNING
+      }
+    />
+  )
+}
+
 function DashboardSectionComponent({
   section,
   isEditing,
@@ -181,6 +207,7 @@ function DashboardSectionComponent({
   customMetrics,
   onRemoveWidget,
   onMoveWidget,
+  onSetVisibleToVisitors,
   onAddWidgetClick,
   onDeleteSection,
   onRenameSection,
@@ -196,6 +223,7 @@ function DashboardSectionComponent({
   periodLabel?: string
   customMetrics?: CustomMetricDefinition[]
   onRemoveWidget?: (widgetId: string) => void
+  onSetVisibleToVisitors?: (widgetId: string, visible: boolean) => void
   onMoveWidget?: (widgetId: string, direction: 'up' | 'down') => void
   onAddWidgetClick?: () => void
   onDeleteSection?: () => void
@@ -369,6 +397,12 @@ function DashboardSectionComponent({
                   </button>
                 </div>
               )}
+              {isEditing && boardId !== 'home' && (
+                <VisitorSwitch
+                  widget={widget}
+                  onChange={(visible) => onSetVisibleToVisitors?.(widget.id, visible)}
+                />
+              )}
               {widgetData &&
               widgetDataLoading &&
               widget.type !== 'quick_link' &&
@@ -380,6 +414,7 @@ function DashboardSectionComponent({
                   data={widgetData[widget.id]}
                   periodLabel={periodLabel}
                   customMetrics={customMetrics}
+                  ownerNote={boardId !== 'home' ? 'Only you see this card' : undefined}
                 />
               ) : (
                 <WidgetRenderer widget={widget} boardId={boardId} sectionId={section.id} />
@@ -686,6 +721,9 @@ export function EditableDashboard({
           periodLabel={periodLabel}
           customMetrics={customMetrics}
           onRemoveWidget={(widgetId) => handleRemoveWidget(section.id, widgetId)}
+          onSetVisibleToVisitors={(widgetId, visible) =>
+            onChange(setVisibleToVisitors(config, widgetId, visible))
+          }
           onMoveWidget={(widgetId, direction) => handleMoveWidget(section.id, widgetId, direction)}
           onAddWidgetClick={() => setShowWidgetPicker(section.id)}
           onDeleteSection={() => handleDeleteSection(section.id)}

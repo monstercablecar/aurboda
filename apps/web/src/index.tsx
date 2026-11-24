@@ -1,3 +1,4 @@
+import './integration-theme.css'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import axios from 'axios'
 import { render } from 'preact'
@@ -52,6 +53,9 @@ const HomeAssistantSource = lazyPage(
   () => import('./pages/DataSources/HomeAssistantSource.jsx'),
   'HomeAssistantSource',
 )
+const CheckIns = lazyPage(() => import('./pages/CheckIns/index.jsx'), 'CheckIns')
+const CheckInEditor = lazyPage(() => import('./pages/CheckIns/Editor.jsx'), 'CheckInEditor')
+const CheckInFill = lazyPage(() => import('./pages/CheckIns/FillIn.jsx'), 'CheckInFill')
 const DataSources = lazyPage(() => import('./pages/DataSources/index.jsx'), 'DataSources')
 const LastFmSource = lazyPage(() => import('./pages/DataSources/LastFmSource.jsx'), 'LastFmSource')
 const OuraSource = lazyPage(() => import('./pages/DataSources/OuraSource.jsx'), 'OuraSource')
@@ -120,6 +124,7 @@ const Timeline = lazyPage(() => import('./pages/Timeline/index.jsx'), 'Timeline'
 const Assessments = lazyPage(() => import('./pages/Assessments/index'), 'Assessments')
 const Treatments = lazyPage(() => import('./pages/Treatments/index'), 'Treatments')
 const CPAP = lazyPage(() => import('./pages/CPAP/index'), 'CPAP')
+const FamilyPhotos = lazyPage(() => import('./pages/FamilyPhotos/index'), 'FamilyPhotos')
 const Resources = lazyPage(() => import('./pages/Resources/index'), 'Resources')
 const Journal = lazyPage(() => import('./pages/Journal/index'), 'Journal')
 const People = lazyPage(() => import('./pages/People/index'), 'People')
@@ -174,8 +179,13 @@ function AppShell() {
             <Route path="/people" component={People} />
             <Route path="/journal" component={Journal} />
             <Route path="/journal/prompted" component={Journal} />
+            <Route path="/family-photos" component={FamilyPhotos} />
             <Route path="/resources" component={Resources} />
             <Route path="/assessments" component={Assessments} />
+            <Route path="/check-ins/new" component={CheckInEditor} />
+            <Route path="/check-ins/:id/edit" component={CheckInEditor} />
+            <Route path="/check-ins/:id" component={CheckInFill} />
+            <Route path="/check-ins" component={CheckIns} />
             <Route path="/treatments" component={Treatments} />
             <Route path="/simple-food" component={SimpleFood} />
             <Route path="/timeline" component={Timeline} />

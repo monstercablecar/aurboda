@@ -13,6 +13,7 @@ import * as db from './db/index.ts'
 import { createMcpRouter, trimToolCallArguments } from './mcp.ts'
 import * as activityRecords from './services/activity-records.ts'
 import * as dataPresence from './services/data-presence.ts'
+import * as dataSourcesOverview from './services/data-sources-overview.ts'
 import * as latestSleep from './services/latest-sleep.ts'
 import * as mutations from './services/mutations.ts'
 import { PeriodError } from './services/periods.ts'
@@ -26,6 +27,7 @@ vi.mock('./services/queries/index', async () => ({
   getDailySummary: vi.fn(),
   getPeriodSummary: vi.fn(),
   getPlacesSummary: vi.fn(),
+  getRecentActivities: vi.fn(),
   getTopApps: vi.fn(),
   getTopMedia: vi.fn(),
   parseActivityId: (raw: string) => ({
@@ -148,6 +150,10 @@ vi.mock('./services/data-presence', () => ({
   queryDataPresence: vi.fn(),
 }))
 
+vi.mock('./services/data-sources-overview', () => ({
+  getDataSourcesOverview: vi.fn(),
+}))
+
 vi.mock('./oura-sync', () => ({
   syncAllOuraData: vi.fn(),
 }))
@@ -201,6 +207,18 @@ describe('MCP Server', () => {
 
       expect(response.status).toBe(401)
       expect(response.body.error).toBe('Unauthorized')
+      expect(response.headers['www-authenticate']).toBeUndefined()
+    })
+
+    test('401 points to the protected resource metadata when the host is known', async () => {
+      const app = express()
+      app.use('/mcp', createMcpRouter(auth, { webHost: 'https://aurboda.test' }))
+      const response = await mcpPost(app).send({ id: 1, jsonrpc: '2.0', method: 'initialize' })
+
+      expect(response.status).toBe(401)
+      expect(response.headers['www-authenticate']).toBe(
+        'Bearer resource_metadata="https://aurboda.test/.well-known/oauth-protected-resource/mcp"',
+      )
     })
 
     test('returns 401 with invalid token', async () => {
@@ -1140,6 +1158,7 @@ describe('MCP Server', () => {
         'testuser',
         defaultDashboardConfig,
         '2026-10',
+        'owner',
       )
     })
 
@@ -1168,6 +1187,35 @@ describe('MCP Server', () => {
         activity_types: 'sleep',
         metrics: 'hrv_rmssd',
       })
+    })
+
+    test('get_data_sources_overview answers the sources, their kinds and any overlap', async () => {
+      const overview = {
+        groups: [{ id: 'location' as const, label: 'Location' }],
+        kinds: [
+          {
+            active_sources: ['owntracks' as const, 'home_assistant' as const],
+            available_sources: ['owntracks' as const, 'home_assistant' as const],
+            id: 'location' as const,
+            label: 'Location',
+            one_source_enough: true,
+            overlap: true,
+            overlap_hint: "your phone's position",
+          },
+        ],
+        sources: [],
+      }
+      vi.mocked(dataSourcesOverview.getDataSourcesOverview).mockResolvedValueOnce(overview)
+
+      const response = await callTool(
+        createTestApp(),
+        auth.createToken('testuser'),
+        'get_data_sources_overview',
+        {},
+      )
+
+      expect(JSON.parse(response.text)).toEqual(overview)
+      expect(dataSourcesOverview.getDataSourcesOverview).toHaveBeenCalledWith('testuser')
     })
 
     test('get_activity_records rejects a filter field without a value', async () => {
@@ -1210,6 +1258,40 @@ describe('MCP Server', () => {
         end: '2026-10-31T23:59:59Z',
         start: '2026-10-01T00:00:00Z',
       })
+    })
+
+    test('get_recent_activities maps its arguments onto the service', async () => {
+      vi.mocked(queries.getRecentActivities).mockResolvedValue({
+        activities: [
+          {
+            activity_type: 'running',
+            id: 'a1',
+            start_time: '2026-11-21T07:00:00.000Z',
+            type_name: 'Running',
+          },
+        ],
+        tz: 'Europe/Stockholm',
+      })
+
+      const response = await callTool(
+        createTestApp(),
+        auth.createToken('testuser'),
+        'get_recent_activities',
+        {
+          exclude_types: ['walking'],
+          manual_only: true,
+          types: ['exercise'],
+          tz: 'Europe/Stockholm',
+          window: 'latest',
+        },
+      )
+
+      expect(JSON.parse(response.text).data.activities).toHaveLength(1)
+      expect(queries.getRecentActivities).toHaveBeenCalledWith(
+        'testuser',
+        { exclude_types: ['walking'], limit: 5, manual_only: true, types: ['exercise'], window: 'latest' },
+        { tz: 'Europe/Stockholm' },
+      )
     })
 
     test('query_top_media, query_top_apps and get_places_summary map their arguments onto the services', async () => {
