@@ -94,7 +94,7 @@ jobs:
       - name: Install media test tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-x265
+          sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-x265 libheif-plugin-libde265
           encoder_probe_dir="$(mktemp -d)"
           trap 'rm -rf -- "$encoder_probe_dir"' EXIT
           ffmpeg -nostdin -v error -f lavfi -i color=c=blue:s=40x24:d=0.1 -frames:v 1 -threads 1 "$encoder_probe_dir/input.png"

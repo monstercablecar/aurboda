@@ -10,6 +10,14 @@ Every metadata, thumbnail, preview, download, HEAD and range request queries the
 
 The signed-in Home quick-link framework offers **Upload Photo / Video** to administrators and Family Photos to members. The page supports sequential multi-file selection, gallery selection, drag and drop, progress, optional captions, gallery/feed views, type filters, date headings, lazy images, cursor pagination, a swipe/keyboard photo dialog and video seeking. Images and videos use generated, metadata-free derivatives. Capture dates are extracted when recognized; administrators can also set them through the private edit API. EXIF timestamps without a timezone are represented as UTC rather than guessing a location.
 
+## Family album interface
+
+The local album redesign keeps the existing private API and storage boundary. The gallery opens with photos, date headings and quiet type/view controls; administrators reveal the upload panel explicitly (including Home's `#upload` quick entry). Files have individual previews and captions, progress, and retained failures for retry. A queue stops on account change or page exit; temporary browser previews are released on removal or exit and are never persisted.
+
+The full-screen viewer includes arrow/keyboard and photo-only swipe navigation, zoom, a filmstrip and a six-second photo slideshow. Native video gestures remain available for seeking. Captions and administrator actions live in the details panel. Recently removed items show restoration controls without requesting deleted media. The Android browser-download handoff remains required for the existing APK.
+
+Design references: [Google Photos albums](https://support.google.com/photos/answer/6128849?co=GENIE.Platform%3DDesktop&hl=en) for quieter organization/editing, and [Immich features](https://immich.app/features) for timeline, slideshow and drag/drop patterns. These references do not imply full feature parity.
+
 ## Privacy boundary
 
 `/family-photos` is an authenticated REST-only module, exposed by the deployment proxy as `/api/family-photos`. This is an explicit exception to upstream REST/MCP parity. There are no family MCP tools, public OpenAPI paths, feed posts/images, ActivityPub deliveries, public profile/dashboard entries, RSS/Atom items, link previews, personal export attachments or external processing calls. Family membership is deliberately outside broad account serialization, which is also used by MCP. Per-user exports cannot contain the central family library or its binaries.
