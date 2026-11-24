@@ -33,6 +33,23 @@ describe('Settings Integration Tests', () => {
     expect((await getUserSettings(user))?.sex).toBe('male')
   })
 
+  test('sidebar order persists alongside visibility and onboarding, and resets independently', async () => {
+    const user = getTestUser()
+    await upsertUserSettings(user, {
+      hidden_pages: ['/work'],
+      sidebar_order: ['group:sharing', '/future', '/work'],
+    })
+    await upsertUserSettings(user, { onboarding_progress: { feature_control: 'completed' } })
+    expect(await getUserSettings(user)).toMatchObject({
+      hidden_pages: ['/work'],
+      sidebar_order: ['group:sharing', '/future', '/work'],
+      onboarding_progress: { feature_control: 'completed' },
+    })
+    await upsertUserSettings(user, {}, ['sidebar_order'])
+    expect((await getUserSettings(user))?.sidebar_order).toBeUndefined()
+    expect((await getUserSettings(user))?.hidden_pages).toEqual(['/work'])
+  })
+
   describe('persistent onboarding progress', () => {
     test('concurrent different-step updates preserve progress and legacy settings', async () => {
       const user = getTestUser()

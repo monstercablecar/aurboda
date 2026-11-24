@@ -2,37 +2,17 @@ import { useLocation } from 'preact-iso'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 
 import { auth, ensureStatusLoaded, logout, signupMode } from '../state/auth'
-import {
-  DATA_SOURCE_LINKS,
-  HELP_LINK,
-  isSharingActive,
-  NAV_LINKS_PRIMARY,
-  NAV_LINKS_SECONDARY,
-  pageTitleForPath,
-  SHARING_LINKS,
-} from './nav-links'
+import { HELP_LINK, pageTitleForPath } from './nav-links'
 import { NotificationBellLink } from './NotificationBell'
-import { usePageVisibility } from './usePageVisibility'
+import { SidebarNavigation } from './SidebarNavigation'
 
 // eslint-disable-next-line complexity -- navigation component with many branches
 export function Header() {
   const { url } = useLocation()
   const isLoggedIn = auth.value.token
-  const isAdmin = auth.value.is_admin
-  const visible = usePageVisibility()
-  const primaryLinks = NAV_LINKS_PRIMARY.filter((link) => visible(link.href))
-  const sharingLinks = SHARING_LINKS.filter((link) => visible(link.href))
-  const secondaryLinks = NAV_LINKS_SECONDARY.filter((link) => visible(link.href))
-  const dataSourceLinks = DATA_SOURCE_LINKS.filter((link) => visible(link.path))
   const canSignup = signupMode.value === 'open'
 
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [dsExpandedInDrawer, setDsExpandedInDrawer] = useState(false)
-  const [sharingExpandedInDrawer, setSharingExpandedInDrawer] = useState(true)
-
-  const isDataSourcesActive = url.startsWith('/data-sources')
-  const sharingActive = isSharingActive(url)
-
   const handleLogout = (e: Event) => {
     e.preventDefault()
     logout()
@@ -94,95 +74,16 @@ export function Header() {
         </div>
         {isLoggedIn ? (
           <>
-            {visible('/') && (
-              <a href="/" class={url === '/' ? 'active' : undefined} onClick={closeDrawer}>
-                Home
-              </a>
-            )}
-            {primaryLinks
-              .filter((l) => l.href !== '/')
-              .map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  class={url === link.href ? 'active' : undefined}
-                  onClick={closeDrawer}
-                >
-                  {link.label}
+            <SidebarNavigation
+              url={url}
+              drawer
+              onNavigate={closeDrawer}
+              beforeReorganize={
+                <a href="/settings" class="user-link" onClick={closeDrawer}>
+                  {auth.value.user}
                 </a>
-              ))}
-            {sharingLinks.length > 0 && (
-              <button
-                class={`drawer-section-toggle${sharingActive ? ' active' : ''}`}
-                onClick={() => setSharingExpandedInDrawer((v) => !v)}
-                type="button"
-              >
-                Sharing <span class="dropdown-arrow">{sharingExpandedInDrawer ? '▴' : '▾'}</span>
-              </button>
-            )}
-            {sharingExpandedInDrawer &&
-              sharingLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  class={`drawer-sub-link${url === link.href ? ' active' : ''}`}
-                  onClick={closeDrawer}
-                >
-                  {link.label}
-                </a>
-              ))}
-            {secondaryLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                class={url === link.href ? 'active' : undefined}
-                onClick={closeDrawer}
-              >
-                {link.label}
-              </a>
-            ))}
-            {dataSourceLinks.length > 0 && (
-              <button
-                class={`drawer-section-toggle${isDataSourcesActive ? ' active' : ''}`}
-                onClick={() => setDsExpandedInDrawer((v) => !v)}
-                type="button"
-              >
-                Data Sources <span class="dropdown-arrow">{dsExpandedInDrawer ? '\u25B4' : '\u25BE'}</span>
-              </button>
-            )}
-            {dsExpandedInDrawer &&
-              dataSourceLinks.map((link) => (
-                <a
-                  key={link.path}
-                  href={link.path}
-                  class={`drawer-sub-link${url === link.path ? ' active' : ''}`}
-                  onClick={closeDrawer}
-                >
-                  {link.label}
-                </a>
-              ))}
-            {isAdmin && visible('/admin') && (
-              <a href="/admin" class={url === '/admin' ? 'active' : undefined} onClick={closeDrawer}>
-                Admin
-              </a>
-            )}
-            <div class="drawer-spacer" />
-            {visible(HELP_LINK.href) && (
-              <a
-                href={HELP_LINK.href}
-                class={url === HELP_LINK.href ? 'active' : undefined}
-                onClick={closeDrawer}
-              >
-                {HELP_LINK.label}
-              </a>
-            )}
-            <a
-              href="/settings"
-              class={url === '/settings' ? 'active user-link' : 'user-link'}
-              onClick={closeDrawer}
-            >
-              {auth.value.user}
-            </a>
+              }
+            />
             <a href="#" onClick={handleLogout} class="logout-link">
               Logout
             </a>

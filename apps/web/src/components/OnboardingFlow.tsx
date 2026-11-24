@@ -266,7 +266,7 @@ function OptionalTasksHandoff({
   onNavigate,
 }: Pick<OnboardingFlowProps, 'hiddenPages' | 'onNavigate'>) {
   const tasksVisible = isPageVisible('/goals', hiddenPages)
-  const href = tasksVisible ? '/goals?view=board' : '/settings'
+  const href = '/goals?view=board'
   return (
     <aside class="onboarding-handoff" aria-label="Optional next steps">
       <h3>Want to explore more?</h3>
@@ -274,7 +274,7 @@ function OptionalTasksHandoff({
         Tasks includes optional onboarding cards to help you discover features and set up useful baseline
         data. Move one into your workflow when you’re ready, and delete anything you don’t need.
       </p>
-      {!tasksVisible && <p>Open Settings → Feature Control and enable Tasks to show it in your menus.</p>}
+      {!tasksVisible && <p>Turn on Reorganize in the menu and enable Tasks to show it there.</p>}
       <a
         href={href}
         onClick={
@@ -286,7 +286,7 @@ function OptionalTasksHandoff({
             : undefined
         }
       >
-        {tasksVisible ? 'Explore optional cards in Tasks' : 'Open Settings'}
+        Explore optional cards in Tasks
       </a>
     </aside>
   )

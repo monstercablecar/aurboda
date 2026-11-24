@@ -25,7 +25,7 @@ Check `git status` and identify the checkout/deployment target before changing a
 
 ## Page visibility
 
-When adding a menu page, add its entry to the shared navigation lists in `apps/web/src/components/nav-links.ts`. Feature Control discovers these entries automatically. A concise `description` is encouraged for hover/focus help, but is optional: an undescribed page must still be hideable. Preserve Settings recovery and do not use visibility preferences as authorization or to stop tracking. See [Feature Control](docs/feature-control.md).
+When adding a menu page, add its entry to the shared navigation lists in `apps/web/src/components/nav-links.ts`. The sidebar Reorganize editor and onboarding Feature Control discover these entries automatically. A concise `description` is encouraged for hover/focus help, but is optional: an undescribed page must still be hideable. Preserve Settings recovery and do not use visibility preferences as authorization or to stop tracking. See [Feature Control](docs/feature-control.md).
 
 ## Repository structure
 

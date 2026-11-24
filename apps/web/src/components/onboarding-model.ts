@@ -19,7 +19,7 @@ const definitions: Omit<OnboardingStep, 'status'>[] = [
     chapter: 0,
     title: 'What would you like to track?',
     description:
-      'Choose what belongs in your menus. These choices can be changed anytime in Settings → Feature Control.',
+      'Choose what belongs in your menus. These choices can be changed anytime with Reorganize in the menu.',
     manualLabel: 'Continue with these pages',
   },
   {

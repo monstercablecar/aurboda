@@ -10,7 +10,7 @@ export interface OnboardingCard {
 const optional =
   'This is optional. If you already did this, move the card to a Done-category column or use its checkmark. You can complete or delete this card whenever you prefer.'
 const reveal = (page: string) =>
-  `If ${page} is hidden in your menu, open [Settings](/settings) → Feature Control and enable ${page}. Hiding a page changes menu visibility only; it does not delete data or stop collection.`
+  `If ${page} is hidden in your menu, turn on Reorganize in the menu and enable ${page}. Hiding a page changes menu visibility only; it does not delete data or stop collection.`
 
 const feature = (
   key: string,
@@ -57,7 +57,7 @@ export function onboardingCatalog(columns: TaskBoardColumn[]): OnboardingCard[] 
     {
       key: 'feature_control',
       title: 'Make the tracker fit you',
-      description: `Open [Settings](/settings) → Feature Control. Hide a page you do not expect to use and enable another you are curious about, then return to the navigation to see the difference. Keep whichever arrangement you prefer. If you already like your selection, reviewing it is enough. Each switch saves immediately.\n\nHiding changes menu visibility only. It does not delete records, stop collection or integrations, or remove access through a direct link. Settings stays available to restore pages.\n\nDone when: you know where visibility is controlled and have chosen the pages you want to see.\n\n${optional}`,
+      description: `Turn on Reorganize immediately above Logout in the menu. Hide a page you do not expect to use and enable another you are curious about, then return to the navigation to see the difference. Keep whichever arrangement you prefer. If you already like your selection, reviewing it is enough. Each switch saves immediately.\n\nHiding changes menu visibility only. It does not delete records, stop collection or integrations, or remove access through a direct link. Hidden pages stay visible while reorganizing so you can restore them.\n\nDone when: you know where visibility is controlled and have chosen the pages you want to see.\n\n${optional}`,
     },
     feature(
       'kanban',

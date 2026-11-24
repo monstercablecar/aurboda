@@ -8,7 +8,6 @@ import { AvatarSettings } from '../../components/AvatarSettings'
 import { CustomRemindersSettings } from '../../components/CustomRemindersSettings'
 import { DataExportSettings } from '../../components/DataExportSettings'
 import { DeleteAccountSettings } from '../../components/DeleteAccountSettings'
-import { FeatureControl } from '../../components/FeatureControl'
 import { LinkedProvidersSettings } from '../../components/LinkedProvidersSettings'
 import { MealPreferencesSettings } from '../../components/MealPreferencesSettings'
 import { NotificationSettings } from '../../components/NotificationSettings'
@@ -207,8 +206,6 @@ export function Settings() {
   return (
     <div class="settings-page">
       <h1>Settings</h1>
-
-      <FeatureControl />
 
       <OnboardingSettings />
 

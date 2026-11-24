@@ -6,13 +6,13 @@ The browser at https://stats.foghouse.org is recommended for full dashboards, de
 
 ## Optional second stage in Tasks
 
-The basic guide ends with a brief optional handoff to [Tasks](/goals), where one Onboarding column contains ordinary editable, movable, completable and deletable tasks. The full feature/assessment catalog stays out of signup. If Tasks is hidden, the handoff explains Settings → Feature Control → Tasks; it does not change visibility or replay dismissed setup for existing users.
+The basic guide ends with a brief optional handoff to [Tasks](/goals), where one Onboarding column contains ordinary editable, movable, completable and deletable tasks. The full feature/assessment catalog stays out of signup. If Tasks is hidden, the handoff explains Reorganize in the menu → Tasks and keeps the direct Tasks link available; it does not change visibility or replay dismissed setup for existing users.
 
 New accounts receive the column during account initialization. Existing accounts receive it through the account migration sweep, including accounts that never opened Tasks. A durable per-account seed marker survives task/column deletion and catalog edits, so dismissed guidance does not return. All cards start open; users who already did an action can move its card to Done or use its checkmark. There is no cross-feature completion checking. See [optional Kanban onboarding](optional-kanban-onboarding.md) for the full card list, feature/action audit, seed lifecycle, extension guidance and integration limits.
 
 ## Feature selection
 
-Start here begins with “What would you like to track?” and the shared [Feature Control](feature-control.md) switch list. Choices save to the account’s existing settings; completing or skipping this step is explicit. Hidden pages can be restored in Settings. Previously dismissed guides remain dismissed. Hiding affects navigation only; it does not delete records, stop integrations, or revoke access.
+Start here begins with “What would you like to track?” and the shared [Feature Control](feature-control.md) switch list. Choices save to the account’s existing settings; completing or skipping this step is explicit. Hidden pages can be restored by turning on Reorganize in the menu. Previously dismissed guides remain dismissed. Hiding affects navigation only; it does not delete records, stop integrations, or revoke access.
 
 ## Progress and verification
 

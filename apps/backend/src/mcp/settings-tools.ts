@@ -32,7 +32,7 @@ export const registerSettingsTools = (
 
   server.tool(
     'update_user_settings',
-    'Update user settings, including birth date, HR zone thresholds, onboarding progress, and hidden_pages menu preferences. Hiding a page does not restrict access or stop tracking.',
+    'Update user settings, including birth date, HR zone thresholds, onboarding progress, hidden_pages visibility and sidebar_order menu preferences. Hiding a page does not restrict access or stop tracking.',
     { ...updateSettingsInputSchema.shape },
     async (params) => {
       const result = await validateAndUpdateSettings(user, params, onHrSettingsChanged, onProfileChanged)
