@@ -20,6 +20,9 @@ let service: ReturnType<typeof createResourcesService>
 let app: express.Express
 let root: string
 let revoked = false
+// Startup cleanup locks deletion tombstones before pending uploads; fixture reset follows the same order.
+const RESET_RESOURCES =
+  'TRUNCATE resources_items, resources_folders, resources_pending_deletions, resources_pending_uploads, admins'
 beforeAll(async () => {
   await startTestDb()
   root = await mkdtemp(join(tmpdir(), 'resources-integration-'))
@@ -65,10 +68,47 @@ afterAll(async () => {
 })
 beforeEach(async () => {
   revoked = false
-  await pool.query(
-    'TRUNCATE resources_items, resources_folders, resources_pending_uploads, resources_pending_deletions, admins',
-  )
+  await pool.query(RESET_RESOURCES)
   await pool.query("INSERT INTO admins VALUES('admin')")
+})
+test('fixture reset can overlap startup cleanup without deadlocking', async () => {
+  const cleanupClient = await pool.connect()
+  const resetClient = await pool.connect()
+  let pendingReset: Promise<{ error?: unknown }> = Promise.resolve({})
+  try {
+    await cleanupClient.query('BEGIN')
+    await cleanupClient.query('LOCK TABLE resources_pending_deletions IN ROW EXCLUSIVE MODE')
+    const resetPid = (await resetClient.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0].pid
+    pendingReset = resetClient.query(RESET_RESOURCES).then(
+      () => ({}),
+      (error: unknown) => ({ error }),
+    )
+    await expect
+      .poll(
+        async () =>
+          (
+            await getTestDbClient().query<{ waiting: boolean }>(
+              "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND relation='resources_pending_deletions'::regclass AND NOT granted) AS waiting",
+              [resetPid],
+            )
+          ).rows[0].waiting,
+      )
+      .toBe(true)
+    const cleanupService = createResourcesService(
+      createCentralDb({
+        getClient: async () => cleanupClient,
+        withTransaction: (fn) => withTransaction(pool, fn),
+      }),
+    )
+    await cleanupService.cleanup()
+    await cleanupClient.query('COMMIT')
+    expect((await pendingReset).error).toBeUndefined()
+  } finally {
+    await cleanupClient.query('ROLLBACK')
+    await pendingReset
+    cleanupClient.release()
+    resetClient.release()
+  }
 })
 test('shared metadata, live admin changes, duplicate titles and safe URL validation', async () => {
   const a = await service.createFolder('admin', { title: 'Shared' })
