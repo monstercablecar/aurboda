@@ -7,6 +7,7 @@ import type { Queryable } from '../db/pool.ts'
 import type { CentralDb } from './central-db.ts'
 
 import { httpError } from '../http-error.ts'
+import { createFamilyFolders, requireFamilyFolder } from './family-folders.ts'
 import { processFamilyMedia, probeFamilyVideo } from './family-process.ts'
 import {
   familyEnabled,
@@ -27,6 +28,8 @@ import {
 
 export const CREATE_FAMILY_TABLES = `
 ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS family_member BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS family_folders (id UUID PRIMARY KEY, name TEXT NOT NULL CHECK(char_length(name) BETWEEN 1 AND 80), created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS family_folders_name ON family_folders(lower(name));
 CREATE TABLE IF NOT EXISTS family_media (
  id UUID PRIMARY KEY, sha256 CHAR(64) NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('photo','video')),
  mime_type TEXT NOT NULL, source_format TEXT NOT NULL, original_filename TEXT NOT NULL, original_bytes BIGINT NOT NULL,
@@ -34,18 +37,27 @@ CREATE TABLE IF NOT EXISTS family_media (
  caption TEXT NOT NULL DEFAULT '', captured_at TIMESTAMPTZ, album_id UUID,
  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','processing','ready','failed','purging')),
  created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ);
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='family_media_folder_fk' AND conrelid='family_media'::regclass) THEN
+  ALTER TABLE family_media ADD CONSTRAINT family_media_folder_fk FOREIGN KEY(album_id) REFERENCES family_folders(id) ON DELETE SET NULL;
+ END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS family_media_memory_date ON family_media((COALESCE(captured_at,created_at)) DESC,id DESC);
+CREATE INDEX IF NOT EXISTS family_media_folder ON family_media(album_id);
 CREATE INDEX IF NOT EXISTS family_media_chronology ON family_media(created_at DESC,id DESC);
 CREATE TABLE IF NOT EXISTS family_uploads(id UUID PRIMARY KEY, reserved_bytes BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 `
-interface MediaRow extends Omit<FamilyItem, 'created_at' | 'captured_at' | 'deleted_at'> {
+interface MediaRow extends Omit<FamilyItem, 'created_at' | 'captured_at' | 'deleted_at' | 'is_owner'> {
   created_at: Date
   captured_at: Date | null
   deleted_at: Date | null
   mime_type: string
   source_format: string
   sha256: string
+  created_by: string | null
 }
-const serialize = (row: MediaRow): FamilyItem => ({
+const serialize = (row: MediaRow, user: string): FamilyItem => ({
+  is_owner: row.created_by === user,
   id: row.id,
   kind: row.kind,
   caption: row.caption,
@@ -88,7 +100,12 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
     const row = (
       await (tx ?? (await client())).query<MediaRow>('SELECT * FROM family_media WHERE id=$1', [familyId(id)])
     ).rows[0]
-    if (!row || row.status === 'purging' || (row.deleted_at && !role.is_admin)) {
+    if (
+      !row ||
+      row.status === 'purging' ||
+      (row.deleted_at && !role.is_admin) ||
+      (!role.is_admin && row.status !== 'ready' && row.created_by !== user)
+    ) {
       throw httpError(404, 'Media not found')
     }
     return row
@@ -178,6 +195,7 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
   }
   return {
     access,
+    folders: createFamilyFolders(db, requireAccess),
     requireAccess,
     item,
     tick,
@@ -214,15 +232,29 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
           await client()
         ).query<MediaRow>(
           `SELECT * FROM family_media WHERE status<>'purging'
-       AND ($1::boolean OR status='ready') AND (deleted_at IS NOT NULL)=$2 AND ($3::text IS NULL OR kind=$3)
-       AND ($4::uuid IS NULL OR (created_at,id)<(SELECT created_at,id FROM family_media WHERE id=$4))
-       ORDER BY created_at DESC,id DESC LIMIT 41`,
-          [role.is_admin, query.trash === 'true', query.kind ?? null, query.cursor ?? null],
+       AND ($1::boolean OR status='ready' OR created_by=$10) AND (deleted_at IS NOT NULL)=$2 AND ($3::text IS NULL OR kind=$3)
+       AND ($4::uuid IS NULL OR (COALESCE(captured_at,created_at),id)<(SELECT COALESCE(captured_at,created_at),id FROM family_media WHERE id=$4))
+       AND ($5::text IS NULL OR ($5='unfiled' AND album_id IS NULL) OR album_id::text=$5)
+       AND ($6::date IS NULL OR COALESCE(captured_at,created_at)>=(($6::date::timestamp AT TIME ZONE 'UTC')+make_interval(mins => $8::integer)))
+       AND ($7::date IS NULL OR COALESCE(captured_at,created_at)<((($7::date+1)::timestamp AT TIME ZONE 'UTC')+make_interval(mins => $9::integer)))
+       ORDER BY COALESCE(captured_at,created_at) DESC,id DESC LIMIT 41`,
+          [
+            role.is_admin,
+            query.trash === 'true',
+            query.kind ?? null,
+            query.cursor ?? null,
+            query.album_id ?? null,
+            query.from_date ?? null,
+            query.to_date ?? null,
+            query.from_offset ?? 0,
+            query.to_offset ?? 0,
+            user,
+          ],
         )
       ).rows
       return {
         success: true,
-        items: rows.slice(0, 40).map(serialize),
+        items: rows.slice(0, 40).map((row) => serialize(row, user)),
         next_cursor: rows.length > 40 ? rows[39].id : null,
       }
     },
@@ -230,8 +262,9 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
       const id = randomUUID()
       const reserve = familyMaxUpload() + familyMaxDerivative() + familyWorkspace()
       await db.resourcesTransaction(async (tx) => {
-        await requireAccess(user, true, tx)
+        await requireAccess(user, false, tx)
         await tx.query('SELECT pg_advisory_xact_lock(638294018)')
+        await requireAccess(user, false, tx)
         const used = (
           await tx.query<{ bytes: string; receiving: string }>(`SELECT
           (COALESCE((SELECT sum(original_bytes+derivative_bytes+reserved_bytes) FROM family_media),0)+COALESCE((SELECT sum(reserved_bytes) FROM family_uploads),0))::text AS bytes,
@@ -244,6 +277,7 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
           throw httpError(507, 'Family media quota is full')
         }
         await familySpace(reserve + Number(used.receiving) * reserve)
+        await requireAccess(user, false, tx)
         await tx.query('INSERT INTO family_uploads(id,reserved_bytes) VALUES($1,$2)', [id, reserve])
       })
       try {
@@ -254,7 +288,14 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
       }
       return id
     },
-    finishUpload: async (user: string, id: string, filename: string, caption: string, declared: string) => {
+    finishUpload: async (
+      user: string,
+      id: string,
+      filename: string,
+      caption: string,
+      declared: string,
+      albumId: string | null = null,
+    ) => {
       const path = await safeFamilyFile(id, 'original')
       const info = await sniffFamily(path)
       if (
@@ -282,15 +323,18 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
       await syncFamilyFile(path)
       await syncFamilyFile(await familyPath(id))
       return db.resourcesTransaction(async (tx) => {
-        await requireAccess(user, true, tx)
+        await requireAccess(user, false, tx)
         await tx.query('SELECT pg_advisory_xact_lock(638294018)')
+        await requireAccess(user, false, tx)
         if ((await tx.query('SELECT 1 FROM family_media WHERE sha256=$1', [sha])).rowCount) {
           throw httpError(409, 'This file is already in the family library, including trash')
         }
+        await requireFamilyFolder(tx, albumId)
+        await requireAccess(user, false, tx)
         const row = (
           await tx.query<MediaRow>(
-            `INSERT INTO family_media(id,sha256,kind,mime_type,source_format,original_filename,original_bytes,reserved_bytes,caption,created_by)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+            `INSERT INTO family_media(id,sha256,kind,mime_type,source_format,original_filename,original_bytes,reserved_bytes,caption,created_by,album_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
             [
               id,
               sha,
@@ -302,11 +346,12 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
               familyMaxDerivative() + familyWorkspace(),
               caption,
               user,
+              albumId,
             ],
           )
         ).rows[0]
         await tx.query('DELETE FROM family_uploads WHERE id=$1', [id])
-        return serialize(row)
+        return serialize(row, user)
       })
     },
     edit: async (user: string, id: string, edit: FamilyEdit) => {
@@ -321,24 +366,33 @@ export const createFamilyService = (db: Pick<CentralDb, 'resourcesClient' | 'res
         )
       ).rows[0]
       if (!row) throw httpError(404, 'Media not found')
-      return serialize(row)
+      return serialize(row, user)
     },
-    trash: async (user: string, id: string, restore = false) => {
-      await requireAccess(user, true)
-      await item(user, id)
-      if (
-        !(
-          await (
-            await client()
-          ).query(
-            `UPDATE family_media SET deleted_at=${restore ? 'NULL' : 'COALESCE(deleted_at,now())'} WHERE id=$1 AND status<>'purging' ${restore ? "AND deleted_at > now()-interval '30 days'" : ''}`,
-            [id],
-          )
-        ).rowCount
-      ) {
-        throw httpError(409, 'The restoration window has expired')
-      }
-    },
+    trash: async (user: string, id: string, restore = false) =>
+      db.resourcesTransaction(async (tx) => {
+        await requireAccess(user, restore, tx)
+        const row = (
+          await tx.query<MediaRow>('SELECT * FROM family_media WHERE id=$1 FOR UPDATE', [familyId(id)])
+        ).rows[0]
+        // Refresh current roles after any wait behind processing or another mutation.
+        const role = await requireAccess(user, restore, tx)
+        if (!row || row.status === 'purging' || (row.deleted_at && !role.is_admin)) {
+          throw httpError(404, 'Media not found')
+        }
+        if (!role.is_admin && row.created_by !== user) {
+          throw httpError(403, 'You can only remove memories you uploaded')
+        }
+        if (
+          !(
+            await tx.query(
+              `UPDATE family_media SET deleted_at=${restore ? 'NULL' : 'COALESCE(deleted_at,now())'} WHERE id=$1 AND status<>'purging' ${restore ? "AND deleted_at > now()-interval '30 days'" : ''}`,
+              [id],
+            )
+          ).rowCount
+        ) {
+          throw httpError(409, 'The restoration window has expired')
+        }
+      }),
     retry: async (user: string, id: string) =>
       db.resourcesTransaction(async (tx) => {
         await requireAccess(user, true, tx)

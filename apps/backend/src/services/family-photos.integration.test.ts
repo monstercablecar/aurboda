@@ -113,7 +113,7 @@ beforeEach(async () => {
   delete process.env.FAMILY_MAX_UPLOAD_BYTES
   delete process.env.FAMILY_ALLOW_MEMBER_ORIGINALS
   await pool.query(
-    "TRUNCATE family_media,family_uploads,admins,user_accounts,deleted_usernames; INSERT INTO user_accounts(username) VALUES('admin'),('family'),('regular'); INSERT INTO admins VALUES('admin'); UPDATE user_accounts SET family_member=true WHERE username='family'",
+    "TRUNCATE family_media,family_folders,family_uploads,admins,user_accounts,deleted_usernames; INSERT INTO user_accounts(username) VALUES('admin'),('family'),('family2'),('regular'); INSERT INTO admins VALUES('admin'); UPDATE user_accounts SET family_member=true WHERE username IN ('family','family2')",
   )
   for (const name of await readdir(root)) await rm(join(root, name), { recursive: true, force: true })
 })
@@ -267,12 +267,12 @@ test('PNG, WebP, AVIF and real HEIC decode in the deployment runtime', async () 
     expect(metadata.exif).toBeUndefined()
   }
 }, 60_000)
-test('family cannot mutate; administrator trash/restore and uploader deletion preserve shared library', async () => {
+test('members cannot modify others; administrator restore and uploader deletion preserve shared library', async () => {
   const app = makeApp()
   const result = await upload(app).expect(201)
   const id = result.body.data.id
   await createFamilyService(db).tick()
-  await upload(app, image, 'photo.jpg', 'image/jpeg', 'family').expect(403)
+  await upload(app, image, 'photo.jpg', 'image/jpeg', 'regular').expect(403)
   await supertest(app)
     .patch(`/family-photos/items/${id}`)
     .set('Authorization', 'Bearer family')
@@ -301,7 +301,7 @@ test('family cannot mutate; administrator trash/restore and uploader deletion pr
 }, 30_000)
 test('duplicate hashes, traversal and MIME spoofing are rejected, and failed previews retain originals', async () => {
   const app = makeApp()
-  const result = await upload(app).expect(201)
+  const result = await upload(app, image, 'photo.jpg', 'image/jpeg', 'family').expect(201)
   const id = result.body.data.id
   await upload(app).expect(409)
   await upload(app, Buffer.from('<svg><script>unsafe</script></svg>'), 'fake.jpg').expect(415)
@@ -315,6 +315,13 @@ test('duplicate hashes, traversal and MIME spoofing are rejected, and failed pre
   )
   await supertest(app).get(media(id, 'original')).set('Authorization', 'Bearer admin').expect(200)
   await supertest(app).get(media(id)).set('Authorization', 'Bearer family').expect(409)
+  const ownFailed = await supertest(app)
+    .get(`/family-photos/items/${id}`)
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(ownFailed.body.data).toMatchObject({ is_owner: true, status: 'failed' })
+  await supertest(app).get(media(id)).set('Authorization', 'Bearer family2').expect(404)
+  await supertest(app).get(`/family-photos/items/${id}`).set('Authorization', 'Bearer family2').expect(404)
   expect(captured).not.toHaveBeenCalled()
 }, 30_000)
 test('file limits, space/quota failures and concurrent reservations leave no published metadata', async () => {
@@ -381,3 +388,344 @@ test('disabled flag refuses all routes; private failures stop before external re
   expect(response.headers['cache-control']).toBe('private, no-store')
   expect(captured).not.toHaveBeenCalled()
 })
+
+test('private folders require current membership and administrators organize without touching originals', async () => {
+  const app = makeApp()
+  await supertest(app).get('/family-photos/folders').expect(401)
+  await supertest(app).get('/family-photos/folders').set('Authorization', 'Bearer regular').expect(403)
+  await supertest(app)
+    .post('/family-photos/folders')
+    .set('Authorization', 'Bearer family')
+    .send({ name: 'Summer' })
+    .expect(403)
+  const created = await supertest(app)
+    .post('/family-photos/folders')
+    .set('Authorization', 'Bearer admin')
+    .send({ name: ' Summer ' })
+    .expect(201)
+  const folder = created.body.folder.id
+  expect(created.body.folder.name).toBe('Summer')
+  await supertest(app)
+    .post('/family-photos/folders')
+    .set('Authorization', 'Bearer admin')
+    .send({ name: 'summer' })
+    .expect(409)
+  await supertest(app)
+    .post('/family-photos/folders')
+    .set('Authorization', 'Bearer admin')
+    .send({ name: '   ' })
+    .expect(400)
+  const uploaded = await upload(app).expect(201)
+  const id = uploaded.body.data.id
+  const move = { ids: [id], album_id: folder }
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer family')
+    .send(move)
+    .expect(403)
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer admin')
+    .send(move)
+    .expect(200)
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer admin')
+    .send({ ids: [id, randomUUID()], album_id: null })
+    .expect(404)
+  expect((await pool.query('SELECT album_id FROM family_media WHERE id=$1', [id])).rows[0].album_id).toBe(
+    folder,
+  )
+  await createFamilyService(db).tick()
+  const member = await supertest(app)
+    .get('/family-photos/folders')
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(member.body.folders).toEqual([{ id: folder, name: 'Summer', count: 1 }])
+  expect(member.headers['cache-control']).toBe('private, no-store')
+  await pool.query("UPDATE user_accounts SET family_member=false WHERE username='family'")
+  await supertest(app).get('/family-photos/folders').set('Authorization', 'Bearer family').expect(403)
+  await supertest(app)
+    .patch(`/family-photos/folders/${folder}`)
+    .set('Authorization', 'Bearer admin')
+    .send({ name: 'Summer days' })
+    .expect(200)
+  await supertest(app)
+    .delete(`/family-photos/folders/${folder}`)
+    .set('Authorization', 'Bearer admin')
+    .expect(200)
+  expect(
+    (await pool.query('SELECT album_id,deleted_at FROM family_media WHERE id=$1', [id])).rows[0],
+  ).toMatchObject({ album_id: null, deleted_at: null })
+  expect(await readFile(await familyPath(id, 'original'))).toEqual(image)
+}, 30000)
+test('folder upload validates destination, pagination composes with inclusive taken/fallback dates and type', async () => {
+  const app = makeApp()
+  const folder = (await createFamilyService(db).folders.create('admin', 'Birthday')).id
+  const result = await supertest(app)
+    .post('/family-photos/upload')
+    .set('Authorization', 'Bearer admin')
+    .field('caption', 'Birthday')
+    .field('album_id', folder)
+    .attach('file', image, { filename: 'photo.jpg', contentType: 'image/jpeg' })
+    .expect(201)
+  expect(result.body.data.album_id).toBe(folder)
+  await pool.query('DELETE FROM family_media WHERE id=$1', [result.body.data.id])
+  await pool.query(
+    `INSERT INTO family_media(id,sha256,kind,mime_type,source_format,original_filename,original_bytes,status,album_id,created_at,captured_at)
+ SELECT id,lpad(i::text,64,'0'),'photo','image/jpeg','jpeg','test.jpg',1,'ready',$1,'2026-06-01T00:00:00Z','2026-01-02T12:00:00Z' FROM unnest($2::uuid[]) WITH ORDINALITY as t(id,i)`,
+    [folder, Array.from({ length: 50 }, () => randomUUID())],
+  )
+  await pool.query(
+    `INSERT INTO family_media(id,sha256,kind,mime_type,source_format,original_filename,original_bytes,status,created_at,captured_at) VALUES($1,$2,'photo','image/jpeg','jpeg','fallback.jpg',1,'ready','2026-01-02T23:59:59.999Z',null)`,
+    [randomUUID(), 'f'.repeat(64)],
+  )
+  const query = { album_id: folder, from_date: '2026-01-02', to_date: '2026-01-02', kind: 'photo' }
+  const first = await supertest(app)
+    .get('/family-photos')
+    .query(query)
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(first.body.items).toHaveLength(40)
+  const second = await supertest(app)
+    .get('/family-photos')
+    .query({ ...query, cursor: first.body.next_cursor })
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(second.body.items).toHaveLength(10)
+  expect(new Set([...first.body.items, ...second.body.items].map((row: { id: string }) => row.id)).size).toBe(
+    50,
+  )
+  const unfiled = await supertest(app)
+    .get('/family-photos')
+    .query({ ...query, album_id: 'unfiled' })
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(unfiled.body.items).toHaveLength(1)
+  expect(unfiled.body.items[0].original_filename).toBe('fallback.jpg')
+  const none = await supertest(app)
+    .get('/family-photos')
+    .query({ ...query, from_date: '2026-01-03', to_date: '2026-01-03' })
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(none.body.items).toHaveLength(0)
+  const localEvening = await supertest(app)
+    .get('/family-photos')
+    .query({
+      album_id: 'unfiled',
+      from_date: '2026-01-02',
+      to_date: '2026-01-02',
+      from_offset: 420,
+      to_offset: 420,
+    })
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(localEvening.body.items).toHaveLength(1)
+  const localNextDay = await supertest(app)
+    .get('/family-photos')
+    .query({
+      album_id: 'unfiled',
+      from_date: '2026-01-03',
+      to_date: '2026-01-03',
+      from_offset: -120,
+      to_offset: -120,
+    })
+    .set('Authorization', 'Bearer family')
+    .expect(200)
+  expect(localNextDay.body.items).toHaveLength(1)
+  for (const dates of [
+    { from_date: '2026-02-30' },
+    { from_date: '2026-02-01', to_date: '2026-01-01' },
+    { from_date: '0000-01-01' },
+    { from_offset: 'bad' },
+    { to_offset: '841' },
+  ]) {
+    await supertest(app).get('/family-photos').query(dates).set('Authorization', 'Bearer family').expect(400)
+  }
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer admin')
+    .send({ ids: first.body.items.map((row: { id: string }) => row.id), album_id: randomUUID() })
+    .expect(404)
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer admin')
+    .send({ ids: [first.body.items[0].id, first.body.items[0].id], album_id: null })
+    .expect(400)
+  await supertest(app)
+    .patch('/family-photos/items/folder')
+    .set('Authorization', 'Bearer admin')
+    .send({ ids: Array.from({ length: 201 }, () => randomUUID()), album_id: null })
+    .expect(400)
+})
+
+test('members upload with server ownership and remove only their own; moderation and originals stay protected', async () => {
+  const app = makeApp()
+  const service = createFamilyService(db)
+  const folder = await service.folders.create('admin', 'Family days')
+  const response = await supertest(app)
+    .post('/family-photos/upload')
+    .set('Authorization', 'Bearer family')
+    .field('caption', 'Our day')
+    .field('album_id', folder.id)
+    .attach('file', image, { filename: 'our-day.jpg', contentType: 'image/jpeg' })
+    .expect(201)
+  const id = response.body.data.id
+  expect(response.body.data.is_owner).toBe(true)
+  expect(response.body.data.created_by).toBeUndefined()
+  expect((await pool.query('SELECT created_by FROM family_media WHERE id=$1', [id])).rows[0].created_by).toBe(
+    'family',
+  )
+  const own = await supertest(app).get('/family-photos').set('Authorization', 'Bearer family').expect(200)
+  expect(own.body.items).toMatchObject([{ id, status: 'queued', is_owner: true }])
+  const other = await supertest(app).get('/family-photos').set('Authorization', 'Bearer family2').expect(200)
+  expect(other.body.items).toHaveLength(0)
+  await supertest(app).get(`/family-photos/items/${id}`).set('Authorization', 'Bearer family2').expect(404)
+  expect((await service.folders.list('family'))[0].count).toBe(1)
+  expect((await service.folders.list('family2'))[0].count).toBe(0)
+  await supertest(app)
+    .post('/family-photos/upload')
+    .set('Authorization', 'Bearer family')
+    .field('caption', 'spoof')
+    .field('created_by', 'family2')
+    .attach('file', image, { filename: 'spoof.jpg', contentType: 'image/jpeg' })
+    .expect(400)
+  expect((await pool.query('SELECT count(*) FROM family_uploads')).rows[0].count).toBe('0')
+  await supertest(app)
+    .patch(`/family-photos/items/${id}`)
+    .set('Authorization', 'Bearer family')
+    .send({ caption: 'not granted', created_by: 'family2' })
+    .expect(403)
+  await supertest(app)
+    .post(`/family-photos/items/${id}/retry`)
+    .set('Authorization', 'Bearer family')
+    .expect(403)
+  await supertest(app)
+    .post(`/family-photos/items/${id}/restore`)
+    .set('Authorization', 'Bearer family')
+    .expect(403)
+  await service.tick()
+  const detail = await supertest(app)
+    .get(`/family-photos/items/${id}`)
+    .set('Authorization', 'Bearer family2')
+    .expect(200)
+  expect(detail.body.data.is_owner).toBe(false)
+  expect(detail.body.data.created_by).toBeUndefined()
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family2').expect(403)
+  await supertest(app).get(media(id, 'original')).set('Authorization', 'Bearer family').expect(403)
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family').expect(200)
+  for (const variant of ['thumb', 'preview', 'download', 'original']) {
+    await supertest(app).get(media(id, variant)).set('Authorization', 'Bearer family').expect(404)
+    await supertest(app).head(media(id, variant)).set('Authorization', 'Bearer family').expect(404)
+    await supertest(app)
+      .get(media(id, variant))
+      .set('Authorization', 'Bearer family')
+      .set('Range', 'bytes=0-7')
+      .expect(404)
+  }
+  await supertest(app).get(`/family-photos/items/${id}`).set('Authorization', 'Bearer family').expect(404)
+  await supertest(app)
+    .get('/family-photos')
+    .query({ trash: 'true' })
+    .set('Authorization', 'Bearer family')
+    .expect(403)
+  await supertest(app)
+    .post(`/family-photos/items/${id}/restore`)
+    .set('Authorization', 'Bearer family')
+    .expect(403)
+  await supertest(app).get(media(id, 'original')).set('Authorization', 'Bearer admin').expect(200)
+  await supertest(app)
+    .post(`/family-photos/items/${id}/restore`)
+    .set('Authorization', 'Bearer admin')
+    .expect(200)
+  await pool.query('UPDATE family_media SET created_by=NULL WHERE id=$1', [id])
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family').expect(403)
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer admin').expect(200)
+  expect(await readFile(await familyPath(id, 'original'))).toEqual(image)
+}, 30000)
+async function waitForLock(pattern: string) {
+  for (let attempt = 0; attempt < 150; attempt++) {
+    const waiting = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE $1",
+      [pattern],
+    )
+    if (Number(waiting.rows[0].count) > 0) return
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error('Expected the pending operation to wait on the test lock')
+}
+test('membership revoked during quota-lock waits blocks both upload reservation and final commit', async () => {
+  const service = createFamilyService(db)
+  for (const stage of ['reserve', 'finish']) {
+    await pool.query("UPDATE user_accounts SET family_member=true WHERE username='family'")
+    const id = stage === 'finish' ? await service.reserve('family') : undefined
+    if (id) await writeFile(await familyPath(id, 'original'), image)
+    const blocker = await pool.connect()
+    await blocker.query('BEGIN')
+    await blocker.query('SELECT pg_advisory_xact_lock(638294018)')
+    const pending = (
+      id ? service.finishUpload('family', id, 'mine.jpg', '', 'image/jpeg') : service.reserve('family')
+    ).then(
+      (value) => ({ value, error: undefined }),
+      (error) => ({ value: undefined, error }),
+    )
+    try {
+      await waitForLock('%pg_advisory_xact_lock(638294018)%')
+      await pool.query("UPDATE user_accounts SET family_member=false WHERE username='family'")
+    } finally {
+      await blocker.query('COMMIT')
+      blocker.release()
+    }
+    expect((await pending).error).toMatchObject({ status: 403 })
+    if (id) await service.cancel(id)
+  }
+  expect((await pool.query('SELECT count(*) FROM family_media')).rows[0].count).toBe('0')
+  expect((await pool.query('SELECT count(*) FROM family_uploads')).rows[0].count).toBe('0')
+}, 30000)
+test('membership revoked during a row-lock wait prevents a queued own-photo removal', async () => {
+  const app = makeApp()
+  const uploaded = await upload(app, image, 'mine.jpg', 'image/jpeg', 'family').expect(201)
+  const id = uploaded.body.data.id
+  const blocker = await pool.connect()
+  await blocker.query('BEGIN')
+  await blocker.query('SELECT id FROM family_media WHERE id=$1 FOR UPDATE', [id])
+  const pending = createFamilyService(db)
+    .trash('family', id)
+    .then(
+      () => undefined,
+      (error) => error,
+    )
+  try {
+    await waitForLock('%family_media%FOR UPDATE%')
+    await pool.query("UPDATE user_accounts SET family_member=false WHERE username='family'")
+  } finally {
+    await blocker.query('COMMIT')
+    blocker.release()
+  }
+  expect(await pending).toMatchObject({ status: 403 })
+  expect(
+    (await pool.query('SELECT deleted_at FROM family_media WHERE id=$1', [id])).rows[0].deleted_at,
+  ).toBeNull()
+  await upload(app, image, 'denied.jpg', 'image/jpeg', 'family').expect(403)
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family').expect(403)
+}, 30000)
+test('permanently deleted uploader accounts cannot claim ownership; shared uploads survive', async () => {
+  const app = makeApp()
+  const id = (await upload(app, image, 'mine.jpg', 'image/jpeg', 'family').expect(201)).body.data.id
+  await pool.query(
+    "INSERT INTO deleted_usernames VALUES('family'); DELETE FROM user_accounts WHERE username='family'; INSERT INTO user_accounts(username,family_member) VALUES('family',true)",
+  )
+  await upload(app, image, 'denied.jpg', 'image/jpeg', 'family').expect(403)
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family').expect(403)
+  await createFamilyService(db).tick()
+  expect(
+    (await pool.query('SELECT created_by FROM family_media WHERE id=$1', [id])).rows[0].created_by,
+  ).toBeNull()
+  const result = await supertest(app)
+    .get(`/family-photos/items/${id}`)
+    .set('Authorization', 'Bearer family2')
+    .expect(200)
+  expect(result.body.data.is_owner).toBe(false)
+  await supertest(app).delete(`/family-photos/items/${id}`).set('Authorization', 'Bearer family2').expect(403)
+  expect(await readFile(await familyPath(id, 'original'))).toEqual(image)
+}, 30000)

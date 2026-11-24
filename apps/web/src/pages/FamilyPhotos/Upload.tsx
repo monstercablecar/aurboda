@@ -1,8 +1,11 @@
+import type { FamilyFolder } from '@aurboda/api-spec'
+
 import { useEffect, useRef, useState } from 'preact/hooks'
 
 import { familyError, uploadFamily } from '../../state/api/family-photos'
 import { currentSessionGeneration } from '../../state/sessionBoundary'
 import { FamilyIcon } from './Icon'
+import { FolderSelect } from './Organization'
 
 type Entry = {
   id: number
@@ -15,17 +18,27 @@ type Entry = {
 }
 type UploadProps = {
   maxBytes: number
+  folders?: FamilyFolder[]
+  folderId?: string
   onUploaded: () => void
   onBusyChange: (busy: boolean) => void
   onDone: () => void
 }
-export function FamilyUpload({ maxBytes, onUploaded, onBusyChange, onDone }: UploadProps) {
+export function FamilyUpload({
+  maxBytes,
+  onUploaded,
+  onBusyChange,
+  onDone,
+  folders = [],
+  folderId = '',
+}: UploadProps) {
   const input = useRef<HTMLInputElement>(null)
   const mounted = useRef(true)
   const previews = useRef(new Set<string>())
   const sequence = useRef(0)
   const running = useRef(false)
   const [entries, setEntries] = useState<Entry[]>([])
+  const [destination, setDestination] = useState(folderId)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   useEffect(() => {
@@ -90,9 +103,14 @@ export function FamilyUpload({ maxBytes, onUploaded, onBusyChange, onDone }: Upl
         }
         patch(entry.id, { status: 'uploading', progress: 0, error: '' })
         try {
-          await uploadFamily(entry.file, entry.caption, (progress) => {
-            if (active()) patch(entry.id, { progress })
-          })
+          await uploadFamily(
+            entry.file,
+            entry.caption,
+            (progress) => {
+              if (active()) patch(entry.id, { progress })
+            },
+            destination || undefined,
+          )
           if (!active()) break
           patch(entry.id, { status: 'done', progress: 100 })
           changed = true
@@ -109,6 +127,7 @@ export function FamilyUpload({ maxBytes, onUploaded, onBusyChange, onDone }: Upl
       }
     }
   }
+  const missingDestination = !!destination && !folders.some((folder) => folder.id === destination)
   const pending = entries.filter((entry) => entry.status !== 'done').length
   return (
     <div
@@ -120,6 +139,20 @@ export function FamilyUpload({ maxBytes, onUploaded, onBusyChange, onDone }: Upl
         add(Array.from(e.dataTransfer?.files ?? []))
       }}
     >
+      {(folders.length > 0 || destination) && (
+        <FolderSelect
+          folders={folders}
+          value={destination}
+          onChange={setDestination}
+          disabled={busy}
+          label="Add to folder"
+        />
+      )}
+      {missingDestination && (
+        <p class="family-note" role="alert">
+          This folder was removed. Choose Unfiled or another folder before adding these memories.
+        </p>
+      )}
       <button class="family-dropzone" disabled={busy} onClick={() => input.current?.click()}>
         <FamilyIcon name="add" />
         <strong>Choose photos &amp; videos</strong>
@@ -156,7 +189,11 @@ export function FamilyUpload({ maxBytes, onUploaded, onBusyChange, onDone }: Upl
             {entries.filter((entry) => entry.status === 'done').length} of {entries.length} added
           </span>
           {pending > 0 ? (
-            <button class="family-button family-button-primary" disabled={busy} onClick={() => void upload()}>
+            <button
+              class="family-button family-button-primary"
+              disabled={busy || missingDestination}
+              onClick={() => void upload()}
+            >
               {busy ? 'Adding memories…' : `Add ${pending} ${pending === 1 ? 'memory' : 'memories'}`}
             </button>
           ) : (

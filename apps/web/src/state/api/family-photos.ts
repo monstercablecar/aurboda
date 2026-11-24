@@ -2,6 +2,9 @@ import type {
   FamilyAccess,
   FamilyAccessResponse,
   FamilyEdit,
+  FamilyFoldersResponse,
+  FamilyFolderResponse,
+  FamilyMove,
   FamilyItemsResponse,
   FamilyMembersResponse,
   FamilyQuery,
@@ -77,9 +80,15 @@ export const downloadFamilyOriginal = async (id: string, filename: string) => {
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
-export const uploadFamily = async (file: File, caption: string, progress: (percent: number) => void) => {
+export const uploadFamily = async (
+  file: File,
+  caption: string,
+  progress: (percent: number) => void,
+  folderId?: string,
+) => {
   const body = new FormData()
   body.append('caption', caption)
+  if (folderId) body.append('album_id', folderId)
   body.append('file', file)
   await axios.post(`${base}/upload`, body, {
     ...config(),
@@ -90,3 +99,12 @@ export const familyError = (error: unknown) =>
   axios.isAxiosError(error) && typeof error.response?.data?.error === 'string'
     ? (error.response.data.error as string)
     : 'Family Photos could not complete this request. Please retry.'
+
+export const fetchFamilyFolders = async () =>
+  (await axios.get<FamilyFoldersResponse>(`${base}/folders`, config())).data.folders
+export const createFamilyFolder = async (name: string) =>
+  (await axios.post<FamilyFolderResponse>(`${base}/folders`, { name }, config())).data.folder
+export const renameFamilyFolder = (id: string, name: string) =>
+  axios.patch(`${base}/folders/${id}`, { name }, config())
+export const removeFamilyFolder = (id: string) => axios.delete(`${base}/folders/${id}`, config())
+export const moveFamily = (move: FamilyMove) => axios.patch(`${base}/items/folder`, move, config())

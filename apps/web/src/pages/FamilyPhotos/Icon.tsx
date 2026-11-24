@@ -1,4 +1,6 @@
 const paths: Record<string, string> = {
+  folder: 'M3 6h6l2 2h10v12H3z',
+  calendar: 'M3 5h18v16H3zM7 3v4M17 3v4M3 10h18',
   add: 'M12 5v14M5 12h14',
   close: 'm6 6 12 12M18 6 6 18',
   left: 'm15 5-7 7 7 7',

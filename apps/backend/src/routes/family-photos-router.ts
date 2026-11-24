@@ -179,6 +179,43 @@ export const createFamilyPhotosRouter = (
       res.json({ success: true })
     },
   )
+  router.get<Record<string, never>, spec.FamilyFoldersResponse>('/folders', auth, role, async (req, res) =>
+    res.json({ success: true, folders: await service.folders.list(req.user ?? '') }),
+  )
+  router.post<Record<string, never>, spec.FamilyFolderResponse, spec.FamilyFolderName>(
+    '/folders',
+    auth,
+    admin,
+    validateBody(spec.familyFolderNameSchema),
+    async (req, res) =>
+      res
+        .status(201)
+        .json({ success: true, folder: await service.folders.create(req.user ?? '', req.body.name) }),
+  )
+  router.patch<{ id: string }, spec.FamilySuccessResponse, spec.FamilyFolderName>(
+    '/folders/:id',
+    auth,
+    admin,
+    validateBody(spec.familyFolderNameSchema),
+    async (req, res) => {
+      await service.folders.rename(req.user ?? '', req.params.id, req.body.name)
+      res.json({ success: true })
+    },
+  )
+  router.delete<{ id: string }, spec.FamilySuccessResponse>('/folders/:id', auth, admin, async (req, res) => {
+    await service.folders.remove(req.user ?? '', req.params.id)
+    res.json({ success: true })
+  })
+  router.patch<Record<string, never>, spec.FamilySuccessResponse, spec.FamilyMove>(
+    '/items/folder',
+    auth,
+    admin,
+    validateBody(spec.familyMoveSchema),
+    async (req, res) => {
+      await service.folders.move(req.user ?? '', req.body)
+      res.json({ success: true })
+    },
+  )
   router.get<Record<string, never>, spec.FamilyItemsResponse, unknown, spec.FamilyQuery>(
     '/',
     auth,
@@ -196,6 +233,7 @@ export const createFamilyPhotosRouter = (
         caption: row.caption,
         original_filename: row.original_filename,
         original_bytes: Number(row.original_bytes),
+        is_owner: row.created_by === req.user,
         album_id: row.album_id,
         status: row.status,
         created_at: row.created_at.toISOString(),
@@ -212,7 +250,7 @@ export const createFamilyPhotosRouter = (
     async (req, res) =>
       res.json({ success: true, data: await service.edit(req.user ?? '', req.params.id, req.body) }),
   )
-  router.delete<{ id: string }, spec.FamilySuccessResponse>('/items/:id', auth, admin, async (req, res) => {
+  router.delete<{ id: string }, spec.FamilySuccessResponse>('/items/:id', auth, role, async (req, res) => {
     await service.trash(req.user ?? '', req.params.id)
     res.json({ success: true })
   })
@@ -248,7 +286,7 @@ export const createFamilyPhotosRouter = (
       },
       filename: (_req, _file, cb) => cb(null, 'original'),
     }),
-    limits: { files: 1, fileSize: familyMaxUpload(), fields: 1, parts: 2, fieldSize: 8000 },
+    limits: { files: 1, fileSize: familyMaxUpload(), fields: 2, parts: 3, fieldSize: 8000 },
   }).single('file')
   const resId = new WeakMap<object, string>()
   const receive: AnyMiddleware = async (req, res, next) => {
@@ -295,14 +333,14 @@ export const createFamilyPhotosRouter = (
   router.post<Record<string, never>, spec.FamilyItemResponse>(
     '/upload',
     auth,
-    admin,
+    role,
     receive,
     async (req, res) => {
       const id = resId.get(req)
       if (!id || !req.file) throw httpError(400, 'Choose a file')
       let saved = false
       try {
-        const parsed = spec.familyEditSchema.safeParse(req.body)
+        const parsed = spec.familyUploadSchema.safeParse(req.body)
         if (!parsed.success) throw httpError(400, 'Caption is too long or invalid')
         const data = await service.finishUpload(
           req.user ?? '',
@@ -310,6 +348,7 @@ export const createFamilyPhotosRouter = (
           req.file.originalname,
           parsed.data.caption ?? '',
           req.file.mimetype,
+          parsed.data.album_id ?? null,
         )
         saved = true
         res.status(201).json({ success: true, data })
@@ -332,6 +371,7 @@ export const createFamilyPhotosRouter = (
       }
       // Originals never accept a cookie. Fresh bearer authorization prevents old admin-cookie downloads.
       const current = await service.requireAccess(req.user ?? '')
+      if (row.deleted_at && !current.is_admin) throw httpError(404, 'Media not found')
       if (original && (!bearerRequests.has(req) || (!current.is_admin && !current.originals_enabled))) {
         throw httpError(403, 'Original downloads require fresh administrator authorization')
       }

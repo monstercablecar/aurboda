@@ -877,3 +877,200 @@
     padding: 1rem;
   }
 }
+.family-organization {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0 0.7rem;
+  border-bottom: 1px solid var(--family-line);
+}
+.family-folder-browse {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.family-folder-browse > svg {
+  width: 16px;
+  color: var(--family-muted);
+}
+.family-folder-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--family-muted);
+  min-width: 0;
+}
+.family-folder-select select {
+  min-height: 44px;
+  padding: 0.55rem 0.5rem;
+  max-width: 220px;
+  border: 1px solid var(--family-line);
+  border-radius: 7px;
+  background: var(--family-panel);
+  color: var(--family-ink);
+  font: inherit;
+}
+.family-folder-browse .family-folder-select > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.family-organize-popover {
+  position: relative;
+  font-size: 0.8rem;
+}
+.family-organize-popover summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  min-height: 44px;
+  color: var(--family-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.family-organize-popover summary::-webkit-details-marker {
+  display: none;
+}
+.family-organize-popover > div {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  top: 100%;
+  width: 280px;
+  max-width: calc(100vw - 3rem);
+  padding: 1.2rem;
+  border: 1px solid var(--family-line);
+  border-radius: 12px;
+  background: var(--family-panel);
+  box-shadow: 0 8px 24px #0002;
+}
+.family-date-filter > div {
+  left: auto;
+  right: 0;
+}
+.family-organize-popover label {
+  display: block;
+  margin-bottom: 0.8rem;
+}
+.family-organize-popover input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.4rem;
+  padding: 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--family-line);
+  background: var(--family-paper);
+  color: var(--family-ink);
+  font: inherit;
+  color-scheme: light dark;
+}
+.family-folder-edit {
+  border-top: 1px solid var(--family-line);
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+}
+.family-selection-entry {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -0.5rem;
+}
+.family-selection-entry .family-text-button {
+  font-size: 0.75rem;
+}
+.family-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: var(--family-panel);
+  border: 1px solid var(--family-line);
+  border-radius: 10px;
+  margin: 1rem 0;
+  font-size: 0.8rem;
+}
+.family-memory {
+  position: relative;
+}
+.family-memory-select {
+  position: absolute;
+  z-index: 2;
+  top: 0.65rem;
+  left: 0.65rem;
+  display: flex;
+  border-radius: 5px;
+  padding: 0.2rem;
+  background: var(--family-panel);
+}
+.family-memory-select input {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--family-sage);
+  cursor: pointer;
+}
+.family-memory:has(.family-memory-select input:checked) .family-open {
+  outline: 3px solid var(--family-sage);
+  outline-offset: -3px;
+}
+.family-upload > .family-folder-select {
+  margin-bottom: 1rem;
+}
+.family-memory-folder {
+  margin: 1.5rem 0;
+}
+.family-memory-folder .family-folder-select {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+@media (max-width: 560px) {
+  .family-organization {
+    align-items: flex-start;
+  }
+  .family-folder-browse {
+    gap: 0.2rem;
+  }
+  .family-folder-select select {
+    max-width: 165px;
+  }
+  .family-folder-browse > svg {
+    display: none;
+  }
+  .family-organize-popover summary {
+    padding: 0.6rem 0.3rem;
+  }
+  .family-selection-bar {
+    padding: 0.75rem;
+  }
+  .family-selection-bar .family-folder-select {
+    width: 100%;
+  }
+}
+.family-organization {
+  position: relative;
+}
+.family-organization .family-organize-popover {
+  position: static;
+}
+/* These are album sections, not the application's height-filling route wrappers. */
+.family-page > div {
+  flex: 0 0 auto;
+}
+.family-organization,
+.family-selection-bar,
+.family-trash-note {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.family-empty {
+  display: block;
+}

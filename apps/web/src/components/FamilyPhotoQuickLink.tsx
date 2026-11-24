@@ -8,8 +8,8 @@ export function FamilyPhotoQuickLink() {
     <div class="quick-links">
       <QuickLinkWidget
         config={{
-          href: data.is_admin ? '/family-photos#upload' : '/family-photos',
-          label: data.is_admin ? 'Upload Photo / Video' : 'Family Photos',
+          href: '/family-photos#upload',
+          label: 'Upload Photo / Video',
         }}
       />
     </div>

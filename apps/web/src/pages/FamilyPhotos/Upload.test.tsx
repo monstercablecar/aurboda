@@ -113,3 +113,50 @@ test('leaving the page stops the remaining queue and releases local previews', a
   expect(uploaded).not.toHaveBeenCalled()
   expect(URL.revokeObjectURL).toHaveBeenCalled()
 })
+
+test('a removed destination keeps staged files and offers an explicit unfiled recovery', async () => {
+  act(() => render(null, container))
+  act(() =>
+    render(
+      <FamilyUpload
+        maxBytes={1024}
+        folders={[{ id: 'folder', name: 'Summer', count: 0 }]}
+        folderId="folder"
+        onUploaded={uploaded}
+        onBusyChange={busy}
+        onDone={() => undefined}
+      />,
+      container,
+    ),
+  )
+  choose()
+  act(() =>
+    render(
+      <FamilyUpload
+        maxBytes={1024}
+        folders={[]}
+        folderId="folder"
+        onUploaded={uploaded}
+        onBusyChange={busy}
+        onDone={() => undefined}
+      />,
+      container,
+    ),
+  )
+  expect(container.textContent).toContain('This folder was removed')
+  expect(button().disabled).toBe(true)
+  expect(container.querySelectorAll('.family-upload-row')).toHaveLength(2)
+  const folder = container.querySelector('select') as HTMLSelectElement
+  act(() => {
+    folder.value = ''
+    folder.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  expect(button().disabled).toBe(false)
+  vi.mocked(uploadFamily).mockResolvedValue({ id: 'recovered' } as never)
+  await act(async () => {
+    button().click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+  expect(uploadFamily).toHaveBeenCalledTimes(2)
+  expect(vi.mocked(uploadFamily).mock.calls.every((call) => call[3] === undefined)).toBe(true)
+})

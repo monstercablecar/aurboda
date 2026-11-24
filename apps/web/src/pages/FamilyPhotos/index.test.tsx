@@ -11,6 +11,11 @@ vi.mock('../../embed', () => ({ isEmbedded: vi.fn(() => false) }))
 vi.mock('../../state/api/family-photos', () => ({
   useFamilyAccess: vi.fn(),
   fetchFamily: vi.fn(),
+  fetchFamilyFolders: vi.fn(),
+  createFamilyFolder: vi.fn(),
+  renameFamilyFolder: vi.fn(),
+  removeFamilyFolder: vi.fn(),
+  moveFamily: vi.fn(),
   refreshFamilySession: vi.fn(),
   editFamily: vi.fn(),
   trashFamily: vi.fn(),
@@ -48,6 +53,7 @@ const mount = async () => {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(api.fetchFamilyFolders).mockResolvedValue([{ id: 'folder', name: 'Summer days', count: 1 }])
   vi.mocked(isEmbedded).mockReturnValue(false)
   container = document.createElement('div')
   document.body.append(container)
@@ -66,6 +72,7 @@ beforeEach(() => {
         caption: 'A memory',
         original_filename: 'phone.jpg',
         original_bytes: 100,
+        is_owner: false,
         created_at: '2026-01-02T12:00:00Z',
         captured_at: null,
         deleted_at: null,
@@ -219,4 +226,91 @@ test('horizontal video control gestures do not advance the viewer', async () => 
     video.dispatchEvent(end)
   })
   expect(container.querySelector('.family-viewer-caption')?.textContent).toBe('Our video')
+})
+
+test('folder and date filters combine on the private query and can be cleared', async () => {
+  access()
+  await mount()
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  const folder = container.querySelector('.family-folder-browse select') as HTMLSelectElement
+  await act(async () => {
+    folder.value = 'folder'
+    folder.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  const inputs = container.querySelectorAll<HTMLInputElement>('input[type=date]')
+  act(() => {
+    inputs[0]!.value = '2026-01-01'
+    inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+    inputs[1]!.value = '2026-01-31'
+    inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => {
+    button('Apply dates').click()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  expect(api.fetchFamily).toHaveBeenLastCalledWith(
+    expect.objectContaining({ album_id: 'folder', from_date: '2026-01-01', to_date: '2026-01-31' }),
+  )
+  await act(async () => {
+    button('Clear dates').click()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  expect(api.fetchFamily).toHaveBeenLastCalledWith(
+    expect.objectContaining({ album_id: 'folder', from_date: undefined, to_date: undefined }),
+  )
+  expect(container.textContent).not.toContain('New folder')
+  expect(container.textContent).not.toContain('Select memories')
+})
+test('administrator selection moves only the selected memories into a folder', async () => {
+  access(true)
+  await mount()
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  act(() => button('Select memories').click())
+  act(() => button('A memory').click())
+  expect(container.querySelector('dialog')).toBeNull()
+  const destination = container.querySelector('.family-selection-bar select') as HTMLSelectElement
+  act(() => {
+    destination.value = 'folder'
+    destination.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await act(async () => {
+    button('Move selected').click()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  expect(api.moveFamily).toHaveBeenCalledWith({ ids: ['photo'], album_id: 'folder' })
+  expect(container.querySelector('.family-selection-bar')).toBeNull()
+})
+
+test('family members can open uploads and remove their own memories without administrator controls', async () => {
+  access()
+  const response = await api.fetchFamily({})
+  vi.mocked(api.fetchFamily).mockResolvedValue({
+    ...response,
+    items: [{ ...response.items[0]!, is_owner: true }],
+  })
+  await mount()
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  })
+  act(() => button('Add photos & videos').click())
+  expect(container.querySelector('input[type=file]')).not.toBeNull()
+  act(() => button('Close upload').click())
+  act(() => button('A memory').click())
+  act(() => button('Photo details').click())
+  expect(container.textContent).toContain('Move to trash')
+  expect(container.textContent).toContain('An administrator can restore')
+  expect(container.textContent).not.toContain('Download original')
+  expect(container.textContent).not.toContain('Restore memory')
+  expect(container.textContent).not.toContain('Retry preview')
+  expect(container.querySelector('textarea')).toBeNull()
+  await act(async () => {
+    button('Move to trash').click()
+    await Promise.resolve()
+  })
+  expect(api.trashFamily).toHaveBeenCalledWith('photo')
 })

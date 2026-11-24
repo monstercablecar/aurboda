@@ -1,4 +1,4 @@
-import type { FamilyAccess, FamilyItem } from '@aurboda/api-spec'
+import type { FamilyAccess, FamilyItem, FamilyFolder } from '@aurboda/api-spec'
 
 import { useEffect, useRef, useState } from 'preact/hooks'
 
@@ -13,6 +13,7 @@ import {
   trashFamily,
 } from '../../state/api/family-photos'
 import { FamilyIcon } from './Icon'
+import { MemoryFolder } from './Organization'
 
 export const familyDate = (item: FamilyItem) =>
   new Date(item.captured_at ?? item.created_at).toLocaleDateString(undefined, {
@@ -27,8 +28,10 @@ export function FamilyViewer({
   onSelect,
   onClose,
   onChanged,
+  folders = [],
 }: {
   items: FamilyItem[]
+  folders?: FamilyFolder[]
   selected: string
   access: FamilyAccess
   onSelect: (id: string) => void
@@ -190,7 +193,9 @@ export function FamilyViewer({
             <FamilyIcon name="right" />
           </button>
         </div>
-        {details && <PhotoDetails key={item.id} item={item} access={access} onChanged={onChanged} />}
+        {details && (
+          <PhotoDetails key={item.id} item={item} access={access} folders={folders} onChanged={onChanged} />
+        )}
       </div>
       <footer class="family-lightbox-footer">
         <p class="family-viewer-caption">{item.caption || familyDate(item)}</p>
@@ -240,11 +245,13 @@ function ViewerMedia({ item, onZoom }: { item: FamilyItem; onZoom: () => void })
   )
 }
 function PhotoDetails({
+  folders,
   item,
   access,
   onChanged,
 }: {
   item: FamilyItem
+  folders: FamilyFolder[]
   access: FamilyAccess
   onChanged: () => void
 }) {
@@ -267,6 +274,7 @@ function PhotoDetails({
     <aside class="family-photo-details">
       <p class="family-eyebrow">About this memory</p>
       <h2>{familyDate(item)}</h2>
+      {item.is_owner && <p class="family-note">You added this memory.</p>}
       {access.is_admin ? (
         <form
           onSubmit={(e) => {
@@ -290,6 +298,7 @@ function PhotoDetails({
       ) : (
         item.caption && <p>{item.caption}</p>
       )}
+      <AdminMemoryFolder item={item} access={access} folders={folders} onChanged={onChanged} />
       <dl>
         <div>
           <dt>{item.captured_at ? 'Taken' : 'Added'}</dt>
@@ -311,37 +320,7 @@ function PhotoDetails({
         </button>
       )}
       {isEmbedded() && <p class="family-note">Open Family Photos in your browser to download.</p>}
-      {access.is_admin && (
-        <div class="family-details-actions">
-          {item.status === 'failed' && !item.deleted_at && (
-            <button
-              class="family-button"
-              disabled={busy}
-              onClick={() => void act(() => retryFamily(item.id))}
-            >
-              Retry preview
-            </button>
-          )}
-          {item.deleted_at ? (
-            <button
-              class="family-button"
-              disabled={busy}
-              onClick={() => void act(() => restoreFamily(item.id))}
-            >
-              Restore memory
-            </button>
-          ) : (
-            <button
-              class="family-button family-button-danger"
-              disabled={busy}
-              onClick={() => void act(() => trashFamily(item.id))}
-            >
-              Move to trash
-            </button>
-          )}
-          <p class="family-note">Memories in trash can be restored for 30 days.</p>
-        </div>
-      )}
+      <RemovalActions item={item} admin={access.is_admin} busy={busy} act={act} />
     </aside>
   )
 }
@@ -361,6 +340,76 @@ function ViewerPending({ item }: { item: FamilyItem }) {
             : 'Getting this memory ready…'}
       </p>
       <p>Your original is safely kept.</p>
+    </div>
+  )
+}
+
+function AdminMemoryFolder({
+  item,
+  access,
+  folders,
+  onChanged,
+}: {
+  item: FamilyItem
+  access: FamilyAccess
+  folders: FamilyFolder[]
+  onChanged: () => void
+}) {
+  if (!access.is_admin || item.deleted_at) return null
+  return (
+    <MemoryFolder
+      key={`${item.id}:${item.album_id}`}
+      folders={folders}
+      itemId={item.id}
+      folderId={item.album_id}
+      onChanged={onChanged}
+    />
+  )
+}
+
+function RemovalActions({
+  item,
+  admin,
+  busy,
+  act,
+}: {
+  item: FamilyItem
+  admin: boolean
+  busy: boolean
+  act: (operation: () => Promise<unknown>) => Promise<void>
+}) {
+  if (!admin && !item.is_owner) return null
+  return (
+    <div class="family-details-actions">
+      {admin && item.status === 'failed' && !item.deleted_at && (
+        <button class="family-button" disabled={busy} onClick={() => void act(() => retryFamily(item.id))}>
+          Retry preview
+        </button>
+      )}
+      {item.deleted_at ? (
+        admin && (
+          <button
+            class="family-button"
+            disabled={busy}
+            onClick={() => void act(() => restoreFamily(item.id))}
+          >
+            Restore memory
+          </button>
+        )
+      ) : (
+        <button
+          class="family-button family-button-danger"
+          disabled={busy}
+          onClick={() => void act(() => trashFamily(item.id))}
+        >
+          Move to trash
+        </button>
+      )}
+      <p class="family-note">
+        {admin
+          ? 'Memories in trash can be restored for 30 days.'
+          : 'An administrator can restore removed memories for 30 days.'}
+      </p>
     </div>
   )
 }
