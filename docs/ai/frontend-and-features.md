@@ -115,3 +115,7 @@ People History renders server-owned `relationship_state` transitions from both d
 ## Foghouse Home games
 
 The authenticated Home dashboard includes opt-in memory and three-minute reaction games with explicit result saving into Mental Assessments. See [protocols, data flow, limitations and licenses](foghouse-games.md). The playable card is not part of shared dashboard widgets.
+
+## Questionnaire interpretation compatibility
+
+Simple Food's REAP-S summary uses the existing published-2022 form policy (section cut points 8/14/16/1, readiness separate). Complete matching records retain their scores. Missing/unknown/duplicate scored responses, mismatched template/question versions, or changed prompts, option meanings, helper text or numeric maps produce **Score unavailable**. Original answers remain preserved. Current definitions cannot establish historical scoring provenance for older versions, so those results remain unavailable until immutable historical definitions can be resolved. This conservative fallback adds no migration and does not change validated cut points. The 2023 study's different healthy-pattern cut point is disclosed rather than silently substituted.

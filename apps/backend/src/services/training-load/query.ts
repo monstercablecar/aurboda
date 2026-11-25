@@ -10,10 +10,8 @@ import type { TrainingLoadDeps } from './deps.ts'
 
 import { aggregateTrainingLoadPoints } from './aggregation.ts'
 import {
-  BOOTSTRAPPING_DAYS,
   computeHourlyImpulses,
   computeHourlyLoadSeries,
-  computeRecoveryZones,
   floorToHour,
   getCurrentHourStart,
   getEffectiveSettings,
@@ -209,11 +207,11 @@ export const computeTrainingLoad = async (
 
   const workoutList = await workoutListPromise
 
-  const totalHours = allPoints.length
-  const bootstrapping = totalHours < BOOTSTRAPPING_DAYS * HOURS_PER_DAY
-
-  // Compute recovery zones from the full extended series
-  const zones = computeRecoveryZones(allPoints)
+  // Impulse buckets record activity, not complete source coverage. Empty hours
+  // are zero-filled for the EMA, so neither their count nor elapsed time since
+  // the first workout establishes six weeks of observed history. Until source
+  // coverage is tracked, retain the conservative flag and omit categorical zones.
+  const bootstrapping = true
 
   return {
     bootstrapping,
@@ -225,6 +223,5 @@ export const computeTrainingLoad = async (
       hr_rest: hrRest,
     },
     workouts: workoutList,
-    zones,
   }
 }

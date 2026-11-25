@@ -5,10 +5,10 @@ export type RecoveryZone = 'undertrained' | 'balanced' | 'strained' | 'very_stra
 export const RECOVERY_ZONES: RecoveryZone[] = ['undertrained', 'balanced', 'strained', 'very_strained']
 
 export const RECOVERY_ZONE_LABELS: Record<RecoveryZone, string> = {
-  balanced: 'Balanced',
-  strained: 'Strained',
-  undertrained: 'Undertrained',
-  very_strained: 'Very Strained',
+  balanced: 'Middle modeled load',
+  strained: 'Higher modeled load',
+  undertrained: 'Lower modeled load',
+  very_strained: 'Highest modeled load',
 }
 
 export const recoveryZone = (atl: number, zones: RecoveryZones): RecoveryZone => {

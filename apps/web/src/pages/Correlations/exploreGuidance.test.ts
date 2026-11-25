@@ -68,6 +68,7 @@ describe('sampleCaution', () => {
   it('flags very small and small samples, clears at 30+', () => {
     expect(sampleCaution(5)).toContain('anecdotal')
     expect(sampleCaution(20)).toContain('caution')
-    expect(sampleCaution(50)).toBeNull()
+    expect(sampleCaution(50)).toContain('does not establish causation')
+    expect(sampleCaution(10000)).toContain('missing coverage')
   })
 })

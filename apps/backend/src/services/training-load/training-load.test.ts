@@ -533,9 +533,53 @@ describe('computeTrainingLoad', () => {
     expect(result.workouts).toHaveLength(0)
     expect(result.points.length).toBeGreaterThan(0)
     expect(result.points.every((p) => p.atl === 0 && p.ctl === 0)).toBe(true)
-    // With hourly EMA, the extended lookback (3×42 days) produces >1008 hours,
-    // so bootstrapping may be false even for a short query range
-    expect(typeof result.bootstrapping).toBe('boolean')
+    expect(result.bootstrapping).toBe(true)
+    expect(result.zones).toBeUndefined()
+  })
+
+  test.each([0, 12])('a single recorded impulse (%s) cannot establish source coverage', async (value) => {
+    const deps = makeDeps({
+      getImpulseBuckets: async (_user, metric) =>
+        metric === 'training_impulse' ? [[new Date('2024-01-03T10:00:00Z'), value]] : [],
+    })
+    const result = await computeTrainingLoad(
+      deps,
+      'sparse-user',
+      new Date('2024-01-03T00:00:00Z'),
+      new Date('2024-01-04T00:00:00Z'),
+    )
+    expect(result.points).toHaveLength(25)
+    expect(result.bootstrapping).toBe(true)
+    expect(result.zones).toBeUndefined()
+    expect(result.points.reduce((sum, p) => sum + p.training_impulse, 0)).toBe(value)
+  })
+
+  test('long populated histories retain identical numerical series without claiming complete coverage', async () => {
+    const start = new Date('2024-01-01T00:00:00Z')
+    const end = new Date('2024-01-04T00:00:00Z')
+    const extendedStart = new Date(start.getTime() - 126 * 24 * 3600000)
+    const recorded = Array.from(
+      { length: 129 * 24 + 1 },
+      (_, i) => [new Date(extendedStart.getTime() + i * 3600000), 5] as [Date, number],
+    )
+    const result = await computeTrainingLoad(
+      makeDeps({ getImpulseBuckets: async () => recorded }),
+      'long-history-user',
+      start,
+      end,
+    )
+    const impulses = new Map(recorded.map(([time, value]) => [time.toISOString(), value]))
+    const expected = computeHourlyLoadSeries({
+      trainingImpulses: impulses,
+      activityImpulses: impulses,
+      start: extendedStart,
+      end,
+      tauAcuteDays: 7,
+      tauChronicDays: 42,
+    }).filter((p) => p.time >= start.toISOString())
+    expect(result.points).toEqual(expected)
+    expect(result.bootstrapping).toBe(true)
+    expect(result.zones).toBeUndefined()
   })
 
   test('computes TRIMP for exercises with HR data', async () => {

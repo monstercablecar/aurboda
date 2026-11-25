@@ -30,6 +30,7 @@ import { BreakdownTable } from './BreakdownTable'
 import { ContextTable } from './ContextTable'
 import { comparisonsNote } from './effects'
 import { applyExploreState, exploreState, ExploreTab } from './Explore'
+import { OBSERVATIONAL_LIMITATION } from './exploreGuidance'
 import { ImpactBreakdown } from './ImpactBreakdown'
 import { ImpactSlicer } from './ImpactSlicer'
 import { comparisonAsGroup, mealsWithLabel } from './mealSource'
@@ -521,6 +522,7 @@ export function Correlations() {
 
           {correlations && (
             <>
+              <p class="comparisons-note">{OBSERVATIONAL_LIMITATION}</p>
               {correlations.correlations.activities.length > 0 && (
                 <ContextTable
                   title="Activities"
@@ -616,22 +618,23 @@ export function Correlations() {
             <h3>Understanding the data</h3>
             <ul>
               <li>
-                <strong>HRV (Heart Rate Variability):</strong> Higher HRV generally indicates better recovery
-                and lower stress.
+                <strong>HRV (Heart Rate Variability):</strong> Interpret recorded values in their measurement
+                context; direction alone does not establish recovery or stress.
               </li>
               <li>
                 <strong>During:</strong> the average while it was going on, one value per occurrence.
               </li>
               <li>
-                <strong>vs avg:</strong> during minus your average over the whole period. Higher HRV is
-                typically good; lower heart rate and stress are typically good.
+                <strong>vs avg:</strong> during minus your average over the whole period. Higher and lower
+                describe measurements, not health benefits.
               </li>
               <li>
                 <strong>Change:</strong> the{' '}
                 {formatImpactWindow(correlations?.window_minutes ?? windowMinutes.value)} after minus the{' '}
                 {formatImpactWindow(correlations?.window_minutes ?? windowMinutes.value)} before, for
-                occurrences with data on both sides. It is coloured only when it is statistically clear; hover
-                it for the before and after values.
+                occurrences with data on both sides. It is marked when p &lt; 0.05 (adjusted where available).
+                This threshold does not establish causation or importance; hover for the before and after
+                values and paired count.
               </li>
               <li>
                 Back-to-back or duplicate entries count as one occurrence, and values are resampled to

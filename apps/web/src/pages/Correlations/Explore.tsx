@@ -27,6 +27,7 @@ import {
   eventOutcomeLooksContinuous,
   MODE_HELP,
   sampleCaution,
+  OBSERVATIONAL_LIMITATION,
   TOOLTIPS,
 } from './exploreGuidance'
 import {
@@ -220,7 +221,7 @@ function RrBars({ perLag }: { perLag: LagExposureResultData[] }) {
   const band = (w - pad.left - pad.right) / items.length
 
   return (
-    <svg width={w} height={h} class="rr-bars">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} class="rr-bars">
       <text x={pad.left} y={pad.top - 4} class="axis-label">
         Relative risk (95% CI)
       </text>
@@ -248,7 +249,7 @@ function RrBars({ perLag }: { perLag: LagExposureResultData[] }) {
   )
 }
 
-function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
+export function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
   const eo = data.event_outcome
   if (!eo) return <p class="explore-empty">No event-outcome result.</p>
 
@@ -257,6 +258,7 @@ function EventOutcomeResults({ data }: { data: GenericCorrelationData }) {
 
   return (
     <div class="explore-results">
+      <p class="comparisons-note">{OBSERVATIONAL_LIMITATION}</p>
       <p class="explore-summary">
         {eo.onsets} onsets (from {eo.outcome_days} event days) · {eo.trigger_days} trigger days ·{' '}
         {eo.known_days} known days · denominator: {eo.denominator}
@@ -374,7 +376,7 @@ function ScatterPlot({ data, selectors }: ContinuousProps) {
   const reg = linearRegression(xs, ys)
 
   return (
-    <svg width={CHART_W} height={CHART_H} class="scatter">
+    <svg width={CHART_W} height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} class="scatter">
       <line
         x1={CHART_PAD.left}
         y1={CHART_H - CHART_PAD.bottom}
@@ -444,7 +446,7 @@ function BoxPlot({ data, selectors }: ContinuousProps) {
   const bw = 46
 
   return (
-    <svg width={CHART_W} height={CHART_H} class="boxplot">
+    <svg width={CHART_W} height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`} class="boxplot">
       <line
         x1={CHART_PAD.left}
         y1={CHART_PAD.top}
@@ -482,7 +484,7 @@ function BoxPlot({ data, selectors }: ContinuousProps) {
   )
 }
 
-function ContinuousResults({ data, selectors }: ContinuousProps) {
+export function ContinuousResults({ data, selectors }: ContinuousProps) {
   const gc = data.group_comparison
   // A Pearson r on a binary/presence trigger is misleading, so when the trigger
   // is binary the group comparison is the headline rather than the correlation.
@@ -492,6 +494,7 @@ function ContinuousResults({ data, selectors }: ContinuousProps) {
 
   return (
     <div class="explore-results">
+      <p class="comparisons-note">{OBSERVATIONAL_LIMITATION}</p>
       <p class="explore-summary">
         n={data.n}
         {completeness && ` (${completeness})`} · Pearson r=

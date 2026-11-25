@@ -171,7 +171,7 @@ export function TrainingLoadChart({ points, bootstrapping, onHover }: Props) {
         width={width}
         height={HEIGHT}
         role="img"
-        aria-label="Fitness, fatigue and form over time"
+        aria-label="Long-term load, short-term load and their difference over time"
       />
     </div>
   )

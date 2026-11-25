@@ -9,9 +9,10 @@ const MIN_PAIRS_FOR_TEST = 3
 export type MetricDirection = 'up' | 'down' | 'neutral'
 
 export const getDeltaClass = (value: number | null, direction: MetricDirection): string => {
-  if (value === null || value === 0 || direction === 'neutral') return ''
-  const isGood = direction === 'down' ? value < 0 : value > 0
-  return isGood ? 'positive' : 'negative'
+  // Direction describes the measurement, not whether it benefits this person.
+  void direction
+  if (value === null || value === 0) return ''
+  return value > 0 ? 'delta-higher' : 'delta-lower'
 }
 
 /** Rounds to the decimals a cell shows, so a delta that displays as 0 is neither signed nor coloured. */
@@ -40,7 +41,6 @@ export const isClearChange = (effect: WindowEffect): boolean => {
 export const changeClass = (effect: WindowEffect, direction: MetricDirection): string => {
   if (effect.change === null) return ''
   if (!isClearChange(effect)) return 'muted'
-  if (direction === 'neutral') return ''
   return getDeltaClass(effect.change, direction) || 'muted'
 }
 
@@ -79,7 +79,7 @@ export const changeTitle = (effect: WindowEffect): string => {
 }
 
 export const columnTitles = (windowMinutes: number) => ({
-  change: `The ${formatImpactWindow(windowMinutes)} after minus the ${formatImpactWindow(windowMinutes)} before, for occurrences with data on both sides; coloured when statistically clear`,
+  change: `The ${formatImpactWindow(windowMinutes)} after minus the ${formatImpactWindow(windowMinutes)} before, for occurrences with data on both sides; marked when p < 0.05 (adjusted where available); this does not establish causation or benefit`,
   during: 'Average while it was going on, one value per occurrence',
   vs_avg: 'During minus your average over the whole period',
 })
