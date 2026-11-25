@@ -211,7 +211,7 @@ export const reapsDefinition: ManagedTemplateDefinition = {
   display_name: 'REAP-S v2 detailed nutrition assessment',
   enabled: true,
   description:
-    'Rapid Eating Assessment for Participants, Short Version, v.2. Source: Segal-Isaacson et al. supplemental instrument (2022/2023). Use for baseline or periodic reassessment rather than daily logging.',
+    'Rapid Eating Assessment for Participants, Short Version, v.2. Source: Segal-Isaacson et al. published 2022 form (the 2023 study reports a different healthy-pattern cut point). Use for baseline or periodic reassessment rather than daily logging.',
   moment: 'custom',
   questions: [
     reapQuestion({
@@ -986,11 +986,69 @@ export const scoreFromQuestion = (
   return typeof mapped === 'number' && Number.isFinite(mapped) ? mapped : null
 }
 
+const sameScoringMap = (actual: unknown, expected: unknown): boolean => {
+  if (!actual || !expected || typeof actual !== 'object' || typeof expected !== 'object') {
+    return false
+  }
+  const left = Object.entries(actual)
+  const right = Object.entries(expected)
+  return (
+    left.length === right.length &&
+    left.every(([key, value]) => (expected as Record<string, unknown>)[key] === value)
+  )
+}
+
+const sameScoringOptions = (actual: unknown, expected: unknown): boolean => {
+  if (!Array.isArray(actual) || !Array.isArray(expected) || actual.length !== expected.length) return false
+  return actual.every((item, index) => {
+    const original = expected[index]
+    return (
+      item &&
+      original &&
+      typeof item === 'object' &&
+      typeof original === 'object' &&
+      item.value === original.value &&
+      item.label === original.label &&
+      item.detail === original.detail
+    )
+  })
+}
+
+const recordedReapsScore = (
+  assessment: Assessment,
+  question: QuestionnaireTemplate['questions'][number] | undefined,
+): number | null => {
+  if (!question) return null
+  const original = reapsDefinition.questions.find((item) => item.stable_key === question.stable_key)
+  const responses = assessment.responses.filter((response) => response.question_id === question.id)
+  if (!original || responses.length !== 1 || responses[0].question_version !== question.version) return null
+  if (
+    question.prompt !== original.prompt ||
+    question.response_type !== original.response_type ||
+    question.config.helper !== original.config?.helper ||
+    !sameScoringOptions(question.config.options, original.config?.options) ||
+    !sameScoringMap(question.config.numeric_map, original.config?.numeric_map)
+  ) {
+    return null
+  }
+  return scoreFromQuestion(question, responses[0].value)
+}
+
 export const scoreReapsAssessment = (
   assessment: Assessment | undefined,
   template: QuestionnaireTemplate | undefined,
 ): ReapsScores | null => {
   if (!assessment || !template) return null
+  // Only the unchanged published-form policy can be interpreted here. Older
+  // versions remain readable, but cannot borrow the current question definitions.
+  if (
+    assessment.stage === 'draft' ||
+    assessment.template_id !== template.id ||
+    assessment.template_version !== template.version ||
+    template.stable_key !== SIMPLE_FOOD_REAPS_KEY
+  ) {
+    return null
+  }
   const values = responseMap(assessment, template)
   const questions = new Map(template.questions.map((question) => [question.stable_key, question]))
   const sections = {
@@ -1000,10 +1058,11 @@ export const scoreReapsAssessment = (
     low_nutrient_density: 0,
   }
   for (const [section, keys] of Object.entries(reapsSectionKeys) as [keyof typeof sections, string[]][]) {
-    sections[section] = keys.reduce(
-      (sum, key) => sum + (scoreFromQuestion(questions.get(key), values[key]) ?? 0),
-      0,
-    )
+    for (const key of keys) {
+      const score = recordedReapsScore(assessment, questions.get(key))
+      if (score === null || !Number.isFinite(score)) return null
+      sections[section] += score
+    }
   }
   return {
     sections,

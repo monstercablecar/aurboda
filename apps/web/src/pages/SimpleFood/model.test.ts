@@ -11,6 +11,8 @@ import {
   responseMap,
   scoreReapsAssessment,
   symptomTimeBucket,
+  sectionVerdict,
+  reapThresholds,
 } from './model'
 
 const withIds = (
@@ -81,6 +83,68 @@ describe('simple food model', () => {
     expect(scores?.sections.exercise).toBe(1)
     expect(scores?.total).toBe(40)
     expect(scores?.readiness).toBe('Interested')
+
+    for (const altered of [
+      { ...assessment, responses: [] },
+      { ...assessment, responses: assessment.responses.slice(1) },
+      {
+        ...assessment,
+        responses: [{ ...assessment.responses[0], value: 'unrecognized' }, ...assessment.responses.slice(1)],
+      },
+      {
+        ...assessment,
+        responses: [{ ...assessment.responses[0], question_version: 99 }, ...assessment.responses.slice(1)],
+      },
+      { ...assessment, responses: [...assessment.responses, assessment.responses[0]] },
+      { ...assessment, template_version: 99 },
+      { ...assessment, stage: 'draft' },
+    ]) {
+      expect(scoreReapsAssessment(altered, template)).toBeNull()
+    }
+    const changed = {
+      ...template,
+      questions: template.questions.map((q, i) =>
+        i ? q : { ...q, config: { ...q.config, numeric_map: { never: 99 } } },
+      ),
+    }
+    expect(scoreReapsAssessment(assessment, changed)).toBeNull()
+    for (const field of ['label', 'detail', 'value']) {
+      const changedOptions = {
+        ...template,
+        questions: template.questions.map((q, i) =>
+          i
+            ? q
+            : {
+                ...q,
+                config: {
+                  ...q.config,
+                  options: (q.config.options as { value: string; label: string; detail?: string }[]).map(
+                    (option, j) => (j ? option : { ...option, [field]: 'Changed meaning' }),
+                  ),
+                },
+              },
+        ),
+      }
+      expect(scoreReapsAssessment(assessment, changedOptions)).toBeNull()
+    }
+    const changedHelper = {
+      ...template,
+      questions: template.questions.map((q, i) =>
+        i ? q : { ...q, config: { ...q.config, helper: 'Changed recall period or serving definition' } },
+      ),
+    }
+    expect(scoreReapsAssessment(assessment, changedHelper)).toBeNull()
+
+    expect(scoreReapsAssessment(assessment, template)?.total).toBe(40)
+    const withoutReadiness = {
+      ...assessment,
+      responses: assessment.responses.filter((r) => r.question_id !== template.questions.at(-1)?.id),
+    }
+    expect(scoreReapsAssessment(withoutReadiness, template)?.total).toBe(40)
+    for (const [key, threshold] of Object.entries(reapThresholds)) {
+      expect(sectionVerdict(key as keyof typeof reapThresholds, threshold)).toBe('Investigate / discuss')
+      expect(sectionVerdict(key as keyof typeof reapThresholds, threshold + 1)).toBe('Encourage / commend')
+    }
   })
 
   test('finds one local-date questionnaire by the assessment timezone and preserves unknown distinct from missing', () => {

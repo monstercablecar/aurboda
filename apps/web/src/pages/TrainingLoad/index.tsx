@@ -1,4 +1,4 @@
-import type { RecoveryZones, TrainingLoadPoint, TrainingLoadResult, WorkoutTrimp } from '@aurboda/api-spec'
+import type { TrainingLoadPoint, TrainingLoadResult, WorkoutTrimp } from '@aurboda/api-spec'
 
 import { signal } from '@preact/signals'
 import { useQuery } from '@tanstack/react-query'
@@ -7,15 +7,7 @@ import { useState } from 'preact/hooks'
 
 import { fetchTrainingLoad } from '../../state/api'
 import { auth } from '../../state/auth'
-import {
-  formState,
-  newestFirst,
-  RECOVERY_ZONE_LABELS,
-  RECOVERY_ZONES,
-  type RecoveryZone,
-  recoveryZone,
-  zoneSegments,
-} from '../../utils/trainingLoad'
+import { formState, newestFirst } from '../../utils/trainingLoad'
 import { ATL_COLOR, CTL_COLOR, TSB_FATIGUED_COLOR, TSB_FRESH_COLOR } from '../Timeline/drawTrainingLoadTrack'
 import { TrainingLoadChart } from './TrainingLoadChart'
 import './style.css'
@@ -24,50 +16,38 @@ const RANGES = [30, 90, 180, 365]
 const WORKOUTS_SHOWN = 20
 const daysBack = signal(90)
 
-const ZONE_MEANINGS: Record<RecoveryZone, string> = {
-  balanced: 'Optimal training range.',
-  strained: 'Elevated fatigue: risk of overreaching.',
-  undertrained: 'Not training enough to maintain your current fitness.',
-  very_strained: 'Very high fatigue: high risk of overtraining.',
-}
-
 const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}`
-const day = (iso: string) => format(new Date(iso), 'MMM d')
 
-function FormSummary({ point, zones }: { point: TrainingLoadPoint; zones?: RecoveryZones }) {
+export function FormSummary({ point }: { point: TrainingLoadPoint }) {
   const form = formState(point.tsb)
-  const zone = zones ? recoveryZone(point.atl, zones) : null
   const gap = Math.abs(point.tsb).toFixed(1)
   return (
     <section class="tl-summary">
       <div class={`tl-form tl-form-${form}`}>
-        <div class="tl-form-label">{form === 'fresh' ? 'Fresh' : 'Fatigued'}</div>
+        <div class="tl-form-label">
+          {point.tsb >= 0 ? 'Long-term load ≥ short-term load' : 'Short-term load > long-term load'}
+        </div>
         <p>
           {form === 'fresh'
-            ? `Your fitness exceeds your recent fatigue by ${gap}: a good time for a hard session.`
-            : `Your recent training exceeds your fitness base by ${gap}: easier days let your form recover.`}
+            ? `Long-term modeled load exceeds short-term modeled load by ${gap}.`
+            : `Short-term modeled load exceeds long-term modeled load by ${gap}.`}
         </p>
-        {zone && (
-          <p class="tl-zone-now">
-            <span class={`tl-zone-dot tl-zone-${zone}`} /> {RECOVERY_ZONE_LABELS[zone]}: {ZONE_MEANINGS[zone]}
-          </p>
-        )}
       </div>
       <div class="tl-stats">
         <div class="tl-stat">
-          <div class="tl-stat-label">Fitness (CTL)</div>
+          <div class="tl-stat-label">Long-term load (CTL)</div>
           <div class="tl-stat-value" style={{ color: CTL_COLOR }}>
             {point.ctl.toFixed(1)}
           </div>
         </div>
         <div class="tl-stat">
-          <div class="tl-stat-label">Fatigue (ATL)</div>
+          <div class="tl-stat-label">Short-term load (ATL)</div>
           <div class="tl-stat-value" style={{ color: ATL_COLOR }}>
             {point.atl.toFixed(1)}
           </div>
         </div>
         <div class="tl-stat">
-          <div class="tl-stat-label">Form (TSB)</div>
+          <div class="tl-stat-label">Load difference (TSB)</div>
           <div
             class="tl-stat-value"
             style={{ color: form === 'fresh' ? TSB_FRESH_COLOR : TSB_FATIGUED_COLOR }}
@@ -77,42 +57,6 @@ function FormSummary({ point, zones }: { point: TrainingLoadPoint; zones?: Recov
         </div>
       </div>
     </section>
-  )
-}
-
-function ZoneTimeline({ points, zones }: { points: TrainingLoadPoint[]; zones?: RecoveryZones }) {
-  if (!zones) {
-    return (
-      <p class="tl-muted">
-        Recovery zones appear after about six weeks of training data, once your fitness (CTL) is meaningful.
-      </p>
-    )
-  }
-  const segments = zoneSegments(points, zones)
-  return (
-    <>
-      <div class="tl-zone-strip">
-        {segments.map((s) => (
-          <span
-            key={s.start}
-            class={`tl-zone-segment tl-zone-${s.zone}`}
-            style={{ flexGrow: s.count }}
-            title={`${RECOVERY_ZONE_LABELS[s.zone]}: ${day(s.start)}${s.start === s.end ? '' : ` – ${day(s.end)}`}`}
-          />
-        ))}
-      </div>
-      <div class="tl-zone-axis">
-        <span>{day(points[0].time)}</span>
-        <span>{day(points[points.length - 1].time)}</span>
-      </div>
-      <div class="tl-legend">
-        {RECOVERY_ZONES.map((zone) => (
-          <span key={zone} class="tl-legend-item">
-            <span class={`tl-zone-dot tl-zone-${zone}`} /> {RECOVERY_ZONE_LABELS[zone]}
-          </span>
-        ))}
-      </div>
-    </>
   )
 }
 
@@ -195,13 +139,13 @@ function EstimatedNote({ data }: { data: TrainingLoadResult }) {
   return (
     <p class="tl-note">
       {basis.estimated_workouts} of {basis.workouts} workouts in this range (
-      {Math.round(basis.estimated_share * 100)}% of their TRIMP) are estimated from duration, so fitness and
-      fatigue are partly guessed.
+      {Math.round(basis.estimated_share * 100)}% of their TRIMP) are estimated from duration, so long-term and
+      short-term load are partly estimated.
     </p>
   )
 }
 
-function LoadOverview({ data }: { data: TrainingLoadResult }) {
+export function LoadOverview({ data }: { data: TrainingLoadResult }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const { points } = data
   const latest = points.at(-1)
@@ -216,39 +160,42 @@ function LoadOverview({ data }: { data: TrainingLoadResult }) {
   const readout = (hoverIndex !== null ? points[hoverIndex] : undefined) ?? latest
   return (
     <>
-      <FormSummary point={latest} zones={data.zones} />
-      {data.bootstrapping && (
-        <p class="tl-note">
-          Less than six weeks of data: fitness (CTL, dashed) is still building and is not yet meaningful.
-        </p>
-      )}
+      <p class="tl-note">
+        Recorded load is a model estimate, not a measurement of recovery or readiness. Source coverage is
+        unknown: a gap does not show rest or recovery. Sleep, illness and other life demands are not included.
+      </p>
+      <FormSummary point={latest} />
       <EstimatedNote data={data} />
 
       <section class="tl-section">
-        <h2>Fitness, fatigue and form</h2>
+        <h2>Modeled training load</h2>
         <div class="tl-legend">
           <span class="tl-legend-item">
-            <span class="tl-swatch" style={{ background: CTL_COLOR }} /> Fitness (CTL)
+            <span class="tl-swatch" style={{ background: CTL_COLOR }} /> Long-term load (CTL)
           </span>
           <span class="tl-legend-item">
-            <span class="tl-swatch" style={{ background: ATL_COLOR }} /> Fatigue (ATL)
+            <span class="tl-swatch" style={{ background: ATL_COLOR }} /> Short-term load (ATL)
           </span>
           <span class="tl-legend-item">
             <span class="tl-swatch" style={{ background: TSB_FRESH_COLOR }} />
-            <span class="tl-swatch" style={{ background: TSB_FATIGUED_COLOR }} /> Form (TSB)
+            <span class="tl-swatch" style={{ background: TSB_FATIGUED_COLOR }} /> Load difference (TSB)
           </span>
         </div>
         <TrainingLoadChart points={points} bootstrapping={data.bootstrapping} onHover={setHoverIndex} />
         <p class="tl-readout">
-          <strong>{format(new Date(readout.time), 'EEE MMM d')}</strong> · Fitness {readout.ctl.toFixed(1)} ·
-          Fatigue {readout.atl.toFixed(1)} · Form {signed(readout.tsb)}
+          <strong>{format(new Date(readout.time), 'EEE MMM d')}</strong> · Long-term load{' '}
+          {readout.ctl.toFixed(1)} · Short-term load {readout.atl.toFixed(1)} · Difference{' '}
+          {signed(readout.tsb)}
           {readout.training_impulse > 0 && ` · Training ${readout.training_impulse.toFixed(0)}`}
         </p>
       </section>
 
       <section class="tl-section">
-        <h2>Recovery zones</h2>
-        <ZoneTimeline points={points} zones={data.zones} />
+        <h2>Data coverage</h2>
+        <p class="tl-muted">
+          Source coverage is unknown. Model bands are unavailable; gaps may be missing recordings or
+          inactivity.
+        </p>
       </section>
     </>
   )
@@ -279,7 +226,7 @@ export function TrainingLoad() {
         <div>
           <h1>Training load</h1>
           <p class="tl-subtitle">
-            Fitness, fatigue and form from your workouts and daily movement (Banister model).{' '}
+            Modeled training load from your workouts and daily movement (Banister model).{' '}
             <a href="/settings#training-load">Time constants</a>
           </p>
         </div>
@@ -310,8 +257,8 @@ export function TrainingLoad() {
             <WorkoutsTable workouts={data.workouts} />
           </section>
           <p class="tl-muted tl-footnote">
-            Fatigue (ATL) uses a {data.settings.tau_acute ?? 7}-day time constant and fitness (CTL) a{' '}
-            {data.settings.tau_chronic ?? 42}-day one.{' '}
+            Short-term load (ATL) uses a {data.settings.tau_acute ?? 7}-day time constant and long-term load
+            (CTL) a {data.settings.tau_chronic ?? 42}-day one.{' '}
             <a href="/settings#training-load">Change them in Settings</a>.
           </p>
         </>

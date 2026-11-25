@@ -25,6 +25,13 @@ const workout = (overrides: Partial<WorkoutTrimp>): WorkoutTrimp => ({
 })
 
 describe('buildTrainingLoadTooltipHtml', () => {
+  test.each([10, -10])('describes model difference %s without readiness advice', (tsb) => {
+    const html = buildTrainingLoadTooltipHtml({ ...point, tsb }, [])
+    expect(html).toContain('coverage unknown')
+    expect(html).toContain('Not a recovery or readiness measurement')
+    expect(html).not.toMatch(/Fresh|Fatigued|Undertrained|overtraining|hard session/)
+    expect(html).toContain('Load difference (TSB)')
+  })
   test('shows the average HR of a workout scored from heart rate', () => {
     expect(buildTrainingLoadTooltipHtml(point, [workout({ avg_hr: 151.4 })])).toContain(
       'Run: 30min, TRIMP 40 (151 bpm avg)',

@@ -9,8 +9,8 @@ import { RECOVERY_ZONE_LABELS, recoveryZone } from '../../utils/trainingLoad'
 
 export const CTL_COLOR = '#3b82f6' // blue (fitness)
 export const ATL_COLOR = '#f97316' // orange (fatigue)
-export const TSB_FRESH_COLOR = '#22c55e' // green (TSB > 0)
-export const TSB_FATIGUED_COLOR = '#ef4444' // red (TSB < 0)
+export const TSB_FRESH_COLOR = '#3b82f6' // blue (TSB > 0)
+export const TSB_FATIGUED_COLOR = '#a855f7' // purple (TSB < 0)
 export const TRAINING_IMPULSE_COLOR = '#8b5cf6' // purple (exercise TRIMP)
 export const ACTIVITY_IMPULSE_COLOR = '#60a5fa' // light blue (activity calories)
 
@@ -228,7 +228,7 @@ const drawZoneBands = (
     .attr('font-size', fontSize)
     .attr('opacity', labelOpacity)
     .attr('pointer-events', 'none')
-    .text('Undertrained')
+    .text(RECOVERY_ZONE_LABELS.undertrained)
 
   group
     .append('text')
@@ -240,7 +240,7 @@ const drawZoneBands = (
     .attr('font-size', fontSize)
     .attr('opacity', labelOpacity)
     .attr('pointer-events', 'none')
-    .text('Balanced')
+    .text(RECOVERY_ZONE_LABELS.balanced)
 
   group
     .append('text')
@@ -252,7 +252,7 @@ const drawZoneBands = (
     .attr('font-size', fontSize)
     .attr('opacity', labelOpacity)
     .attr('pointer-events', 'none')
-    .text('Strained')
+    .text(RECOVERY_ZONE_LABELS.strained)
 }
 
 /** Draw ATL (fatigue) as filled bars per hour — Polar Recovery Status style. */
@@ -468,12 +468,12 @@ export const buildTrainingLoadTooltipHtml = (
 
   let html = `<div class="tooltip-title">Training Load</div>`
   html += `<div class="tooltip-time">${dateStr}</div>`
-  html += `<div class="tooltip-detail" style="color:${CTL_COLOR}">Fitness (CTL): ${point.ctl.toFixed(1)}</div>`
-  html += `<div class="tooltip-detail" style="color:${ATL_COLOR}">Fatigue (ATL): ${point.atl.toFixed(1)}</div>`
+  html += `<div class="tooltip-detail" style="color:${CTL_COLOR}">Long-term load (CTL): ${point.ctl.toFixed(1)}</div>`
+  html += `<div class="tooltip-detail" style="color:${ATL_COLOR}">Short-term load (ATL): ${point.atl.toFixed(1)}</div>`
 
   const tsbColor = point.tsb >= 0 ? TSB_FRESH_COLOR : TSB_FATIGUED_COLOR
-  const tsbLabel = point.tsb >= 0 ? 'Fresh' : 'Fatigued'
-  html += `<div class="tooltip-detail" style="color:${tsbColor}">Form (TSB): ${point.tsb >= 0 ? '+' : ''}${point.tsb.toFixed(1)} — ${tsbLabel}</div>`
+  const tsbLabel = point.tsb >= 0 ? 'long-term ≥ short-term' : 'short-term > long-term'
+  html += `<div class="tooltip-detail" style="color:${tsbColor}">Load difference (TSB): ${point.tsb >= 0 ? '+' : ''}${point.tsb.toFixed(1)} — ${tsbLabel}</div>`
 
   if (point.training_impulse > 0) {
     html += `<div class="tooltip-detail" style="color:${TRAINING_IMPULSE_COLOR}">Training: ${point.training_impulse.toFixed(1)}</div>`
@@ -485,6 +485,9 @@ export const buildTrainingLoadTooltipHtml = (
   if (zones) {
     html += `<div class="tooltip-detail" style="opacity:0.7">Zone: ${RECOVERY_ZONE_LABELS[recoveryZone(point.atl, zones)]}</div>`
   }
+
+  html +=
+    '<div class="tooltip-detail">Model estimate; coverage unknown. Not a recovery or readiness measurement.</div>'
 
   for (const w of workoutsNearby) {
     const title = w.title ?? 'Workout'

@@ -1348,13 +1348,23 @@ function TrendsAndAssessments({
             <div>
               <p class="simple-food-eyebrow">Detailed assessment</p>
               <h3>REAP-S v2 baseline</h3>
+              <p>
+                Published 2022 form policy (8/14/16/1 section cut points); readiness is separate. The 2023
+                study reports a different healthy-pattern cut point. These results are not a diagnosis.
+              </p>
             </div>
           </header>
-          {!latestScores && <p>No completed REAP-S v2 assessment yet.</p>}
+          {!latestReaps && <p>No completed REAP-S v2 assessment yet.</p>}
+          {latestReaps && !latestScores && (
+            <p>
+              Score unavailable: responses are incomplete or their original scoring definitions cannot be
+              verified. Original answers remain in assessment history.
+            </p>
+          )}
           {latestScores && (
             <div class="simple-food-score-summary">
               <div class="simple-food-score-total">
-                <span>Total score</span>
+                <span>Total score (2022 form)</span>
                 <strong>{latestScores.total} / 60</strong>
               </div>
               <ul>
@@ -1389,13 +1399,30 @@ function TrendsAndAssessments({
   )
 }
 
-function ReapsSummary({ assessment, template }: { assessment: Assessment; template: QuestionnaireTemplate }) {
+export function ReapsSummary({
+  assessment,
+  template,
+}: {
+  assessment: Assessment
+  template: QuestionnaireTemplate
+}) {
   const scores = scoreReapsAssessment(assessment, template)
-  if (!scores) return null
+  if (!scores) {
+    return (
+      <p>
+        Score unavailable: responses are incomplete or their original scoring definitions cannot be verified.
+        Original answers are preserved.
+      </p>
+    )
+  }
   return (
     <div class="simple-food-score-summary compact">
+      <p>
+        2022 form policy: 8/14/16/1 section cut points. Readiness is separate; the 2023 study uses a different
+        healthy-pattern cut point. This is not a diagnosis.
+      </p>
       <div class="simple-food-score-total">
-        <span>Total</span>
+        <span>Total (2022 form)</span>
         <strong>{scores.total} / 60</strong>
       </div>
       <ul>

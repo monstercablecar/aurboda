@@ -25,9 +25,9 @@ const effect = (overrides: Partial<WindowEffect> = {}): WindowEffect => ({
 
 describe('changeClass', () => {
   test('colours a clear change by direction', () => {
-    expect(changeClass(effect(), 'down')).toBe('positive')
-    expect(changeClass(effect(), 'up')).toBe('negative')
-    expect(changeClass(effect({ change: 3 }), 'up')).toBe('positive')
+    expect(changeClass(effect(), 'down')).toBe('delta-lower')
+    expect(changeClass(effect(), 'up')).toBe('delta-lower')
+    expect(changeClass(effect({ change: 3 }), 'up')).toBe('delta-higher')
   })
 
   test('mutes a change that is not statistically clear', () => {
@@ -38,12 +38,12 @@ describe('changeClass', () => {
 
   test('judges from the adjusted p-value when there is one', () => {
     expect(changeClass(effect({ p_value: 0.01, p_value_adjusted: 0.2 }), 'down')).toBe('muted')
-    expect(changeClass(effect({ p_value: 0.01, p_value_adjusted: 0.04 }), 'down')).toBe('positive')
+    expect(changeClass(effect({ p_value: 0.01, p_value_adjusted: 0.04 }), 'down')).toBe('delta-lower')
     expect(changeClass(effect({ p_value: null, p_value_adjusted: null }), 'down')).toBe('muted')
   })
 
   test('shows a clear change plainly when the good direction is unknown', () => {
-    expect(changeClass(effect(), 'neutral')).toBe('')
+    expect(changeClass(effect(), 'neutral')).toBe('delta-lower')
   })
 
   test('is empty without a change', () => {
@@ -114,9 +114,9 @@ describe('deltas', () => {
   test('format and colour', () => {
     expect(formatDelta(7, 0)).toBe('+7')
     expect(formatDelta(null, 1)).toBe('--')
-    expect(getDeltaClass(7, 'down')).toBe('negative')
-    expect(getDeltaClass(7, 'up')).toBe('positive')
-    expect(getDeltaClass(7, 'neutral')).toBe('')
+    expect(getDeltaClass(7, 'down')).toBe('delta-higher')
+    expect(getDeltaClass(7, 'up')).toBe('delta-higher')
+    expect(getDeltaClass(7, 'neutral')).toBe('delta-higher')
     expect(getDeltaClass(0, 'down')).toBe('')
   })
 })

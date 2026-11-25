@@ -1,4 +1,13 @@
+.simple-food-page,
+.simple-food-page * {
+  box-sizing: border-box;
+}
+
 .simple-food-page {
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
+  background: #0f1726;
   color: #e5edf8;
   display: flex;
   flex-direction: column;
@@ -128,7 +137,8 @@
   align-items: start;
 }
 
-.simple-food-date-controls {
+.simple-food-date-controls,
+.simple-food-actions {
   flex-wrap: wrap;
 }
 

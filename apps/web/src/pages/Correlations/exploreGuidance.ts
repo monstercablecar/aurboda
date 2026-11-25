@@ -50,7 +50,7 @@ export const describeEffectSize = (d: number | null): string => {
 export const sampleCaution = (n: number): string | null => {
   if (n < 10) return 'very small sample — treat as anecdotal'
   if (n < 30) return 'small sample — interpret with caution'
-  return null
+  return 'Repeated observations, missing coverage and confounding can affect this association; a larger sample does not establish causation.'
 }
 
 /** Tooltip copy for the controls users most often misread. */
@@ -61,3 +61,6 @@ export const TOOLTIPS = {
   lagWindows: 'How far back before an onset to look for the trigger (e.g. 24h, 48h).',
   regime: 'Limit the analysis to a behavioural era (e.g. since you started a protocol).',
 } as const
+
+export const OBSERVATIONAL_LIMITATION =
+  'Associations in recorded data do not show what caused a change or what is better for you. Missing recordings, repeated measurements and other circumstances can affect these comparisons.'

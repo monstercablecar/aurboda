@@ -585,7 +585,7 @@
   font-size: 0.8em;
 }
 .correlations-table tr.sig-row {
-  background: rgba(16, 185, 129, 0.08);
+  background: rgba(59, 130, 246, 0.08);
 }
 .scatter {
   border: 1px solid #e5e7eb;
@@ -860,5 +860,28 @@
 
   .correlations-page .slicer-clear {
     margin-left: 0.5rem;
+  }
+}
+
+/* Measurement direction carries no favorable/unfavorable judgment. */
+.correlations-page .delta-cell.delta-higher {
+  color: #2563eb;
+}
+.correlations-page .delta-cell.delta-lower {
+  color: #9333ea;
+}
+
+.correlations-page :is(.scatter, .boxplot, .rr-bars) {
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .correlations-page .delta-cell.delta-higher {
+    color: #60a5fa;
+  }
+  .correlations-page .delta-cell.delta-lower {
+    color: #c084fc;
   }
 }

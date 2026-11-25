@@ -1,10 +1,10 @@
 # Correlation Analysis
 
-Aurboda goes beyond simple charts by computing statistical correlations between your health metrics and everything you do -- activities, locations, screen time, tags, and more. The goal is to answer questions like "Does evening exercise affect my sleep?" or "What's the probability of a headache after a bad night?"
+Aurboda goes beyond simple charts by computing statistical correlations between your health metrics and everything you do -- activities, locations, screen time, tags, and more. It can help explore recorded associations, such as sleep measurements on days with and without evening exercise. Associations do not establish causes or health benefits.
 
 In the web app it is the **Analyze** page (`/correlations`), with two tabs:
 
-- **Explore** answers "does X make a difference to Y?": pick anything you log or measure (a drink, a late coffee, an evening run, carbs) and an outcome (sleep score, HRV, a headache). It compares the days with and without it, says how big the difference is, and whether it is more than chance. How it works is described in [Correlations & exploratory analysis](../correlations.md).
+- **Explore** compares recorded X and Y: pick anything you log or measure (a drink, a late coffee, an evening run, carbs) and an outcome (sleep score, HRV, a headache). It compares the days with and without it, says how big the difference is, and the reported statistical tests. A p-value threshold does not establish importance or causation. How it works is described in [Correlations & exploratory analysis](../correlations.md).
 - **Context** shows how your HRV, heart rate and stress look during and around each activity, place and screen-time category, compared with your baseline. It is described below.
 
 Everything is also available over the REST API and as MCP tools, so an AI assistant such as Claude can run the same analyses when you ask it in plain language.
@@ -27,7 +27,7 @@ that window out, and say how much they left out. See [Flagged windows](../correl
 
 ## The Context tab
 
-The first tab of the Analyze page shows three tables over a configurable analysis period (14, 30, 60, or 90 days). Checkboxes for **HRV**, **Heart rate** and **Stress** (all on by default) choose which metrics the baseline cards, the tables and the impact chart show. After them comes a checkbox for every other metric you record around the clock (at least every 15 minutes for half of the day on most days), so there is data before and after a session: Garmin body battery, say, or a continuous custom metric. Metrics recorded only during workouts or sleep (often respiration rate) do not qualify. These are off by default, and up to 4 can be on. A ticked one gets its own columns in the tables, its own line (on its own scale), summary line and legend entry in the impact chart, its own baseline card (its average over the period), and an r for productivity categories. Its changes are coloured green or red only where the good direction is known (higher body battery, SpO2 and HRV; lower resting heart rate); otherwise a statistically clear change is shown plainly. Daily values such as resting heart rate or sleep scores never appear: they cannot show a change around a 30-minute session. At least one checkbox stays on.
+The first tab of the Analyze page shows three tables over a configurable analysis period (14, 30, 60, or 90 days). Checkboxes for **HRV**, **Heart rate** and **Stress** (all on by default) choose which metrics the baseline cards, the tables and the impact chart show. After them comes a checkbox for every other metric you record around the clock (at least every 15 minutes for half of the day on most days), so there is data before and after a session: Garmin body battery, say, or a continuous custom metric. Metrics recorded only during workouts or sleep (often respiration rate) do not qualify. These are off by default, and up to 4 can be on. A ticked one gets its own columns in the tables, its own line (on its own scale), summary line and legend entry in the impact chart, its own baseline card (its average over the period), and an r for productivity categories. Higher and lower differences use neutral blue/purple direction styling. This describes measurements without judging their benefit. Changes are marked using the existing p-value threshold and adjustment where available. Daily values such as resting heart rate or sleep scores never appear: they cannot show a change around a 30-minute session. At least one checkbox stays on.
 
 ### Correlation Tables
 
@@ -43,13 +43,13 @@ Each table covers a different category of data:
 
 Every row displays:
 
-| Column        | What it means                                                                            |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| **HRV**       | Your average HRV during or around that activity (in ms)                                  |
-| **Delta HRV** | Difference from your baseline. Positive (green) = better than usual                      |
-| **HR**        | Your average heart rate during or around that activity (in bpm)                          |
-| **Delta HR**  | Difference from baseline. Negative (green) = lower than usual, which is typically better |
-| **Samples**   | Total minutes of HR/HRV data collected                                                   |
+| Column        | What it means                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| **HRV**       | Your average HRV during or around that activity (in ms)                                               |
+| **Delta HRV** | Difference from your baseline. Higher or lower than the period baseline; benefit is context-dependent |
+| **HR**        | Your average heart rate during or around that activity (in bpm)                                       |
+| **Delta HR**  | Difference from baseline. Higher or lower than the period baseline; no health judgment follows        |
+| **Samples**   | Total minutes of HR/HRV data collected                                                                |
 
 ### Activity Impact Detail
 
@@ -210,3 +210,7 @@ Different categories sample HRV from different time windows:
 - The Pearson correlation coefficient requires at least 3 data points and only measures linear relationships. Non-linear associations won't be captured.
 - Correlation does not imply causation. A strong correlation between two events might be caused by a third, unmeasured factor.
 - Auto-sync is triggered in the background (fire-and-forget) — it never blocks correlation computation, so the analysis returns from existing data immediately. Newly synced data lands on the next request, so the first load after a stale period may reflect slightly out-of-date data.
+
+## Interpretation limits
+
+Context and Explore place a noncausal interpretation beside results. Missing coverage, repeated measurements and other circumstances can affect comparisons even with many observations. Counts, denominators, periods, units, paired values and existing multiple-comparison adjustment remain inspectable. Calculations, raw observations, API/MCP and export contracts are unchanged. No treatment recommendation or confidence score is added. See the [ASA p-value principles](https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf).

@@ -188,7 +188,7 @@ export const recoveryZonesSchema = z
   })
   .meta({
     description:
-      'Zone thresholds based on ATL: below balanced_min = Undertrained, balanced = optimal, above strained_max = Very Strained',
+      'Legacy descriptive ATL bands; these are not validated recovery, injury-risk or readiness thresholds',
     id: 'RecoveryZones',
   })
 
@@ -217,9 +217,10 @@ export type TrainingImpulseBasis = z.infer<typeof trainingImpulseBasisSchema>
 
 export const trainingLoadResultSchema = z
   .object({
-    bootstrapping: z
-      .boolean()
-      .meta({ description: 'True if < 6 weeks of data, meaning CTL may not yet be meaningful' }),
+    bootstrapping: z.boolean().meta({
+      description:
+        'True when sufficient observed source coverage cannot be established; generated zero-filled hours are not observed history',
+    }),
     estimated_impulse: trainingImpulseBasisSchema,
     points: z
       .array(trainingLoadPointSchema)
@@ -228,7 +229,7 @@ export const trainingLoadResultSchema = z
     workouts: z.array(workoutTrimpSchema).meta({ description: 'Per-workout TRIMP scores in the range' }),
     zones: recoveryZonesSchema
       .optional()
-      .meta({ description: 'Recovery zone thresholds (absent during bootstrapping)' }),
+      .meta({ description: 'Legacy modeled-load bands, omitted when observed source coverage is unknown' }),
   })
   .meta({ description: 'Training load computation result', id: 'TrainingLoadResult' })
 
