@@ -70,7 +70,7 @@ suspend fun awGet(client: HttpClient, path: List<String>, key: String, parameter
   }
   when (response.status.value) {
     200 -> return response.bodyAsText()
-    401, 403 -> throw AwSyncException("ActivityWatch requires its own API key. In ActivityWatch open Settings → API authentication, copy the key, then save it here. Keep authentication enabled.", false)
+    401, 403 -> throw AwSyncException("ActivityWatch rejected access (HTTP ${response.status.value}). If your installation has API authentication settings, copy its existing key here. Otherwise check its installed Android app version and local server settings; do not use the Web UI commit hash as a key.", false)
     404 -> throw AwSyncException("ActivityWatch endpoint or bucket is unavailable. Update ActivityWatch, open it, then retry. Your import checkpoint is preserved.", false)
     else -> throw AwSyncException("ActivityWatch returned HTTP ${response.status.value}. Open ActivityWatch and retry.")
   }
@@ -119,6 +119,20 @@ suspend fun pushEventsToAurboda(httpClient: HttpClient, apiUrl: String, authToke
     throw AwSyncException("Aurboda did not confirm the complete batch. Update the server and retry; the checkpoint has not advanced.")
   }
   return result
+}
+
+/** Manual requests run in the foreground rather than waiting behind WorkManager retry backoff. */
+suspend fun syncActivityWatchNow(context: Context, backfill: Boolean = false, httpClient: HttpClient? = null, localClient: HttpClient? = null): ActivityWatchSyncResult {
+  val credentials = CredentialsManager.getCredentials(context)
+    ?: return ActivityWatchSyncResult(error = "Sign in to Aurboda first.", retryable = false)
+  val client = httpClient ?: syncHttpClient(onTokenRefused = { forgetRefusedToken(context, it) })
+  return try {
+    val result = processActivityWatchSync(credentials.apiUrl, credentials.authToken, client, context, backfill, localClient)
+    if (result.error == null && result.retryable) ActivityWatchWorker.enqueue(context)
+    result
+  } finally {
+    if (httpClient == null) client.close()
+  }
 }
 
 suspend fun processActivityWatchSync(apiUrl: String, authToken: String, httpClient: HttpClient, context: Context, backfill: Boolean = false, localClient: HttpClient? = null): ActivityWatchSyncResult = awImportMutex.withLock {
@@ -226,7 +240,7 @@ suspend fun processActivityWatchSync(apiUrl: String, authToken: String, httpClie
     throw e
   }
   catch (e: Exception) {
-    status = status.copy(running = false, error = if (e is AwSyncException) e.message else "Cannot read or import ActivityWatch data. Open ActivityWatch, check its API key and network connection, then retry. Your checkpoint is preserved.", retryable = (e as? AwSyncException)?.retryable ?: true)
+    status = status.copy(running = false, error = if (e is AwSyncException) e.message else "Cannot read or import ActivityWatch data. Open ActivityWatch and check the connection diagnostics, then retry. Your checkpoint is preserved.", retryable = (e as? AwSyncException)?.retryable ?: true)
     save(); status
   } finally { local.close(); upload.close() }
 }

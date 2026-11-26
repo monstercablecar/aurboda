@@ -2,6 +2,8 @@ package net.aurboda
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +16,25 @@ fun ActivityWatchSection(context: Context, enabled: Boolean, onEnabled: (Boolean
   var status by remember { mutableStateOf(loadActivityWatchStatus(context)) }
   var key by remember { mutableStateOf("") }
   var keySaved by remember { mutableStateOf(false) }
+  val coroutineScope = rememberCoroutineScope()
+  var manualRunning by remember { mutableStateOf(false) }
+  var manualError by remember { mutableStateOf<String?>(null) }
+  fun syncNow(backfill: Boolean = false) {
+    manualRunning = true
+    manualError = null
+    coroutineScope.launch {
+      try {
+        val result = syncActivityWatchNow(context, backfill)
+        manualError = result.error
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        manualError = "Could not start synchronization. Check that you are signed in, then retry."
+      } finally {
+        manualRunning = false
+      }
+    }
+  }
   DisposableEffect(context) {
     val prefs = context.getSharedPreferences("ActivityWatchSyncV2", Context.MODE_PRIVATE)
     val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> status = loadActivityWatchStatus(context) }
@@ -35,16 +56,18 @@ fun ActivityWatchSection(context: Context, enabled: Boolean, onEnabled: (Boolean
         status.available -> "ActivityWatch reachable; no confirmed import yet"
         else -> "Connection not verified"
       })
-      OutlinedTextField(value = key, onValueChange = { key = it; keySaved = false }, label = { Text("ActivityWatch API key") },
+      OutlinedTextField(value = key, onValueChange = { key = it; keySaved = false }, label = { Text("ActivityWatch API key (optional)") },
         visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
-      Text("In ActivityWatch, open Settings → API authentication and copy its key. This is separate from your Aurboda sign-in. Leave authentication enabled.", style = MaterialTheme.typography.bodySmall)
+      Text("Leave this blank unless your ActivityWatch installation requires API authentication. A version number or Web UI commit hash is not a key. If authentication is enabled, use its existing key; do not disable it.", style = MaterialTheme.typography.bodySmall)
       Button(onClick = { ActivityWatchKeyStore.save(context, key); key = ""; keySaved = true }) { Text("Save API key") }
       if (keySaved) Text("Key saved securely on this phone.")
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(enabled = enabled, onClick = { ActivityWatchWorker.enqueue(context) }) { Text("Sync Now") }
-        OutlinedButton(enabled = enabled, onClick = { ActivityWatchWorker.enqueue(context) }) { Text("Retry") }
+        Button(enabled = enabled && !manualRunning, onClick = { syncNow() }) { Text("Sync Now") }
+        OutlinedButton(enabled = enabled && !manualRunning, onClick = { syncNow() }) { Text("Retry") }
       }
-      OutlinedButton(enabled = enabled, onClick = { ActivityWatchWorker.enqueue(context, backfill = true) }) { Text("Import all history again") }
+      OutlinedButton(enabled = enabled && !manualRunning, onClick = { syncNow(backfill = true) }) { Text("Import all history again") }
+      if (manualRunning) Text(if (status.running) "Synchronizing ActivityWatch…" else "Starting sync; waiting for any active import to finish…")
+      manualError?.takeIf { it != status.error }?.let { Text(it, color = MaterialTheme.colorScheme.error) }
       Text("Last successful sync: ${status.lastSuccess ?: "Never"}")
       Text("Last attempted sync: ${status.lastAttempt ?: "Never"}")
       Text("Confirmed events across source devices: ${status.eventsPushed}")

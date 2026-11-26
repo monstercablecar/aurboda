@@ -5,8 +5,8 @@ ActivityWatch collects app usage locally. Aurboda's Android companion and deskto
 ## Android setup
 
 1. Install and open ActivityWatch for Android. Verify that its app-usage screen contains events and that ActivityWatch has Usage Access.
-2. In ActivityWatch **Settings → API authentication**, copy its API key. Keep authentication enabled.
-3. In Aurboda **Sync → ActivityWatch**, save that key, enable synchronization for the signed-in account, and press **Sync Now**.
+2. Leave the API key blank unless your ActivityWatch installation requires authentication. If it exposes API authentication settings, copy its existing key without disabling authentication. Android builds and the embedded web UI can have different versions and menus; a Web UI commit hash is not a key.
+3. In Aurboda **Sync → ActivityWatch**, save a key only if needed, enable synchronization for the signed-in account, and press **Sync Now**.
 4. Watch the confirmed event count and earliest/latest timestamps. The web Data Sources page shows stored events per device. Use the activity timeline and screen-time charts to inspect them.
 
 The ActivityWatch key is different from the Aurboda login token. It is encrypted on the phone, excluded from backup/transfer, and sent only to `127.0.0.1:5600`. The Aurboda token goes only to your Aurboda server. Redirects are rejected for these import requests. A local 401 does not log you out of Aurboda.
@@ -17,9 +17,9 @@ The repair requires enabling the account-specific toggle again; the old global o
 
 The native section shows connection evidence, last attempted and successful pass, server-confirmed unique observation count, earliest/latest imported timestamps, resumable historical progress, diagnostics and remediation, **Sync Now**, **Retry**, and **Import all history again**. A toggle alone never means connected. A successful pass can still have historical work pending; the progress label distinguishes that state.
 
-Manual Health Connect Sync Now also queues ActivityWatch. ActivityWatch has its own WorkManager job so Health Connect permissions, failures and early returns cannot prevent it from running. Enabling it schedules an immediate job and a 15-minute periodic job, with network constraints and exponential retry backoff. Android controls actual timing. WorkManager persists jobs across restarts/reboots; both apps must be allowed background battery use, and the local ActivityWatch server must be running.
+The dedicated ActivityWatch **Sync Now** and **Retry** buttons run an import in the foreground with immediate visible feedback, without waiting behind a queued WorkManager retry. An already active import finishes first under the existing shared lock. Keep the screen open for the manual pass; saved checkpoints survive interruption. Manual Health Connect Sync Now also queues ActivityWatch. ActivityWatch has its own WorkManager job so Health Connect permissions, failures and early returns cannot prevent it from running. Enabling it schedules an immediate job and a 15-minute periodic job, with network constraints and exponential retry backoff. Android controls actual timing. WorkManager persists jobs across restarts/reboots; both apps must be allowed background battery use, and the local ActivityWatch server must be running.
 
-If ActivityWatch is unreachable, open it and retry. A key-required/rejected error directs you to its authentication settings. An unsupported endpoint or malformed event stops the current page without advancing its checkpoint. Authentication and read-only Aurboda refusals require user action, while transient connectivity/server failures retry automatically.
+If ActivityWatch is unreachable, open it and retry. An HTTP 401/403 error reports that access was rejected; check authentication settings only if that installation exposes them. Otherwise verify the installed Android app version and local server settings. An unsupported endpoint or malformed event stops the current page without advancing its checkpoint. Authentication and read-only Aurboda refusals require user action, while transient connectivity/server failures retry automatically.
 
 ## History and incremental imports
 

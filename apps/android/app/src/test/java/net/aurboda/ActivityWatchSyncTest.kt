@@ -22,7 +22,16 @@ class ActivityWatchSyncTest {
     })
     assertEquals("{}", awGet(client, listOf("info"), ""))
     try { awGet(client, listOf("buckets", ""), ""); fail("401 must not become an empty bucket list") }
-    catch (e: AwSyncException) { assertTrue(e.message!!.contains("API key")); assertFalse(e.retryable) }
+    catch (e: AwSyncException) { assertTrue(e.message!!.contains("HTTP 401")); assertFalse(e.retryable) }
+    client.close()
+  }
+
+  @Test fun `unprotected ActivityWatch works without a key`() = runTest {
+    val client = HttpClient(MockEngine { request ->
+      assertNull(request.headers[HttpHeaders.Authorization])
+      respond("{}", headers = headersOf(HttpHeaders.ContentType, "application/json"))
+    })
+    assertEquals("{}", awGet(client, listOf("buckets", ""), ""))
     client.close()
   }
 

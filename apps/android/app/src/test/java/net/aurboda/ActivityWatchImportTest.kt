@@ -3,6 +3,14 @@ package net.aurboda
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
+import java.util.concurrent.TimeUnit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -29,15 +37,16 @@ class ActivityWatchImportTest {
   private var account = CredentialsManager.Credentials("https://example.test", "alice", "remote-token")
   @Before fun setup() {
     context = ApplicationProvider.getApplicationContext()
+    WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
     context.getSharedPreferences("ActivityWatchSyncV2", Context.MODE_PRIVATE).edit().clear().commit()
     mockkObject(CredentialsManager, ActivityWatchKeyStore)
     every { CredentialsManager.getCredentials(any()) } answers { account }
     every { ActivityWatchKeyStore.get(any()) } returns "local-key"
     context.getSharedPreferences("ActivityWatchSyncV2", Context.MODE_PRIVATE).edit().putBoolean("${activityWatchScope(context)}.enabled", true).commit()
   }
-  @After fun cleanup() { unmockkAll() }
+  @After fun cleanup() { WorkManager.getInstance(context).cancelAllWork().result.get(); unmockkAll() }
 
-  @Test fun `interrupted history resumes and repeated import preserves unique server counts`() = runTest {
+  @Test fun `manual sync bypasses deferred work and resumes history without duplicate records`() = runTest {
     val source = (0..1200).map { i -> AwEvent(Instant.parse("2025-01-01T00:00:00Z").plusSeconds(i.toLong() * 120).toString(), 1.25, buildJsonObject { put("app", "Synthetic") }, i.toLong()) }.toMutableList()
     fun local() = HttpClient(MockEngine { request ->
       assertEquals("Bearer local-key", request.headers[HttpHeaders.Authorization])
@@ -71,9 +80,18 @@ class ActivityWatchImportTest {
     assertNotNull(first.error)
     assertNull(first.lastSuccess)
     fail = false
-    val resumed = processActivityWatchSync(account.apiUrl, account.authToken, remote, context, localClient = local())
+    val workName = "activitywatch_now_${activityWatchScope(context)}"
+    val deferred = OneTimeWorkRequestBuilder<ActivityWatchWorker>().setInitialDelay(1, TimeUnit.DAYS).build()
+    val workManager = WorkManager.getInstance(context)
+    workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, deferred).result.get()
+    ActivityWatchWorker.enqueue(context)
+    val queued = workManager.getWorkInfosForUniqueWork(workName).get()
+    assertEquals(deferred.id, queued.single().id)
+    assertEquals(WorkInfo.State.ENQUEUED, queued.single().state)
+    val resumed = syncActivityWatchNow(context, httpClient = remote, localClient = local())
     assertNull(resumed.error)
     assertEquals(1201, resumed.eventsPushed)
+    assertEquals(WorkInfo.State.ENQUEUED, workManager.getWorkInfoById(deferred.id).get().state)
     assertEquals(1201, stored.size)
     assertTrue(stored.values.all { it.duration == 1.25 })
     val replay = processActivityWatchSync(account.apiUrl, account.authToken, remote, context, backfill = true, localClient = local())
