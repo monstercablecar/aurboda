@@ -18,6 +18,30 @@ export const productivityTables: Record<string, string> = {
       CONSTRAINT unique_productivity UNIQUE (source, start_time, activity, device_name)
     )
   `,
+  activitywatch_projection: `
+    ALTER TABLE productivity ADD COLUMN IF NOT EXISTS aw_managed BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE productivity ADD COLUMN IF NOT EXISTS aw_source_retracted BOOLEAN NOT NULL DEFAULT FALSE
+  `,
+  activitywatch_observations: `
+    CREATE TABLE IF NOT EXISTS activitywatch_observations (
+      device_name TEXT NOT NULL,
+      bucket_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      source_instance TEXT NOT NULL DEFAULT '',
+      is_afk BOOLEAN NOT NULL DEFAULT FALSE,
+      original_timestamp TEXT NOT NULL,
+      start_time TIMESTAMPTZ NOT NULL,
+      duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),
+      app TEXT NOT NULL,
+      source_data JSONB NOT NULL,
+      category TEXT,
+      resolved_category TEXT[],
+      is_mobile BOOLEAN NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (device_name, bucket_id, source_instance, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS activitywatch_observations_time ON activitywatch_observations(start_time)
+  `,
   productivity_indexes: `
     CREATE INDEX IF NOT EXISTS idx_productivity_time ON productivity (start_time DESC);
     CREATE INDEX IF NOT EXISTS idx_productivity_category ON productivity (category, start_time DESC);

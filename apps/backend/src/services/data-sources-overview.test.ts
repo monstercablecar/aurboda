@@ -161,7 +161,7 @@ describe('buildDataSourcesOverview', () => {
     )
 
     expect(source(overview, 'activitywatch_android')).toMatchObject({
-      detail: 'Mobile data syncing',
+      detail: 'Mobile activity data received',
       status: 'active',
     })
     expect(source(overview, 'activitywatch_desktop').status).toBe('not_set_up')

@@ -1,6 +1,7 @@
 import type { TopApps } from '@aurboda/api-spec'
 
 import { getProductivity, getScreentimeCategories, type ProductivityRecord } from '../../db/index.ts'
+import { allocateProductivity } from '../productivity-union.ts'
 
 export interface TopAppsDeps {
   getProductivity: typeof getProductivity
@@ -29,7 +30,11 @@ export const getTopApps = async (
     categories.filter((c) => c.exclude_from_screentime).map((c) => c.name.join(' > ')),
   )
   const seconds = new Map<string, number>()
-  for (const record of records) {
+  for (const record of allocateProductivity(
+    records.filter((r) => !isExcluded(r, excludedPaths)),
+    window.start,
+    window.end,
+  )) {
     if (!record.activity || isExcluded(record, excludedPaths)) continue
     seconds.set(record.activity, (seconds.get(record.activity) ?? 0) + record.duration_sec)
   }

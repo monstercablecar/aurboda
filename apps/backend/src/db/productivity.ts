@@ -1,7 +1,9 @@
 import format from 'pg-format'
 
+import type { Queryable } from './pool.ts'
 import type { ProductivityRecord } from './types.ts'
 
+import { allocateProductivity } from '../services/productivity-union.ts'
 import { query } from './connection.ts'
 
 /**
@@ -30,7 +32,7 @@ export const toPgArray = (arr: string[] | null | undefined): string | null => {
   return '{' + escaped.join(',') + '}'
 }
 
-export const insertProductivity = async (user: string, records: ProductivityRecord[]) => {
+export const insertProductivity = async (user: string, records: ProductivityRecord[], tx?: Queryable) => {
   if (records.length === 0) return
 
   const values = records.map((r) => [
@@ -47,10 +49,8 @@ export const insertProductivity = async (user: string, records: ProductivityReco
     toPgArray(r.resolved_category) ?? null,
   ])
 
-  await query(
-    user,
-    format(
-      `INSERT INTO productivity (source, start_time, end_time, activity, title, category, productivity, duration_sec, is_mobile, device_name, resolved_category)
+  const sql = format(
+    `INSERT INTO productivity (source, start_time, end_time, activity, title, category, productivity, duration_sec, is_mobile, device_name, resolved_category)
        VALUES %L
        ON CONFLICT (source, start_time, activity, device_name) DO UPDATE SET
          end_time = EXCLUDED.end_time,
@@ -58,11 +58,13 @@ export const insertProductivity = async (user: string, records: ProductivityReco
          category = EXCLUDED.category,
          productivity = EXCLUDED.productivity,
          duration_sec = EXCLUDED.duration_sec,
+         is_mobile = EXCLUDED.is_mobile,
          resolved_category = EXCLUDED.resolved_category
        WHERE productivity.deleted_at IS NULL`,
-      values,
-    ),
+    values,
   )
+  if (tx) await tx.query(sql)
+  else await query(user, sql)
 }
 
 export const getProductivity = async (
@@ -74,7 +76,7 @@ export const getProductivity = async (
     user,
     `SELECT id, source, start_time, end_time, activity, title, category, productivity, duration_sec, is_mobile, device_name, resolved_category
      FROM productivity
-     WHERE start_time >= $1 AND start_time <= $2
+     WHERE end_time > $1 AND start_time <= $2
        AND deleted_at IS NULL
      ORDER BY start_time`,
     [start, end],
@@ -188,30 +190,46 @@ export const getDistinctApps = async (
     last_seen: Date
   }>
 > => {
-  const result = await query(
+  const records = await getProductivity(
     user,
-    `SELECT activity, title, resolved_category,
-            SUM(duration_sec)::int AS total_duration_sec,
-            COUNT(*)::int AS record_count,
-            MAX(start_time) AS last_seen
-     FROM productivity
-     WHERE deleted_at IS NULL
-     GROUP BY activity, title, resolved_category
-     ORDER BY MAX(start_time) DESC`,
+    new Date('0001-01-01T00:00:00Z'),
+    new Date('9999-12-31T23:59:59Z'),
   )
-
-  return result.rows.map((row) => ({
-    activity: row.activity,
-    last_seen: new Date(row.last_seen as string),
-    record_count: row.record_count,
-    resolved_category: row.resolved_category || undefined,
-    title: row.title || undefined,
-    total_duration_sec: row.total_duration_sec,
-  }))
+  const key = (r: ProductivityRecord) => JSON.stringify([r.activity, r.title, r.resolved_category])
+  const groups = new Map<
+    string,
+    {
+      activity: string
+      title?: string
+      resolved_category?: string[]
+      total_duration_sec: number
+      record_count: number
+      last_seen: Date
+    }
+  >()
+  for (const record of records) {
+    const id = key(record)
+    const group = groups.get(id) ?? {
+      activity: record.activity,
+      title: record.title,
+      resolved_category: record.resolved_category,
+      total_duration_sec: 0,
+      record_count: 0,
+      last_seen: record.start_time,
+    }
+    group.record_count++
+    if (record.start_time > group.last_seen) group.last_seen = record.start_time
+    groups.set(id, group)
+  }
+  for (const record of allocateProductivity(records)) {
+    groups.get(key(record))!.total_duration_sec += record.duration_sec
+  }
+  return [...groups.values()].sort((a, b) => b.last_seen.getTime() - a.last_seen.getTime())
 }
 
 export interface ProductivityBucketRow {
   bucket_start: Date
+  bucket_end?: Date
   resolved_category: string[] | null
   total_sec: number
   record_count: number
@@ -220,7 +238,7 @@ export interface ProductivityBucketRow {
 /**
  * Used for the horizontal timeline stacked bar chart.
  *
- * Uses date_bin with timezone support for DST-correct bucket alignment.
+ * Subday boundaries are absolute instants; calendar-day steps use the requested timezone.
  */
 export const getProductivityBucketed = async (
   user: string,
@@ -231,20 +249,37 @@ export const getProductivityBucketed = async (
 ): Promise<ProductivityBucketRow[]> => {
   const result = await query(
     user,
-    `SELECT
-       date_bin($3::interval, start_time AT TIME ZONE $4, ($1 AT TIME ZONE $4)::timestamp) AT TIME ZONE $4 AS bucket_start,
-       resolved_category,
-       SUM(duration_sec)::int AS total_sec,
-       COUNT(*)::int AS record_count
-     FROM productivity
-     WHERE start_time >= $1 AND start_time < $2 AND deleted_at IS NULL
-     GROUP BY bucket_start, resolved_category
-     ORDER BY bucket_start`,
+    `WITH clipped AS (
+       SELECT p.*, GREATEST(start_time,$1) AS lo, LEAST(end_time,$2) AS hi
+       FROM productivity p WHERE end_time > $1 AND start_time < $2 AND deleted_at IS NULL
+     ), slices AS (
+       SELECT c.*, b.bucket_start, b.bucket_end,
+         tstzrange(GREATEST(lo,b.bucket_start),LEAST(hi,b.bucket_end),'[)') AS span
+       FROM clipped c CROSS JOIN LATERAL (
+         SELECT boundary AS bucket_start, lead(boundary) OVER (ORDER BY boundary) AS bucket_end
+         FROM generate_series(
+           CASE WHEN $3::interval < interval '1 day' THEN date_bin($3::interval,lo,$1::timestamptz)
+             ELSE date_bin($3::interval,lo AT TIME ZONE $4,($1 AT TIME ZONE $4)::timestamp) AT TIME ZONE $4 END,
+           hi + 2 * $3::interval,$3::interval,$4) boundary
+       ) b WHERE b.bucket_start < hi AND b.bucket_end > lo
+     ), categories AS (
+       SELECT bucket_start,bucket_end,resolved_category,range_agg(span) AS coverage,COUNT(DISTINCT id)::int AS record_count
+       FROM slices GROUP BY bucket_start,bucket_end,resolved_category
+     ), allocated AS (
+       SELECT *, coverage - COALESCE(range_agg(coverage) OVER (
+         PARTITION BY bucket_start ORDER BY resolved_category NULLS LAST
+         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),'{}'::tstzmultirange) AS exclusive
+       FROM categories
+     )
+     SELECT bucket_start,bucket_end,resolved_category,record_count,
+       COALESCE((SELECT SUM(EXTRACT(EPOCH FROM upper(r)-lower(r))) FROM unnest(exclusive) r),0)::double precision AS total_sec
+     FROM allocated ORDER BY bucket_start`,
     [start, end, interval, tz],
   )
 
   return result.rows.map((row) => ({
     bucket_start: new Date(row.bucket_start as string),
+    bucket_end: new Date(row.bucket_end as string),
     record_count: row.record_count as number,
     resolved_category: row.resolved_category || null,
     total_sec: row.total_sec as number,

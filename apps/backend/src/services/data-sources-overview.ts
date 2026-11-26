@@ -59,9 +59,17 @@ const calendarsState = ({ settings }: DataSourceSignals): SourceState => {
 
 const sourceStates: Record<DataSourceId, (signals: DataSourceSignals) => SourceState> = {
   activitywatch_android: ({ activity }) =>
-    activeIf(hasProductivity(activity, 'activitywatch', true), 'Mobile data syncing', 'Not set up'),
+    activeIf(
+      hasProductivity(activity, 'activitywatch', true),
+      'Mobile activity data received',
+      'No mobile activity received',
+    ),
   activitywatch_desktop: ({ activity }) =>
-    activeIf(hasProductivity(activity, 'activitywatch', false), 'Desktop data syncing', 'Not set up'),
+    activeIf(
+      hasProductivity(activity, 'activitywatch', false),
+      'Desktop activity data received',
+      'No desktop activity received',
+    ),
   android_app: ({ activity }) =>
     activeIf(
       activity.health_connect,

@@ -22,6 +22,7 @@ import type { ouraClient } from '../integrations/oura/client.ts'
 import type { ActivityNotifier } from '../services/deduction-queue.ts'
 import type { StravaQueue } from '../services/strava-queue.ts'
 
+import { getActivityWatchDevices } from '../db/activitywatch.ts'
 import {
   ackOutboundSync,
   getOAuthToken,
@@ -348,6 +349,7 @@ export const registerSyncTools = (
 
         for (const p of providers) {
           states[p] = await getVisibleSyncStates(user, p)
+          if (p === 'activitywatch') states.activitywatch_devices = await getActivityWatchDevices(user)
         }
 
         const response: Record<string, unknown> = { states, success: true }

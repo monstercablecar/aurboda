@@ -84,6 +84,7 @@ interface Span {
 export const buildScreentimeActivitySpans = (
   records: ProductivityRecord[],
   categories: ScreentimeCategory[],
+  mergeGapMs = MERGE_GAP_MS,
 ): Span[] => {
   const excludedPaths = categories.filter((c) => c.exclude_from_screentime).map((c) => c.name)
   // Index categories by joined path for O(1) lookup inside the merge loop.
@@ -120,7 +121,7 @@ export const buildScreentimeActivitySpans = (
     for (let i = 1; i < sorted.length; i++) {
       const next = sorted[i]
       const gap = next.start_time.getTime() - current.end_time.getTime()
-      if (gap <= MERGE_GAP_MS) {
+      if (gap <= mergeGapMs) {
         if (next.end_time > current.end_time) current.end_time = next.end_time
       } else {
         spans.push(current)

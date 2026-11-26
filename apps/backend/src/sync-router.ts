@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express'
 import type { ParamsDictionary } from 'express-serve-static-core'
 
 import {
+  type ActivityWatchDevice,
   type GarminDataType,
   dailyAggregatesBodySchema,
   healthConnectDeletionsBodySchema,
@@ -192,6 +193,7 @@ export interface SyncRouterDeps {
   ) => Promise<HomeAssistantSyncResult>
   getHomeAssistantSyncStates?: (user: string) => Promise<ProviderSyncStatus[]>
   resetHomeAssistantSyncState?: (user: string) => Promise<void>
+  getActivityWatchDevices?: (user: string) => Promise<ActivityWatchDevice[]>
   getActivityWatchSyncStates: (user: string) => Promise<ProviderSyncStatus[]>
   getPendingOutboundSync: (user: string, limit?: number) => Promise<PendingOutboundSyncResult>
   ackOutboundSync: (user: string, id: string, hcRecordId?: string) => Promise<boolean>
@@ -571,7 +573,15 @@ export const createSyncRouter = (deps: SyncRouterDeps, authMiddleware: RequestHa
 
       try {
         const result = await deps.processActivityWatchEvents(user, events, deviceName, is_mobile)
-        deps.onActivitySynced?.(user, '*', new Date(Date.now() - 86400000), new Date())
+        if (result.status !== 'success') {
+          res
+            .status(500)
+            .json({ result, success: false, error: 'ActivityWatch import failed; retry this batch.' })
+          return
+        }
+        const starts = events.map((event) => new Date(event.timestamp).getTime())
+        const ends = events.map((event) => new Date(event.timestamp).getTime() + event.duration * 1000)
+        deps.onActivitySynced?.(user, '*', new Date(Math.min(...starts)), new Date(Math.max(...ends)))
         res.json({ result, success: true })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -588,7 +598,8 @@ export const createSyncRouter = (deps: SyncRouterDeps, authMiddleware: RequestHa
 
       try {
         const states = await deps.getActivityWatchSyncStates(user)
-        res.json({ states, success: true })
+        const devices = await deps.getActivityWatchDevices?.(user)
+        res.json({ states, devices, success: true })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         res.status(500).json({ error: message, success: false })

@@ -1,275 +1,232 @@
 package net.aurboda
 
 import android.content.Context
-import android.util.Log
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
+import io.ktor.http.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
+import java.security.MessageDigest
+import java.time.Instant
 
-private const val TAG = "ActivityWatchSync"
-private const val PREFS_NAME = "AurbodaAppPrefs"
-private const val AW_SYNC_ENABLED_KEY = "activityWatchSyncEnabled"
-private const val AW_LAST_SYNC_PREFIX = "aw_last_sync_"
-private const val AW_URL = "http://localhost:5600"
-private const val AW_TIMEOUT_MS = 2000L
+private const val AW_URL = "http://127.0.0.1:5600"
+private val awImportMutex = Mutex()
 
-fun isActivityWatchSyncEnabled(context: Context): Boolean {
-  val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  return prefs.getBoolean(AW_SYNC_ENABLED_KEY, false)
+fun activityWatchScope(context: Context): String? = CredentialsManager.getCredentials(context)?.let {
+  MessageDigest.getInstance("SHA-256").digest("${it.apiUrl.trimEnd('/')}|${it.username}".toByteArray()).joinToString("") { b -> "%02x".format(b) }
 }
-
-fun setActivityWatchSyncEnabled(
-  context: Context,
-  enabled: Boolean,
-) {
-  val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  prefs.edit().putBoolean(AW_SYNC_ENABLED_KEY, enabled).apply()
-}
-
-private fun getLastSyncTime(
-  context: Context,
-  bucketId: String,
-): String? {
-  val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  return prefs.getString("$AW_LAST_SYNC_PREFIX$bucketId", null)
-}
-
-private fun setLastSyncTime(
-  context: Context,
-  bucketId: String,
-  timestamp: String,
-) {
-  val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  prefs.edit().putString("$AW_LAST_SYNC_PREFIX$bucketId", timestamp).apply()
+private fun awPrefs(context: Context) = context.getSharedPreferences("ActivityWatchSyncV2", Context.MODE_PRIVATE)
+fun isActivityWatchSyncEnabled(context: Context): Boolean = activityWatchScope(context)?.let { awPrefs(context).getBoolean("$it.enabled", false) } ?: false
+fun setActivityWatchSyncEnabled(context: Context, enabled: Boolean) {
+  val scope = activityWatchScope(context) ?: return
+  awPrefs(context).edit().putBoolean("$scope.enabled", enabled).apply()
+  if (enabled) { ActivityWatchWorker.schedule(context); ActivityWatchWorker.enqueue(context) }
+  else ActivityWatchWorker.cancel(context)
 }
 
 @Serializable
-data class AwEvent(
-  val timestamp: String,
-  val duration: Double,
-  val data: JsonObject,
-)
-
+data class AwEvent(val timestamp: String, val duration: Double, val data: JsonObject, val id: Long? = null)
 @Serializable
-data class AurbodaAwEvent(
-  val app: String,
-  val duration: Double,
-  val timestamp: String,
-  val title: String? = null,
-)
-
+data class AwBucket(val type: String = "", val hostname: String = "", val created: String = "")
 @Serializable
-data class AurbodaAwSyncBody(
-  val device_name: String,
-  val events: List<AurbodaAwEvent>,
-  val is_mobile: Boolean = true,
-)
-
+data class AurbodaAwEvent(val app: String, val duration: Double, val timestamp: String, val title: String? = null,
+  val bucket_id: String? = null, val source_event_id: String? = null, val source_data: JsonObject? = null, val category: String? = null, val source_instance: String? = null)
 @Serializable
-data class AurbodaAwSyncResponse(
-  val success: Boolean,
-  val result: AurbodaAwSyncResult? = null,
-  val error: String? = null,
-  @Transient val stop: SyncStop? = null,
-)
-
+data class AurbodaAwSyncBody(val device_name: String, val events: List<AurbodaAwEvent>, val is_mobile: Boolean = true)
 @Serializable
-data class AurbodaAwSyncResult(
-  val status: String,
-  val records_stored: Int,
-  val device_name: String,
-  val error: String? = null,
-)
+data class AurbodaAwSyncResponse(val success: Boolean, val result: AurbodaAwSyncResult? = null, val error: String? = null, @Transient val stop: SyncStop? = null)
+@Serializable
+data class AurbodaAwSyncResult(val status: String, val records_stored: Int, val device_name: String, val error: String? = null,
+  val events_total: Int? = null, val earliest_event: String? = null, val latest_event: String? = null)
+@Serializable
+data class ActivityWatchSyncResult(val available: Boolean = false, val bucketsFound: Int = 0, val eventsFetched: Int = 0,
+  val eventsPushed: Int = 0, val error: String? = null, @Transient val stop: SyncStop? = null,
+  val lastAttempt: String? = null, val lastSuccess: String? = null, val earliest: String? = null, val latest: String? = null,
+  val progress: String = "Not yet synchronized", val running: Boolean = false, val retryable: Boolean = true)
 
-data class ActivityWatchSyncResult(
-  val available: Boolean = false,
-  val bucketsFound: Int = 0,
-  val eventsFetched: Int = 0,
-  val eventsPushed: Int = 0,
-  val error: String? = null,
-  val stop: SyncStop? = null,
-)
+fun loadActivityWatchStatus(context: Context): ActivityWatchSyncResult {
+  val scope = activityWatchScope(context) ?: return ActivityWatchSyncResult()
+  return awPrefs(context).getString("$scope.status", null)?.let { runCatching { appJson.decodeFromString<ActivityWatchSyncResult>(it) }.getOrNull() } ?: ActivityWatchSyncResult()
+}
 
-suspend fun checkActivityWatchAvailable(httpClient: HttpClient): Boolean =
-  try {
-    val response = httpClient.get("$AW_URL/api/0/info")
-    response.status == HttpStatusCode.OK
-  } catch (_: Exception) {
-    false
+fun activityWatchLocalClient() = HttpClient(Android) {
+  followRedirects = false
+  install(HttpTimeout) { connectTimeoutMillis = 3000; socketTimeoutMillis = 15000; requestTimeoutMillis = 30000 }
+}
+
+class AwSyncException(message: String, val retryable: Boolean = true) : Exception(message)
+
+suspend fun awGet(client: HttpClient, path: List<String>, key: String, parameters: Map<String, String> = emptyMap()): String {
+  val response = client.get(AW_URL) {
+    url { appendPathSegments(listOf("api", "0") + path, encodeSlash = true); parameters.forEach { (k, v) -> this.parameters.append(k, v) } }
+    if (key.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $key")
   }
-
-/**
- * Desktop: type == "currentwindow" (aw-watcher-window)
- * Android: bucket ID starts with "aw-android-appevents"
- */
-suspend fun fetchAppEventBuckets(httpClient: HttpClient): List<Pair<String, String>> =
-  try {
-    val response = httpClient.get("$AW_URL/api/0/buckets/")
-    if (response.status != HttpStatusCode.OK) return emptyList()
-
-    val body = response.bodyAsText()
-    val buckets = appJson.decodeFromString<Map<String, JsonObject>>(body)
-
-    buckets.entries
-      .filter { (id, bucket) ->
-        val type = bucket["type"]?.jsonPrimitive?.contentOrNull
-        type == "currentwindow" || id.startsWith("aw-android-appevents")
-      }.map { (id, bucket) ->
-        val type = bucket["type"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-        id to type
-      }
-  } catch (e: Exception) {
-    Log.e(TAG, "🚫 Error fetching AW buckets: ${e.message}")
-    emptyList()
+  when (response.status.value) {
+    200 -> return response.bodyAsText()
+    401, 403 -> throw AwSyncException("ActivityWatch requires its own API key. In ActivityWatch open Settings → API authentication, copy the key, then save it here. Keep authentication enabled.", false)
+    404 -> throw AwSyncException("ActivityWatch endpoint or bucket is unavailable. Update ActivityWatch, open it, then retry. Your import checkpoint is preserved.", false)
+    else -> throw AwSyncException("ActivityWatch returned HTTP ${response.status.value}. Open ActivityWatch and retry.")
   }
+}
 
-suspend fun fetchBucketEvents(
-  httpClient: HttpClient,
-  bucketId: String,
-  since: String?,
-): List<AwEvent> =
-  try {
-    val url =
-      buildString {
-        append("$AW_URL/api/0/buckets/$bucketId/events?limit=500")
-        if (since != null) append("&start=$since")
-      }
-    val response = httpClient.get(url)
-    if (response.status != HttpStatusCode.OK) return emptyList()
+data class AwPage(val events: List<AwEvent>, val nextEnd: String?)
 
-    val body = response.bodyAsText()
-    appJson.decodeFromString<List<AwEvent>>(body)
-  } catch (e: Exception) {
-    Log.e(TAG, "🚫 Error fetching events from $bucketId: ${e.message}")
-    emptyList()
-  }
-
-suspend fun pushEventsToAurboda(
-  httpClient: HttpClient,
-  apiUrl: String,
-  authToken: String,
-  events: List<AurbodaAwEvent>,
-  deviceName: String,
-): AurbodaAwSyncResponse =
-  try {
-    val response =
-      httpClient.post("$apiUrl/sync/activitywatch") {
-        contentType(ContentType.Application.Json)
-        headers { append(HttpHeaders.Authorization, "Bearer $authToken") }
-        setBody(AurbodaAwSyncBody(device_name = deviceName, events = events))
-      }
-    if (response.status == HttpStatusCode.OK) {
-      val body = response.bodyAsText()
-      appJson.decodeFromString<AurbodaAwSyncResponse>(body)
-    } else {
-      val error = httpErrorOf(response)
-      AurbodaAwSyncResponse(
-        success = false,
-        error = error.serverMessage ?: "HTTP ${response.status.value}",
-        stop = error.syncStop(),
-      )
-    }
-  } catch (e: Exception) {
-    Log.e(TAG, "🚫 Error pushing AW events to Aurboda: ${e.message}")
-    AurbodaAwSyncResponse(success = false, error = e.message)
-  }
-
-suspend fun processActivityWatchSync(
-  apiUrl: String,
-  authToken: String,
-  httpClient: HttpClient,
-  context: Context,
-): ActivityWatchSyncResult {
-  if (!checkActivityWatchAvailable(httpClient)) {
-    return ActivityWatchSyncResult(available = false)
-  }
-  Log.d(TAG, "📱 ActivityWatch detected, starting sync")
-
-  val buckets = fetchAppEventBuckets(httpClient)
-  if (buckets.isEmpty()) {
-    Log.d(TAG, "📱 No app-usage buckets found")
-    return ActivityWatchSyncResult(available = true, bucketsFound = 0)
-  }
-  Log.d(TAG, "📱 Found ${buckets.size} app-usage bucket(s)")
-
-  val deviceName = android.os.Build.MODEL
-  var totalFetched = 0
-  var totalPushed = 0
-
-  for ((bucketId, _) in buckets) {
-    val since = getLastSyncTime(context, bucketId)
-    val events = fetchBucketEvents(httpClient, bucketId, since)
-    if (events.isEmpty()) {
-      Log.d(TAG, "📱 No new events in $bucketId")
+/** ActivityWatch returns newest first and clips durations at query bounds. Never split a timestamp tie. */
+suspend fun readAwPage(end: String?, fetch: suspend (String?, Int) -> List<AwEvent>, hydrate: suspend (Long) -> AwEvent): AwPage {
+  var limit = 501
+  while (true) {
+    val events = fetch(end, limit)
+    events.forEach { require(it.duration.isFinite() && it.duration >= 0 && it.data["app"]?.jsonPrimitive?.contentOrNull?.isNotBlank() == true) { "Invalid ActivityWatch event; checkpoint retained" }; Instant.parse(it.timestamp) }
+    val oldest = events.minOfOrNull { Instant.parse(it.timestamp) }
+    val full = events.size >= limit
+    val selected = if (full) events.filter { Instant.parse(it.timestamp) > oldest } else events
+    if (full && selected.isEmpty()) {
+      if (limit >= 32064) throw AwSyncException("Too many events share one timestamp. Export this bucket for a manual import; no events were skipped.", false)
+      limit *= 2
       continue
     }
+    val boundary = end?.let(Instant::parse)
+    val originals = selected.map { event ->
+      if (boundary != null && Instant.parse(event.timestamp).plusNanos((event.duration * 1e9).toLong()) >= boundary) {
+        val original = hydrate(event.id ?: throw AwSyncException("ActivityWatch did not supply event IDs needed to preserve original durations. Update ActivityWatch and retry.", false))
+        require(original.id == event.id && original.timestamp.let(Instant::parse) == event.timestamp.let(Instant::parse)) { "ActivityWatch changed during import; retry" }
+        original
+      } else event
+    }
+    return AwPage(originals, if (full) oldest.toString() else null)
+  }
+}
 
-    totalFetched += events.size
-    Log.d(TAG, "📱 Fetched ${events.size} events from $bucketId")
+suspend fun pushEventsToAurboda(httpClient: HttpClient, apiUrl: String, authToken: String, events: List<AurbodaAwEvent>, deviceName: String, isMobile: Boolean = true): AurbodaAwSyncResponse {
+  val response = httpClient.post("${apiUrl.trimEnd('/')}/sync/activitywatch") {
+    contentType(ContentType.Application.Json)
+    header(HttpHeaders.Authorization, "Bearer $authToken")
+    setBody(AurbodaAwSyncBody(device_name = deviceName, events = events, is_mobile = isMobile))
+  }
+  if (response.status != HttpStatusCode.OK) {
+    val error = httpErrorOf(response)
+    return AurbodaAwSyncResponse(false, error = "Aurboda returned HTTP ${response.status.value}. Check your connection and sign-in, then retry.", stop = error.syncStop())
+  }
+  val result = appJson.decodeFromString<AurbodaAwSyncResponse>(response.bodyAsText())
+  if (!result.success || result.result?.status != "success" || result.result.records_stored != events.size || result.result.events_total == null) {
+    throw AwSyncException("Aurboda did not confirm the complete batch. Update the server and retry; the checkpoint has not advanced.")
+  }
+  return result
+}
 
-    val aurbodaEvents =
-      events.mapNotNull { event ->
-        val app = event.data["app"]?.jsonPrimitive?.contentOrNull
-        if (app == null) {
-          Log.w(TAG, "⚠️ Skipping event without 'app' field: ${event.data.keys}")
-          return@mapNotNull null
+suspend fun processActivityWatchSync(apiUrl: String, authToken: String, httpClient: HttpClient, context: Context, backfill: Boolean = false, localClient: HttpClient? = null): ActivityWatchSyncResult = awImportMutex.withLock {
+  val credentials = CredentialsManager.getCredentials(context) ?: return@withLock ActivityWatchSyncResult(error = "Sign in to Aurboda first.", retryable = false)
+  if (credentials.apiUrl != apiUrl || credentials.authToken != authToken) return@withLock ActivityWatchSyncResult(error = "Account changed. Retry from the current account.", retryable = false)
+  val scope = activityWatchScope(context)!!
+  val prefs = awPrefs(context)
+  fun stillCurrent() = activityWatchScope(context) == scope && CredentialsManager.getCredentials(context)?.authToken == authToken && isActivityWatchSyncEnabled(context)
+  fun guard() { if (!stillCurrent()) throw CancellationException("ActivityWatch account or opt-in changed") }
+  var status = loadActivityWatchStatus(context).copy(lastAttempt = Instant.now().toString(), running = true, error = null)
+  fun save() { guard(); check(prefs.edit().putString("$scope.status", appJson.encodeToString(ActivityWatchSyncResult.serializer(), status)).commit()) }
+  save()
+  val local = localClient ?: activityWatchLocalClient()
+  val upload = httpClient.config { followRedirects = false }
+  try {
+    if (backfill || prefs.contains("$scope.backfill_requested")) {
+      guard()
+      val reset = prefs.edit()
+      prefs.all.keys.filter { it.startsWith("$scope.") && (it.endsWith(".end") || it.endsWith(".done")) }.forEach { reset.remove(it) }
+      reset.remove("$scope.backfill_requested")
+      check(reset.commit())
+    }
+    val key = ActivityWatchKeyStore.get(context)
+    val buckets = appJson.decodeFromString<Map<String, AwBucket>>(awGet(local, listOf("buckets", ""), key))
+      .filter { (id, b) -> b.type == "currentwindow" || id.startsWith("aw-android-appevents") || id.startsWith("aw-watcher-android") && !id.contains("unlock") }
+    if (buckets.isEmpty()) throw AwSyncException("ActivityWatch is reachable but has no app-usage buckets. Open ActivityWatch, grant it Usage Access, and check its app-usage view.", false)
+    status = status.copy(available = true, bucketsFound = buckets.size)
+    var historyPending = false
+    for ((bucketId, bucket) in buckets) {
+      guard()
+      val device = bucket.hostname.takeIf { it.isNotBlank() && it != "unknown" } ?: throw AwSyncException("ActivityWatch bucket has no device hostname. Set the device hostname in ActivityWatch, then retry.", false)
+      val bucketKey = "$scope.${bucketId}.${bucket.created}"
+      suspend fun fetchPage(end: String?) = readAwPage(end, { upper, limit ->
+        val parameters = mutableMapOf("limit" to limit.toString()); upper?.let { parameters["end"] = it }
+        appJson.decodeFromString<List<AwEvent>>(awGet(local, listOf("buckets", bucketId, "events"), key, parameters))
+      }, { id -> appJson.decodeFromString<AwEvent>(awGet(local, listOf("buckets", bucketId, "events", id.toString()), key)) })
+      suspend fun send(page: AwPage) {
+        for (chunk in page.events.chunked(500)) {
+          guard()
+          val response = pushEventsToAurboda(upload, apiUrl, authToken, chunk.map { e ->
+            AurbodaAwEvent(e.data["app"]!!.jsonPrimitive.content, e.duration, e.timestamp,
+              e.data["title"]?.jsonPrimitive?.contentOrNull, bucketId, e.id?.toString(), e.data,
+              (e.data["category"] as? JsonPrimitive)?.contentOrNull, bucket.created)
+          }, device, !bucketId.startsWith("aw-watcher-window"))
+          if (!response.success) throw AwSyncException(response.error ?: "Aurboda refused the import.", response.stop == null)
+          guard()
+          val result = response.result!!
+          check(prefs.edit().putString("$scope.coverage.$device", appJson.encodeToString(AurbodaAwSyncResult.serializer(), result)).commit())
+          val coverage = prefs.all.filterKeys { it.startsWith("$scope.coverage.") }.values.mapNotNull { value ->
+            (value as? String)?.let { appJson.decodeFromString<AurbodaAwSyncResult>(it) }
+          }
+          status = status.copy(eventsFetched = status.eventsFetched + chunk.size, eventsPushed = coverage.sumOf { it.events_total ?: 0 },
+            earliest = coverage.mapNotNull { it.earliest_event }.minByOrNull { Instant.parse(it) },
+            latest = coverage.mapNotNull { it.latest_event }.maxByOrNull { Instant.parse(it) })
+          save()
         }
-        val title = event.data["title"]?.jsonPrimitive?.contentOrNull
-        AurbodaAwEvent(
-          app = app,
-          duration = event.duration,
-          timestamp = event.timestamp,
-          title = title,
-        )
       }
-
-    if (aurbodaEvents.isEmpty()) continue
-
-    // Push in chunks of 500 to avoid oversized payloads
-    for (chunk in aurbodaEvents.chunked(500)) {
-      val response = pushEventsToAurboda(httpClient, apiUrl, authToken, chunk, deviceName)
-      if (response.success) {
-        totalPushed += response.result?.records_stored ?: chunk.size
-        Log.d(TAG, "✅ Pushed ${chunk.size} events from $bucketId")
-      } else {
-        Log.e(TAG, "🚫 Failed to push events from $bucketId: ${response.error}")
-        return ActivityWatchSyncResult(
-          available = true,
-          bucketsFound = buckets.size,
-          eventsFetched = totalFetched,
-          eventsPushed = totalPushed,
-          error = response.error,
-          stop = response.stop,
-        )
+      // Recent imports run even when a long historical import is unfinished.
+      var recentEnd = prefs.getString("$bucketKey.recent_end", null)
+      val recentFloor = prefs.getString("$bucketKey.recent_floor", null)?.let(Instant::parse)
+        ?: (prefs.getString("$bucketKey.recent", null)?.let(Instant::parse) ?: Instant.now()).minusSeconds(86400)
+      var recentNewest = prefs.getString("$bucketKey.recent_newest", null)
+      var recentComplete = false
+      repeat(8) {
+        if (!recentComplete) {
+          val page = fetchPage(recentEnd)
+          if (recentNewest == null) recentNewest = page.events.maxOfOrNull { Instant.parse(it.timestamp) }?.toString()
+          send(page)
+          recentEnd = page.nextEnd
+          recentComplete = recentEnd == null || Instant.parse(recentEnd) < recentFloor
+          guard()
+          val edit = prefs.edit()
+          if (recentComplete) {
+            edit.putString("$bucketKey.recent", recentNewest).remove("$bucketKey.recent_end").remove("$bucketKey.recent_floor").remove("$bucketKey.recent_newest")
+          } else {
+            edit.putString("$bucketKey.recent_end", recentEnd).putString("$bucketKey.recent_floor", recentFloor.toString()).putString("$bucketKey.recent_newest", recentNewest)
+          }
+          check(edit.commit())
+        }
+      }
+      if (!recentComplete) historyPending = true
+      if (!prefs.getBoolean("$bucketKey.done", false)) {
+        var end = prefs.getString("$bucketKey.end", null)
+        var done = false
+        repeat(8) {
+          if (!done) {
+            guard()
+            status = status.copy(progress = "Importing history: ${end ?: "newest available events"}"); save()
+            val page = fetchPage(end)
+            send(page)
+            guard()
+            end = page.nextEnd
+            done = end == null
+            check(prefs.edit().putString("$bucketKey.end", end).putBoolean("$bucketKey.done", done).commit())
+          }
+        }
+        historyPending = historyPending || !done
       }
     }
-
-    val latestTimestamp = events.maxByOrNull { it.timestamp }?.timestamp
-    if (latestTimestamp != null) {
-      setLastSyncTime(context, bucketId, latestTimestamp)
-    }
+    status = status.copy(running = false, lastSuccess = Instant.now().toString(), progress = if (historyPending) "History import paused; continuing automatically" else "All available history imported", retryable = historyPending)
+    save()
+    status
+  } catch (e: CancellationException) {
+    if (stillCurrent()) { status = status.copy(running = false, progress = "Import interrupted; retry resumes from the saved checkpoint"); save() }
+    throw e
   }
-
-  if (totalFetched > 0) {
-    Log.d(TAG, "✅ ActivityWatch sync complete: $totalPushed events pushed")
-  }
-
-  return ActivityWatchSyncResult(
-    available = true,
-    bucketsFound = buckets.size,
-    eventsFetched = totalFetched,
-    eventsPushed = totalPushed,
-  )
+  catch (e: Exception) {
+    status = status.copy(running = false, error = if (e is AwSyncException) e.message else "Cannot read or import ActivityWatch data. Open ActivityWatch, check its API key and network connection, then retry. Your checkpoint is preserved.", retryable = (e as? AwSyncException)?.retryable ?: true)
+    save(); status
+  } finally { local.close(); upload.close() }
 }

@@ -340,6 +340,7 @@ export interface ActivityResult extends ActivityComputedMetrics {
  * source_ids lists all original record IDs that were merged into this span.
  */
 export interface ProductivityResult {
+  device_name?: string
   id?: string
   source_ids?: string[]
   start_time: string

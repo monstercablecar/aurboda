@@ -1,428 +1,66 @@
 # ActivityWatch
 
-[ActivityWatch](https://activitywatch.net/) is an open-source, privacy-preserving activity tracker that runs locally on your machine. It tracks which windows and applications you use, making it an alternative to RescueTime that keeps your data on your own device.
+ActivityWatch collects app usage locally. Aurboda's Android companion and desktop push agent **read** its local API and upload events to your authenticated Aurboda account. The server cannot contact your phone's localhost. Original ActivityWatch events are never edited or deleted.
 
-## Why ActivityWatch?
+## Android setup
 
-- **Open source and free** — no API key subscription required
-- **Runs locally** — data stays on your device until you push it
-- **More accurate** — tracks terminal emulators (Alacritty, etc.) and editors correctly
-- **Multi-device** — one Aurboda account can receive pushes from multiple computers
-- **Android support** — via the [aw-android](https://github.com/ActivityWatch/aw-android) app
+1. Install and open ActivityWatch for Android. Verify that its app-usage screen contains events and that ActivityWatch has Usage Access.
+2. In ActivityWatch **Settings → API authentication**, copy its API key. Keep authentication enabled.
+3. In Aurboda **Sync → ActivityWatch**, save that key, enable synchronization for the signed-in account, and press **Sync Now**.
+4. Watch the confirmed event count and earliest/latest timestamps. The web Data Sources page shows stored events per device. Use the activity timeline and screen-time charts to inspect them.
 
-## Architecture
+The ActivityWatch key is different from the Aurboda login token. It is encrypted on the phone, excluded from backup/transfer, and sent only to `127.0.0.1:5600`. The Aurboda token goes only to your Aurboda server. Redirects are rejected for these import requests. A local 401 does not log you out of Aurboda.
 
-ActivityWatch runs as a **local daemon** on your desktop or phone. Aurboda's backend runs on a server. Unlike RescueTime (cloud pull), the backend cannot query ActivityWatch directly.
+The repair requires enabling the account-specific toggle again; the old global opt-in/checkpoints are not inherited across accounts. Android cannot read another app's private key automatically. Do not paste the key into chat or expose ActivityWatch to your network.
 
-**Solution:** A lightweight push agent runs on each device, periodically querying ActivityWatch's local REST API and forwarding events to Aurboda via `POST /api/sync/activitywatch`.
+### Connection and progress
 
-```
-ActivityWatch (local)  →  Push Agent (cron/systemd)  →  Aurboda API
-```
+The native section shows connection evidence, last attempted and successful pass, server-confirmed unique observation count, earliest/latest imported timestamps, resumable historical progress, diagnostics and remediation, **Sync Now**, **Retry**, and **Import all history again**. A toggle alone never means connected. A successful pass can still have historical work pending; the progress label distinguishes that state.
 
-## Data Synced
+Manual Health Connect Sync Now also queues ActivityWatch. ActivityWatch has its own WorkManager job so Health Connect permissions, failures and early returns cannot prevent it from running. Enabling it schedules an immediate job and a 15-minute periodic job, with network constraints and exponential retry backoff. Android controls actual timing. WorkManager persists jobs across restarts/reboots; both apps must be allowed background battery use, and the local ActivityWatch server must be running.
 
-Each record contains:
+If ActivityWatch is unreachable, open it and retry. A key-required/rejected error directs you to its authentication settings. An unsupported endpoint or malformed event stops the current page without advancing its checkpoint. Authentication and read-only Aurboda refusals require user action, while transient connectivity/server failures retry automatically.
 
-| Field                     | Description                                              |
-| ------------------------- | -------------------------------------------------------- |
-| `activity`                | Application name (e.g., "firefox", "emacs", "alacritty") |
-| `duration_sec`            | Time spent in seconds                                    |
-| `start_time` / `end_time` | Precise timestamps                                       |
-| `device_name`             | Hostname or configured device name                       |
-| `source`                  | Always `activitywatch`                                   |
+## History and incremental imports
 
-Window titles are available in the raw ActivityWatch data but are not currently stored (to avoid sensitive information leaking into the database). Category and productivity scores are not assigned yet — see the [categorization follow-up](https://github.com/fiddur/aurboda/issues/218).
+Initial synchronization imports **all available app-usage history**, with no one-hour/500-event cutoff. Each bounded pass handles recent events first, then continues the historical frontier. Both scans resume after interruption. Uploads contain at most 500 events. A checkpoint advances only after every event in that page has a valid complete server acknowledgment.
 
-### AFK Filtering
+ActivityWatch's event API is newest-first, has no offset pagination, and clips intervals at time bounds. The importer leaves timestamp-tied events together, increases the read size for ties, and retrieves original events by ID whenever an end bound may have clipped them. An exceptionally large tie group stops with an error rather than silently skipping events. Current ActivityWatch releases support the single-event endpoint; older incompatible versions must be upgraded.
 
-The push agent automatically filters out screentime events that fall entirely within an AFK (away from keyboard) period, as reported by `aw-watcher-afk`. This prevents idle time (e.g. overnight screen-on) from inflating screentime totals.
+Recent scans overlap the last acknowledged frontier by a day, updating ongoing heartbeats without duplicate rows. Arbitrary edits or newly inserted records older than that overlap require **Import all history again** (desktop: `AW_BACKFILL=1`). This resets only Aurboda's traversal state. Source bucket creation time scopes event identities so a recreated bucket cannot overwrite the previous bucket's observations.
 
-Events that only partially overlap with an AFK period are kept (conservative approach). If `aw-watcher-afk` is not running, no filtering is applied.
+## Desktop setup
 
-## Admin Setup
+On the computer running ActivityWatch, open **Data Sources → ActivityWatch (Desktop)** in Aurboda and use its installation command. The existing Linux/macOS timer/cron/launch-agent and Windows scheduled task run every five minutes. Re-run the installer to update the agent. Linux/macOS require Python 3.9+ and curl; Windows now requires Python 3.9+ with `python` on PATH. Both installers embed the same standard-library Python import engine.
 
-No server-side configuration is needed. Each user sets up their own push agent with their own API token.
+If local API authentication is enabled, add `AW_API_KEY` to the protected Linux/macOS settings file `~/.config/aw-aurboda/env`; on Windows add `aw_api_key` to `%LOCALAPPDATA%\aw-aurboda\config.json`. Never use an Aurboda token as the local key. Keep settings private to your OS account. ActivityWatch authentication is optional on desktop; a blank local key supports existing unauthenticated loopback servers.
 
-## User Setup
-
-### Quick install
-
-1. Install [ActivityWatch](https://activitywatch.net/) and start it.
-2. In Aurboda, open **Data Sources → ActivityWatch (Desktop)** (new accounts also find it in the
-   dashboard's **Get started** guide), pick your operating system and press **Show my command**.
-   That creates your API key and shows a one-line command; **Copy** copies it with the key.
-3. Paste it into a terminal (Linux, macOS) or PowerShell (Windows) on the computer to track.
-
-Linux and macOS:
+To reconcile all history manually on Linux/macOS:
 
 ```bash
-curl -fsSL https://aurboda.net/api/agents/activitywatch.sh | bash -s -- --token '<TOKEN>'
+AW_BACKFILL=1 ~/.local/bin/aw-to-aurboda.sh
 ```
 
-Windows (PowerShell 5.1 or later):
+On Windows, set `$env:AW_BACKFILL='1'`, run the installed `aw-to-aurboda.ps1`, then remove that environment variable. The history cursor resumes on subsequent scheduled runs. State is separate for each Aurboda destination/credential, source bucket and bucket creation time. Refreshing a desktop API token safely starts a new idempotent backfill.
 
-```powershell
-$env:AURBODA_TOKEN='<TOKEN>'; irm https://aurboda.net/api/agents/activitywatch.ps1 | iex
-```
+All app buckets are discovered; each uses its ActivityWatch hostname, rather than assigning another synchronized device's events to the local machine. AFK buckets are matched to that hostname. Fully AFK-contained observations remain in raw storage with an AFK flag but do not contribute to screen time. A failed or truncated AFK lookup stops the import rather than inflating totals.
 
-The command contains your personal key: don't share it. Running it again replaces the installed
-files and keeps a single schedule.
+## Storage, classification and multiple devices
 
-**Linux and macOS** (`activitywatch.sh`, bash, no `sudo`):
+The owner-local `activitywatch_observations` table retains device hostname, bucket ID/creation instance, event ID, original timestamp text, fractional duration, app name, original JSON data (including source categories), mobile/AFK flags, and receipt time. Its compound source identity makes retries idempotent; an existing event's changed duration/data updates that observation. Nothing is shared with other accounts or sent to classification models.
 
-- checks for `curl` and `python3` (on macOS without it, it tells you to run
-  `xcode-select --install`) and warns, without failing, when ActivityWatch is not answering at
-  `http://localhost:5600` yet;
-- installs the [push agent](#create-the-script) as `~/.local/bin/aw-to-aurboda.sh` and its
-  settings (`AURBODA_URL`, `AURBODA_TOKEN`, `DEVICE_NAME`) in `~/.config/aw-aurboda/env`, mode 600 —
-  the key is never written into a unit file or crontab;
-- runs it every 5 minutes: on Linux a systemd user timer (`aw-aurboda.timer`), or a crontab
-  entry marked `# aw-aurboda` where `systemctl --user` is unavailable; on macOS a launch agent,
-  `~/Library/LaunchAgents/net.aurboda.aw-push.plist` (`StartInterval` 300, logging to
-  `~/.local/state/aw-aurboda/push.log`);
-- runs the agent once and prints the result.
+The existing productivity table remains a dashboard projection. Colliding same-app/start/device observations choose the longest observation deterministically; the granular originals remain available. Source corrections retract obsolete managed projections without reviving user-deleted records. Derived activities rebuild from persisted projections so page size/order does not create duplicate spans.
 
-Options after `bash -s --`: `--device <name>` (default: the hostname), `--url <api url>` (another
-Aurboda server), and `--uninstall`, which removes the agent, its schedule and its settings:
+Combined screen-time totals use interval unions, clipped to requested bounds. Simultaneous categories receive deterministic alphabetical category precedence (uncategorized last), not a claim about which device held the user's attention. Raw per-device observations remain distinct. Existing rounded productivity durations are retained for compatibility; exact source duration/timestamp remain in observations. Future timestamp-based contextual classification can operate on these originals independently of today's categories.
 
-```bash
-curl -fsSL https://aurboda.net/api/agents/activitywatch.sh | bash -s -- --uninstall
-```
+## Status API
 
-**Windows** (`activitywatch.ps1`, no administrator rights): installs a PowerShell port of the
-agent (same bucket discovery, AFK filtering, state file and payload) as
-`%LOCALAPPDATA%\aw-aurboda\aw-to-aurboda.ps1` with its settings in `config.json` beside it, and
-registers the scheduled task **Aurboda ActivityWatch push** for the current user, every 5 minutes
-in a hidden window. Set `$env:AURBODA_DEVICE` to name the computer (default: its computer name)
-or `$env:AURBODA_URL` for another server before running it. To uninstall:
+- `POST /api/sync/activitywatch`: authenticated batched ingestion. A database/processing failure returns failure; clients must check both HTTP and result status/count.
+- `GET /api/sync/activitywatch/status`: sync states and persisted per-device coverage, including older history.
+- MCP `get_sync_status(provider="activitywatch")`: includes `activitywatch_devices` alongside sync states.
 
-```powershell
-$env:AURBODA_UNINSTALL='1'; irm https://aurboda.net/api/agents/activitywatch.ps1 | iex
-```
+“Data received” proves persistence, not a continuously reachable phone. Server status cannot know about a local connection attempt that never reached it. Detailed attempt errors and historical cursors live on the importing device.
 
-The scripts are served without authentication by `GET /api/agents/activitywatch.sh` and
-`GET /api/agents/activitywatch.ps1`, with the server's `API_BASE_URL` filled in. They have no MCP
-twin: they are scripts for a shell, like the OpenAPI document.
+## Verification boundary
 
-### Manual setup
-
-To set the agent up by hand instead:
-
-#### 1. Install ActivityWatch
-
-Download and install ActivityWatch from [activitywatch.net](https://activitywatch.net/). Start the daemon — it runs on `http://localhost:5600` by default.
-
-#### 2. Get your Aurboda API token
-
-1. Log into Aurboda and go to **Settings > Data Sources**
-2. Find the **ActivityWatch** section
-3. Click **Generate API Token** and copy the token
-
-> Keep this token secure — it grants full access to your Aurboda account.
-
-#### 3. Set up the push agent
-
-The push agent is a shell script that reads from ActivityWatch's local API and sends events to Aurboda.
-
-##### Create the script
-
-Save the following as `~/.local/bin/aw-to-aurboda.sh`:
-
-```bash
-#!/usr/bin/env bash
-# ActivityWatch → Aurboda push agent
-# Run periodically (e.g. every 5 minutes) via cron or systemd timer.
-
-set -euo pipefail
-
-# Settings written by the installer; variables already in the environment win.
-AW_AURBODA_ENV="${AW_AURBODA_ENV:-$HOME/.config/aw-aurboda/env}"
-if [[ -z "${AURBODA_TOKEN:-}" && -r "$AW_AURBODA_ENV" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  . "$AW_AURBODA_ENV"
-  set +a
-fi
-
-# ── Configuration ─────────────────────────────────────────────────────────────
-AURBODA_URL="${AURBODA_URL:-https://aurboda.net/api}"
-AURBODA_TOKEN="${AURBODA_TOKEN:-}"           # set in environment or replace here
-DEVICE_NAME="${DEVICE_NAME:-$(hostname)}"    # override to give a friendly name
-AW_URL="${AW_URL:-http://localhost:5600}"
-STATE_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/aw-aurboda/last_sync"
-LOOKBACK_HOURS="${LOOKBACK_HOURS:-1}"        # how far back to fetch on each run
-# ──────────────────────────────────────────────────────────────────────────────
-
-if [[ -z "$AURBODA_TOKEN" ]]; then
-  echo "ERROR: AURBODA_TOKEN is not set" >&2
-  exit 1
-fi
-
-mkdir -p "$(dirname "$STATE_FILE")"
-
-# Determine time window
-if [[ -f "$STATE_FILE" ]]; then
-  START_TIME=$(cat "$STATE_FILE")
-else
-  START_TIME=$(date -u -d "${LOOKBACK_HOURS} hours ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-    || date -u -v-${LOOKBACK_HOURS}H +%Y-%m-%dT%H:%M:%SZ)  # macOS fallback
-fi
-# Use 5 minutes ago to give AFK watcher time to finalize heartbeats
-END_TIME=$(date -u -d "5 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-  || date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)  # macOS fallback
-
-# Find the aw-watcher-window and aw-watcher-afk buckets for this host
-BUCKETS_JSON=$(curl -sf "${AW_URL}/api/0/buckets/" || true)
-
-BUCKET_ID=$(echo "$BUCKETS_JSON" | python3 -c "
-import sys, json
-buckets = json.load(sys.stdin)
-for bid, b in buckets.items():
-    if b.get('type') == 'currentwindow':
-        print(bid)
-        break
-" 2>/dev/null || true)
-
-AFK_BUCKET_ID=$(echo "$BUCKETS_JSON" | python3 -c "
-import sys, json
-buckets = json.load(sys.stdin)
-for bid, b in buckets.items():
-    if b.get('type') == 'afkstatus':
-        print(bid)
-        break
-" 2>/dev/null || true)
-
-if [[ -z "$BUCKET_ID" ]]; then
-  echo "No aw-watcher-window bucket found — is ActivityWatch running?" >&2
-  exit 0
-fi
-
-# Fetch window events
-EVENTS=$(curl -sf \
-  "${AW_URL}/api/0/buckets/${BUCKET_ID}/events?start=${START_TIME}&end=${END_TIME}&limit=10000")
-
-# Fetch AFK events (used to filter out idle screentime)
-AFK_EVENTS="[]"
-if [[ -n "$AFK_BUCKET_ID" ]]; then
-  AFK_EVENTS=$(curl -sf \
-    "${AW_URL}/api/0/buckets/${AFK_BUCKET_ID}/events?start=${START_TIME}&end=${END_TIME}&limit=10000" || echo "[]")
-fi
-
-EVENT_COUNT=$(echo "$EVENTS" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
-
-if [[ "$EVENT_COUNT" -eq 0 ]]; then
-  echo "No events in range ${START_TIME} → ${END_TIME}"
-  echo "$END_TIME" > "$STATE_FILE"
-  exit 0
-fi
-
-echo "Found ${EVENT_COUNT} events (${START_TIME} → ${END_TIME}) for device '${DEVICE_NAME}'"
-
-# Transform, filter AFK, and push
-PAYLOAD=$(python3 -c "
-import sys, json
-from datetime import datetime, timedelta, timezone
-
-events = json.loads(sys.argv[1])
-afk_events = json.loads(sys.argv[2])
-device_name = sys.argv[3]
-
-def parse_ts(ts):
-    # Handle both 'Z' suffix and '+00:00' offset
-    ts = ts.replace('Z', '+00:00')
-    return datetime.fromisoformat(ts)
-
-def utc_iso(dt):
-    # Aurboda accepts UTC timestamps with a 'Z' suffix only
-    return dt.astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
-
-# Build list of AFK periods
-afk_periods = []
-for ae in afk_events:
-    if ae.get('data', {}).get('status') == 'afk':
-        start = parse_ts(ae['timestamp'])
-        end = start + timedelta(seconds=ae['duration'])
-        afk_periods.append((start, end))
-
-def is_during_afk(evt_start, evt_end):
-    \"\"\"Check if the event falls entirely within an AFK period.\"\"\"
-    for afk_start, afk_end in afk_periods:
-        if evt_start >= afk_start and evt_end <= afk_end:
-            return True
-    return False
-
-transformed = []
-filtered_count = 0
-for e in events:
-    app = e.get('data', {}).get('app', '')
-    if not app:
-        continue
-    evt_start = parse_ts(e['timestamp'])
-    evt_end = evt_start + timedelta(seconds=e['duration'])
-    if afk_periods and is_during_afk(evt_start, evt_end):
-        filtered_count += 1
-        continue
-    transformed.append({
-        'timestamp': utc_iso(evt_start),
-        'duration': e['duration'],
-        'app': app,
-        'title': e.get('data', {}).get('title', ''),
-    })
-
-if filtered_count > 0:
-    print(f'Filtered {filtered_count} AFK events', file=sys.stderr)
-
-print(json.dumps({'device_name': device_name, 'events': transformed}))
-" "$EVENTS" "$AFK_EVENTS" "$DEVICE_NAME")
-
-PUSH_COUNT=$(echo "$PAYLOAD" | python3 -c "import sys, json; print(len(json.load(sys.stdin).get('events', [])))" 2>/dev/null || echo 0)
-
-if [[ "$PUSH_COUNT" -eq 0 ]]; then
-  echo "All events were AFK — nothing to push"
-  echo "$END_TIME" > "$STATE_FILE"
-  exit 0
-fi
-
-echo "Pushing ${PUSH_COUNT} events (${EVENT_COUNT} total, $((EVENT_COUNT - PUSH_COUNT)) filtered as AFK)"
-
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST "${AURBODA_URL}/sync/activitywatch" \
-  -H "Authorization: bearer ${AURBODA_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD")
-
-if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
-  echo "✓ Pushed successfully (HTTP ${HTTP_STATUS})"
-  echo "$END_TIME" > "$STATE_FILE"
-else
-  echo "✗ Push failed (HTTP ${HTTP_STATUS})" >&2
-  exit 1
-fi
-```
-
-Make it executable:
-
-```bash
-chmod +x ~/.local/bin/aw-to-aurboda.sh
-```
-
-##### Configure the script
-
-Set the required environment variables. Add these to `~/.profile` or `~/.zshenv`:
-
-```bash
-export AURBODA_URL="https://aurboda.net/api"   # your Aurboda server URL
-export AURBODA_TOKEN="your-token-here"          # from Settings
-export DEVICE_NAME="laptop"                     # friendly name for this device
-```
-
-##### Test it manually
-
-```bash
-AURBODA_URL=https://aurboda.net/api \
-AURBODA_TOKEN=your-token \
-DEVICE_NAME=laptop \
-~/.local/bin/aw-to-aurboda.sh
-```
-
-#### 4. Schedule the push agent
-
-##### Option A: cron
-
-```bash
-crontab -e
-```
-
-Add:
-
-```
-*/5 * * * * AURBODA_URL=https://aurboda.net/api AURBODA_TOKEN=your-token DEVICE_NAME=laptop ~/.local/bin/aw-to-aurboda.sh >> ~/.local/state/aw-aurboda/push.log 2>&1
-```
-
-##### Option B: systemd user timer (Linux, recommended)
-
-Create `~/.config/systemd/user/aw-aurboda.service`:
-
-```ini
-[Unit]
-Description=ActivityWatch → Aurboda push agent
-After=network-online.target
-
-[Service]
-Type=oneshot
-EnvironmentFile=%h/.config/aw-aurboda/env
-ExecStart=%h/.local/bin/aw-to-aurboda.sh
-StandardOutput=journal
-StandardError=journal
-```
-
-Create `~/.config/systemd/user/aw-aurboda.timer`:
-
-```ini
-[Unit]
-Description=Run ActivityWatch → Aurboda push every 5 minutes
-
-[Timer]
-OnCalendar=*:0/5
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Create the environment file `~/.config/aw-aurboda/env`:
-
-```ini
-AURBODA_URL=https://aurboda.net/api
-AURBODA_TOKEN=your-token-here
-DEVICE_NAME=laptop
-```
-
-Enable and start:
-
-```bash
-chmod 600 ~/.config/aw-aurboda/env   # protect the token
-systemctl --user daemon-reload
-systemctl --user enable --now aw-aurboda.timer
-systemctl --user status aw-aurboda.timer
-```
-
-## Multiple Computers
-
-Each computer runs its own ActivityWatch daemon and its own push agent. Set a different `DEVICE_NAME` on each machine (e.g. `laptop`, `workstation`). All devices use the same `AURBODA_TOKEN`.
-
-Aurboda stores a separate `device_name` with each productivity record. Existing RescueTime records have an empty device name. The unique deduplication key is `(source, start_time, activity, device_name)`, so data from different devices never conflicts.
-
-## Android
-
-The [ActivityWatch Android app](https://github.com/ActivityWatch/aw-android) runs `aw-server-rust` as a native library, exposing the standard ActivityWatch REST API at `localhost:5600` on the device. The Aurboda Android app queries it directly — no Tasker or Termux needed.
-
-### Setup
-
-1. Install [ActivityWatch for Android](https://github.com/ActivityWatch/aw-android) and ensure it is running.
-2. Open the Aurboda app → **Sync** tab.
-3. Enable the **ActivityWatch Sync** toggle.
-
-That's it. Aurboda will sync app-usage events from ActivityWatch automatically, both during foreground "Sync Now" and in the background (every 15 minutes when background sync is enabled).
-
-### How it works
-
-- Aurboda checks `http://localhost:5600` for ActivityWatch availability (2-second timeout; skips silently if not reachable).
-- It fetches app-usage buckets (`currentwindow` type or `aw-android-appevents-*` buckets).
-- New events since the last sync are mapped to the `ActivityWatchEvent` format and POSTed to the backend with `is_mobile: true`.
-- The `device_name` is set to the Android device model name automatically.
-- Last sync time is tracked per bucket in SharedPreferences to avoid re-sending events.
-
-## Sync Status
-
-Check when each device last pushed:
-
-- **REST:** `GET /api/sync/activitywatch/status`
-- **MCP:** `get_sync_status(provider="activitywatch")`
-
-## Transition from RescueTime
-
-ActivityWatch data coexists with RescueTime data — both sources are stored under `source = 'rescuetime'` and `source = 'activitywatch'` respectively in the `productivity` table. All productivity queries return both sources transparently.
-
-To switch completely, simply stop the RescueTime sync and keep only the ActivityWatch push agent running.
+Automated tests use synthetic app data, an isolated PostgreSQL database, Android HTTP mocks/Robolectric, and local desktop HTTP servers. They do not prove your physical phone's ActivityWatch server availability, installed version, battery policy, key entry, or APK signing compatibility. Verify a real import by checking the source hostname, event count and historical date range, then opening the activity timeline/chart. Preserve both apps' data during installation; never uninstall ActivityWatch to troubleshoot sync.

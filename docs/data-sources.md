@@ -102,3 +102,5 @@ Home Assistant positions arrive by pull, possibly after the activity's track was
 Activity tracks (one line per activity and source in `activity_tracks`, see [Routes and segments](./features/routes-and-segments.md)) are stored separately and are not subject to precedence.
 
 Points are only ever soft-deleted (`locations.deleted_at`), never removed, but re-inserting them does not bring them back -- both insert paths use `ON CONFLICT DO NOTHING`. To restore a superseded track, clear `deleted_at` directly.
+
+ActivityWatch supports authenticated Android and desktop imports, resumable full history, and per-device persisted coverage. See [ActivityWatch setup and diagnostics](activitywatch.md).

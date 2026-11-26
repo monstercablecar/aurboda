@@ -968,6 +968,59 @@ describe('getDailySummary', () => {
     expect(result.productivity!.categories).toEqual([{ duration_sec: 3600, path: ['Work', 'Programming'] }])
   })
 
+  test('excluded overlapping devices cannot hide the included daily category', async () => {
+    vi.mocked(db.getTimeSeries).mockResolvedValue([])
+    vi.mocked(db.getSleepSessions).mockResolvedValue([])
+    vi.mocked(db.getNonSleepActivitiesMerged).mockResolvedValue([])
+    vi.mocked(db.getProductivity).mockResolvedValue([
+      {
+        activity: 'VS Code',
+        duration_sec: 3600,
+        end_time: new Date('2024-01-15T11:00:00Z'),
+        productivity: 2,
+        resolved_category: ['Work', 'Programming'],
+        start_time: new Date('2024-01-15T10:00:00Z'),
+      },
+      {
+        activity: 'System Idle',
+        duration_sec: 1200,
+        end_time: new Date('2024-01-15T10:20:00Z'),
+        productivity: 0,
+        resolved_category: ['System'],
+        start_time: new Date('2024-01-15T10:00:00Z'),
+      },
+      {
+        activity: 'System Update',
+        duration_sec: 300,
+        end_time: new Date('2024-01-15T10:30:00Z'),
+        productivity: 0,
+        resolved_category: ['System', 'Updates'],
+        start_time: new Date('2024-01-15T10:25:00Z'),
+      },
+    ])
+    vi.mocked(screentimeCategoriesDb.getScreentimeCategories).mockResolvedValue([
+      {
+        created_at: new Date(),
+        exclude_from_screentime: true,
+        id: 'cat-1',
+        ignore_case: true,
+        name: ['System'],
+        rule_type: 'regex',
+        sort_order: 0,
+        updated_at: new Date(),
+      },
+    ])
+    vi.mocked(locationsService.getPlaceVisits).mockResolvedValue([])
+    vi.mocked(db.getDailyAggregateValue).mockResolvedValue(null)
+    vi.mocked(db.getTimeSeriesMultiMetric).mockResolvedValue({} as Record<MetricType, [Date, number][]>)
+
+    const result = await getDailySummary('testuser', new Date('2024-01-15'))
+
+    // Excluded categories must not win allocation over simultaneous Work.
+    expect(result.productivity!.total_duration_sec).toBe(3600)
+    expect(result.productivity!.categories).toEqual([{ duration_sec: 3600, path: ['Work', 'Programming'] }])
+  })
+
   test('adds screentime activities from the activities table to the result', async () => {
     vi.mocked(db.getTimeSeries).mockResolvedValue([])
     vi.mocked(db.getSleepSessions).mockResolvedValue([])

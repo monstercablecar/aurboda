@@ -57,121 +57,21 @@ function Install-AwAurboda {
   }
 
   $agentScript = @'
-# ActivityWatch -> Aurboda push agent for Windows, run every 5 minutes by a scheduled task.
-# Reads its settings from config.json next to it; sends the same payload as the bash agent.
-
 $ErrorActionPreference = 'Stop'
-[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-
 $Dir = Join-Path $env:LOCALAPPDATA 'aw-aurboda'
 $Config = Get-Content -Raw -Path (Join-Path $Dir 'config.json') | ConvertFrom-Json
-$StateFile = Join-Path $Dir 'last_sync'
-$AwUrl = 'http://localhost:5600'
-if ($env:AW_URL) { $AwUrl = $env:AW_URL }
-$LookbackHours = 1
-$Invariant = [Globalization.CultureInfo]::InvariantCulture
-$SecondFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-$MilliFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'"
-
-function Get-AwJson([string]$Path) {
-  $client = New-Object System.Net.WebClient
-  $client.Encoding = [Text.Encoding]::UTF8
-  try { return ($client.DownloadString("$AwUrl$Path") | ConvertFrom-Json) } finally { $client.Dispose() }
+$env:AURBODA_URL = $Config.url
+$env:AURBODA_TOKEN = $Config.token
+$env:AW_STATE_DIR = $Dir
+if ($Config.aw_api_key) { $env:AW_API_KEY = $Config.aw_api_key }
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+  throw 'Install Python 3.9 or newer with python on PATH, then retry the ActivityWatch agent.'
 }
-
-function ConvertTo-UtcDate($Value) {
-  if ($Value -is [DateTime]) { return $Value.ToUniversalTime() }
-  return [DateTimeOffset]::Parse([string]$Value, $Invariant).UtcDateTime
-}
-
-if (Test-Path $StateFile) {
-  $startText = (Get-Content -Raw -Path $StateFile).Trim()
-} else {
-  $startText = [DateTime]::UtcNow.AddHours(-$LookbackHours).ToString($SecondFormat, $Invariant)
-}
-# 5 minutes ago gives the AFK watcher time to finalize heartbeats
-$endText = [DateTime]::UtcNow.AddMinutes(-5).ToString($SecondFormat, $Invariant)
-
-$windowBucket = $null
-$afkBucket = $null
-try { $buckets = Get-AwJson '/api/0/buckets/' } catch { $buckets = $null }
-if ($buckets) {
-  foreach ($bucket in $buckets.PSObject.Properties) {
-    if (-not $windowBucket -and $bucket.Value.type -eq 'currentwindow') { $windowBucket = $bucket.Name }
-    if (-not $afkBucket -and $bucket.Value.type -eq 'afkstatus') { $afkBucket = $bucket.Name }
-  }
-}
-if (-not $windowBucket) {
-  Write-Output 'No aw-watcher-window bucket found - is ActivityWatch running?'
-  exit 0
-}
-
-$range = "start=$startText&end=$endText&limit=10000"
-$events = Get-AwJson "/api/0/buckets/$([uri]::EscapeDataString($windowBucket))/events?$range"
-
-$afkPeriods = New-Object System.Collections.Generic.List[object]
-if ($afkBucket) {
-  try { $afkEvents = Get-AwJson "/api/0/buckets/$([uri]::EscapeDataString($afkBucket))/events?$range" } catch { $afkEvents = $null }
-  foreach ($afk in $afkEvents) {
-    if ($null -ne $afk -and $afk.data.status -eq 'afk') {
-      $afkStart = ConvertTo-UtcDate $afk.timestamp
-      $afkPeriods.Add([pscustomobject]@{ Start = $afkStart; End = $afkStart.AddSeconds([double]$afk.duration) })
-    }
-  }
-}
-
-$total = 0
-$filtered = 0
-$transformed = New-Object System.Collections.Generic.List[object]
-foreach ($item in $events) {
-  if ($null -eq $item) { continue }
-  $total++
-  $app = [string]$item.data.app
-  if (-not $app) { continue }
-  $eventStart = ConvertTo-UtcDate $item.timestamp
-  $eventEnd = $eventStart.AddSeconds([double]$item.duration)
-  $isAfk = $false
-  foreach ($period in $afkPeriods) {
-    if ($eventStart -ge $period.Start -and $eventEnd -le $period.End) { $isAfk = $true; break }
-  }
-  if ($isAfk) { $filtered++; continue }
-  $title = ''
-  if ($null -ne $item.data.title) { $title = [string]$item.data.title }
-  $transformed.Add([ordered]@{
-      timestamp = $eventStart.ToString($MilliFormat, $Invariant)
-      duration  = [double]$item.duration
-      app       = $app
-      title     = $title
-    })
-}
-
-if ($total -eq 0) {
-  Write-Output "No events in range $startText -> $endText"
-  Set-Content -Path $StateFile -Value $endText -Encoding ASCII
-  exit 0
-}
-if ($transformed.Count -eq 0) {
-  Write-Output 'All events were AFK - nothing to push'
-  Set-Content -Path $StateFile -Value $endText -Encoding ASCII
-  exit 0
-}
-
-Write-Output "Pushing $($transformed.Count) events ($total total, $filtered filtered as AFK) for device '$($Config.device_name)'"
-
-$body = [ordered]@{ device_name = [string]$Config.device_name; events = $transformed.ToArray() } | ConvertTo-Json -Depth 5 -Compress
-try {
-  $response = Invoke-WebRequest -Uri "$($Config.url)/sync/activitywatch" -Method Post -UseBasicParsing -TimeoutSec 60 `
-    -Headers @{ Authorization = "bearer $($Config.token)" } `
-    -ContentType 'application/json; charset=utf-8' `
-    -Body ([Text.Encoding]::UTF8.GetBytes($body))
-  Write-Output "Pushed successfully (HTTP $($response.StatusCode))"
-  Set-Content -Path $StateFile -Value $endText -Encoding ASCII
-} catch {
-  $status = 'no response'
-  if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
-  [Console]::Error.WriteLine("Push failed (HTTP $status): $($_.Exception.Message)")
-  exit 1
-}
+$program = @"
+__AW_PYTHON_AGENT__
+"@
+$program | python -
+exit $LASTEXITCODE
 '@
 
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
