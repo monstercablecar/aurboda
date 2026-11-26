@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import * as yaml from 'yaml'
 
 import { fixKotlinModel } from './fix-kotlin-models.mjs'
 
@@ -89,4 +90,30 @@ test('an unknown enum default fails generation instead of weakening the enum', (
     () => fixKotlinModel(numericModel.replace('kotlin.Double("0")', 'kotlin.Double("9")')),
     /No CreateTaskItemBody.Priority entry/,
   )
+})
+
+test('ADHD dynamic envelopes preserve JSON primitive and nested wire shapes', () => {
+  for (const name of ['AdhdObservationAnswersValue', 'AdhdItemsValueValue', 'AdhdItemsOutputValueValue']) {
+    const fixed = fixKotlinModel(`package net.aurboda.api.models\n@Serializable\nclass ${name} () {}`)
+    assert.equal(
+      fixed,
+      `package net.aurboda.api.models\n\ntypealias ${name} = kotlinx.serialization.json.JsonElement\n`,
+    )
+    assert.equal(fixKotlinModel(fixed), fixed)
+  }
+  assert.match(
+    fixKotlinModel('package net.aurboda.api.models\ndata class AdhdCommand () {}'),
+    /typealias AdhdCommand = kotlinx.serialization.json.JsonObject/,
+  )
+  assert.match(
+    fixKotlinModel(
+      'package net.aurboda.api.models\ndata class AdhdRecord (val data: kotlin.collections.Map<kotlin.String, kotlin.String>)',
+    ),
+    /Map<kotlin.String, kotlinx.serialization.json.JsonElement>/,
+  )
+})
+
+test('OpenAPI YAML remains string-valued for YAML 1.1 generator parsers', () => {
+  const wire = { enum: ['yes', 'no', 'off', 'on', 'unknown'], quiet_start: '21:00' }
+  assert.deepEqual(yaml.parse(yaml.stringify(wire, { compat: 'yaml-1.1' }), { version: '1.1' }), wire)
 })

@@ -53,6 +53,7 @@ const HomeAssistantSource = lazyPage(
   () => import('./pages/DataSources/HomeAssistantSource.jsx'),
   'HomeAssistantSource',
 )
+const ADHD = lazyPage(() => import('./pages/ADHD/index.jsx'), 'ADHD')
 const CheckIns = lazyPage(() => import('./pages/CheckIns/index.jsx'), 'CheckIns')
 const CheckInEditor = lazyPage(() => import('./pages/CheckIns/Editor.jsx'), 'CheckInEditor')
 const CheckInFill = lazyPage(() => import('./pages/CheckIns/FillIn.jsx'), 'CheckInFill')
@@ -185,6 +186,7 @@ function AppShell() {
             <Route path="/check-ins/new" component={CheckInEditor} />
             <Route path="/check-ins/:id/edit" component={CheckInEditor} />
             <Route path="/check-ins/:id" component={CheckInFill} />
+            <Route path="/adhd" component={ADHD} />
             <Route path="/check-ins" component={CheckIns} />
             <Route path="/treatments" component={Treatments} />
             <Route path="/simple-food" component={SimpleFood} />

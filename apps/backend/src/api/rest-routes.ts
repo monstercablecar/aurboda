@@ -64,6 +64,7 @@ import { createAccountRouter } from '../routes/account-router.ts'
 import { createActivitiesRouter } from '../routes/activities-router.ts'
 import { createActivityTypeCatalogRouter } from '../routes/activity-type-catalog-router.ts'
 import { createActivityTypesRouter } from '../routes/activity-types-router.ts'
+import { createAdhdRouter } from '../routes/adhd-router.ts'
 import { createAdminOidcRouter } from '../routes/admin-oidc-router.ts'
 import { createAdminRouter } from '../routes/admin-router.ts'
 import { createAgentsRouter } from '../routes/agents-router.ts'
@@ -306,6 +307,7 @@ export const mountRestRouters = ({
   wellKnown,
   userDb,
 }: RestRoutesDeps): void => {
+  httpd.use('/adhd', createAdhdRouter(authMiddleware))
   httpd.use(createMetricsRouter(authMiddleware, syncProvider))
   httpd.use(createAgentsRouter(apiBaseUrl))
   httpd.use('/icons', createIconsRouter(authMiddleware))

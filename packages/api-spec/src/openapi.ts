@@ -4,6 +4,7 @@ import { z } from 'zod'
 /** Generates the OpenAPI 3.1 specification from the Zod schemas: pnpm generate:openapi */
 import { createDocument } from 'zod-openapi'
 
+import { adhdPaths } from './adhd-paths.ts'
 import { integrationPaths } from './integration-paths.ts'
 import { journalPaths } from './journal-paths.ts'
 import { nativeTaskPaths } from './native-tasks-paths.ts'
@@ -363,6 +364,7 @@ const openApiDocument = createDocument({
   },
   openapi: '3.1.0',
   paths: {
+    ...adhdPaths,
     ...peoplePaths,
     '/work/days': {
       post: {
@@ -3904,7 +3906,7 @@ for (const [path, item] of Object.entries(openApiDocument.paths ?? {})) {
 }
 
 fs.mkdirSync('./generated', { recursive: true })
-fs.writeFileSync('./generated/openapi.yaml', yaml.stringify(openApiDocument))
+fs.writeFileSync('./generated/openapi.yaml', yaml.stringify(openApiDocument, { compat: 'yaml-1.1' }))
 fs.writeFileSync('./generated/openapi.json', JSON.stringify(openApiDocument, null, 2))
 
 console.info('Generated OpenAPI specification:')

@@ -50,6 +50,7 @@ import { registerAccountEmailTools } from './mcp/account-email-tools.ts'
 import { registerAccountPlanTools } from './mcp/account-plan-tools.ts'
 import { registerActivityTools } from './mcp/activity-tools.ts'
 import { registerActivityTypeTools } from './mcp/activity-type-tools.ts'
+import { registerAdhdTools } from './mcp/adhd-tools.ts'
 import {
   registerAdminFederationTools,
   registerFederationDeliveryTools,
@@ -256,6 +257,7 @@ const createMcpServer = (user: string, deps: McpDeps = {}): McpServer => {
   registerJournalTools(server, user)
   registerWorkTools(server, user, deps.onActivityMutated)
   registerCheckInTools(server, user)
+  registerAdhdTools(server, user)
   registerPrivateLinkTools(server, user)
   registerPeopleTools(server, user)
   registerNativeTasksTools(server, user)

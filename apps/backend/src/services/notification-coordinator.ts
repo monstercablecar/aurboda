@@ -4,6 +4,7 @@ import type { PgBoss } from './pg-boss.ts'
 import { query, withUserTransaction } from '../db/connection.ts'
 import * as notifications from '../db/notifications.ts'
 import { withPeopleReminderClaim, listDuePeopleReminders } from '../db/people-reminders.ts'
+import { enqueueAdhdReminders, maySendAdhdNotification } from './adhd.ts'
 import { browserPushConfiguration, sendStoredNotification } from './browser-push.ts'
 import { checkInDeps, raiseDueCheckIns } from './check-ins.ts'
 import { createNotifier } from './notifications.ts'
@@ -65,11 +66,12 @@ export const deliverBrowserNotifications = async (
       [now],
     )
   })
+  const startedAt = Date.now()
   let sent = 0
   for (let attempt = 0; attempt < 100; attempt++) {
     const row = await withUserTransaction(user, async (tx) => {
-      const result = await tx.query<{ notification_id: string; subscription_id: string }>(
-        `SELECT d.notification_id,d.subscription_id FROM notification_browser_deliveries d JOIN notifications n ON n.id=d.notification_id
+      const result = await tx.query<{ notification_id: string; subscription_id: string; type: string }>(
+        `SELECT d.notification_id,d.subscription_id,n.type FROM notification_browser_deliveries d JOIN notifications n ON n.id=d.notification_id
     LEFT JOIN notification_preferences p ON p.type=n.type
     WHERE d.status='pending' AND d.next_attempt_at<=$1 AND d.attempts<12 AND n.push AND COALESCE(p.push,true) AND n.read_at IS NULL AND n.created_at>=$1::timestamptz-INTERVAL '24 hours'
     ORDER BY d.next_attempt_at,d.notification_id,d.subscription_id LIMIT 1 FOR UPDATE OF d SKIP LOCKED`,
@@ -84,6 +86,16 @@ export const deliverBrowserNotifications = async (
       return claimed
     })
     if (!row) break
+    if (
+      row.type === 'adhd_prompt' &&
+      !(await maySendAdhdNotification(
+        user,
+        row.notification_id,
+        new Date(now.getTime() + Date.now() - startedAt),
+      ))
+    ) {
+      continue
+    }
     // The claim is committed before external delivery; retries use the same browser tag.
     const outcome = await send(user, row.subscription_id, row.notification_id)
     if (outcome === 'accepted') sent++
@@ -106,6 +118,7 @@ export const runNotificationTick = async (listUsers: () => Promise<string[]>, no
       () => deliverTreatmentCheckins(user, now),
       () => enqueuePeopleReminders(user, now),
       () => enqueueFormReminders(user),
+      () => enqueueAdhdReminders(user, now),
       () => deliverBrowserNotifications(user, now),
     ]) {
       try {

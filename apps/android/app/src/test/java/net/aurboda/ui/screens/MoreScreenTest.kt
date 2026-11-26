@@ -68,6 +68,12 @@ class MoreScreenTest {
     }
 
     @Test
+    fun `ADHD opens the embedded web route`() {
+        assertEquals(MoreDestination.Web("/adhd"), allItems.single { it.label == "ADHD" }.destination)
+        assertEquals("https://example.com/adhd?embed=1", embeddedPageUrl("https://example.com", "/adhd"))
+    }
+
+    @Test
     fun `Check-ins opens the embedded web route`() {
         val checkIns = moreGroups.flatMap { it.items }.single { it.label == "Check-ins" }
         assertEquals(MoreDestination.Web("/check-ins"), checkIns.destination)
