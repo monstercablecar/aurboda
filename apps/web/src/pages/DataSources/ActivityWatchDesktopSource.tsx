@@ -1,9 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
-import { endOfDay, formatISO, startOfDay, subDays } from 'date-fns'
 import { useState } from 'preact/hooks'
 
 import { ActivityWatchInstall } from '../../components/ActivityWatchInstall'
-import { fetchProductivity, generateApiToken } from '../../state/api'
+import { ActivityWatchStatus } from '../../components/ActivityWatchStatus'
+import { generateApiToken } from '../../state/api'
 import { auth } from '../../state/auth'
 import { OverlapNote } from './shared'
 import './style.css'
@@ -12,21 +11,6 @@ const DATA_TYPES = ['App usage (desktop)', 'Window titles', 'Per-device tracking
 
 export function ActivityWatchDesktopSource() {
   const isLoggedIn = auth.value.token
-
-  const end = endOfDay(new Date())
-  const start7days = startOfDay(subDays(new Date(), 7))
-
-  const productivityQuery = useQuery({
-    enabled: !!isLoggedIn,
-    queryFn: () => fetchProductivity(start7days, end),
-    queryKey: ['productivity7days', formatISO(start7days, { representation: 'date' })],
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const awProductivity = (productivityQuery.data?.records ?? []).filter(
-    (r) => r.source === 'activitywatch' && !r.is_mobile,
-  )
-  const hasData = awProductivity.length > 0
 
   const [activityWatchToken, setActivityWatchToken] = useState<string>('')
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'loading' | 'copied'>('idle')
@@ -87,10 +71,7 @@ export function ActivityWatchDesktopSource() {
           </div>
         </div>
 
-        <div class={`status-banner ${hasData ? 'connected' : 'not-connected'}`}>
-          <span class={`status-dot ${hasData ? 'connected' : 'not-connected'}`} />
-          {hasData ? 'Desktop screen time data syncing' : 'ActivityWatch desktop not set up'}
-        </div>
+        <ActivityWatchStatus mobile={false} />
 
         <div class="links-row">
           <a

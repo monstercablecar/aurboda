@@ -21,7 +21,9 @@ export const productivityRecordSchema = z
     comments: z.array(commentSchema).optional().meta({ description: 'Attached comments' }),
     deleted_at: iso8601DateTimeSchema.optional().meta({ description: 'Soft-delete timestamp' }),
     device_name: z.string().optional().meta({ description: 'Device name (from ActivityWatch)' }),
-    duration_sec: z.number().int().meta({ description: 'Duration in seconds' }),
+    duration_sec: z
+      .number()
+      .meta({ description: 'Duration in seconds, including fractional interval unions' }),
     end_time: iso8601DateTimeSchema,
     id: z.string().uuid().optional().meta({ description: 'Productivity record ID' }),
     is_mobile: z.boolean().optional().meta({ description: 'Whether activity was on mobile' }),
@@ -98,7 +100,7 @@ export const distinctAppSchema = z
       description: 'Resolved category path from screentime rules',
     }),
     title: z.string().optional().meta({ description: 'Window title' }),
-    total_duration_sec: z.number().int().meta({ description: 'Total duration in seconds' }),
+    total_duration_sec: z.number().meta({ description: 'Total duration in seconds' }),
   })
   .meta({ id: 'DistinctApp' })
 
@@ -113,7 +115,7 @@ export type DistinctAppsResponse = z.infer<typeof distinctAppsResponseSchema>
 export const screentimeBucketCategorySchema = z
   .object({
     path: z.array(z.string()).meta({ description: 'Category path, e.g. ["Work", "Programming"]' }),
-    total_sec: z.number().int().meta({ description: 'Total duration in seconds for this category' }),
+    total_sec: z.number().meta({ description: 'Total duration in seconds for this category' }),
   })
   .meta({ id: 'ScreentimeBucketCategory' })
 
@@ -124,7 +126,7 @@ export const screentimeBucketSchema = z
     }),
     end: iso8601DateTimeSchema.meta({ description: 'Bucket end time' }),
     start: iso8601DateTimeSchema.meta({ description: 'Bucket start time' }),
-    total_sec: z.number().int().meta({ description: 'Total screentime duration in seconds' }),
+    total_sec: z.number().meta({ description: 'Total screentime duration in seconds' }),
   })
   .meta({ id: 'ScreentimeBucket' })
 

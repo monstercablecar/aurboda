@@ -3,6 +3,8 @@ import type { CategoryInfo, ProductivityResult, SyncProvider } from './types.ts'
 import { getProductivity, type ProductivityRecord, type ScreentimeCategory } from '../../db/index.ts'
 import { getScreentimeCategories } from '../../db/screentime-categories.ts'
 import { pushAll } from '../../utils.ts'
+import { allocateProductivity } from '../productivity-union.ts'
+import { isCategoryExcluded } from '../screentime-activities.ts'
 import { getCommentsMap } from './types.ts'
 
 /**
@@ -45,7 +47,13 @@ export function mergeProductivitySpans(
     const gap = current.start_time.getTime() - prev.end_time.getTime()
     const closeEnough = gap >= 0 && gap <= MERGE_GAP_MS
 
-    if (sameActivity && sameMobile && closeEnough) {
+    if (
+      sameActivity &&
+      sameMobile &&
+      current.device_name === prev.device_name &&
+      current.source === prev.source &&
+      closeEnough
+    ) {
       prev.end_time = current.end_time
       prev.duration_sec += current.duration_sec
       if (current.id) prev.source_ids.push(current.id)
@@ -62,7 +70,7 @@ export function mergeProductivitySpans(
   const lastIndexFor = new Map<string, number>()
 
   for (const span of phase1) {
-    const key = `${span.activity}|${span.is_mobile ?? false}`
+    const key = JSON.stringify([span.activity, span.is_mobile ?? false, span.device_name, span.source])
     const prevIdx = lastIndexFor.get(key)
 
     if (prevIdx !== undefined) {
@@ -290,14 +298,16 @@ export async function queryProductivity(
   }
 
   const productivity = await getProductivity(user, start, end)
-  const merged = mergeProductivitySpans(productivity)
-
   if (mergeBy === 'category') {
     const categories = await getScreentimeCategories(user)
+    const excluded = categories.filter((c) => c.exclude_from_screentime).map((c) => c.name)
+    const included = productivity.filter((r) => !isCategoryExcluded(r.resolved_category ?? [], excluded))
+    const merged = mergeProductivitySpans(allocateProductivity(included, start, end))
     const { categoriesMap, results } = mergeByCategorySpans(merged, mergeGapMs ?? MERGE_GAP_MS, categories)
     return { categories: categoriesMap, data: results }
   }
 
+  const merged = mergeProductivitySpans(productivity)
   const allIds = merged.flatMap((p) => (p.source_ids.length > 0 ? p.source_ids : p.id ? [p.id] : []))
   const commentsMap = await getCommentsMap(user, 'productivity', allIds)
   return {
@@ -305,6 +315,7 @@ export async function queryProductivity(
       const comments = p.source_ids.flatMap((sid) => commentsMap.get(sid) ?? [])
       return {
         activity: p.activity,
+        device_name: p.device_name,
         category: p.category,
         comments,
         duration_sec: p.duration_sec,
@@ -325,6 +336,7 @@ export async function queryProductivity(
 export const assembleScreentimeBuckets = (
   rows: Array<{
     bucket_start: Date
+    bucket_end?: Date
     resolved_category: string[] | null
     total_sec: number
   }>,
@@ -337,7 +349,7 @@ export const assembleScreentimeBuckets = (
 }> => {
   const bucketMap = new Map<
     string,
-    { start: Date; categories: Array<{ path: string[]; total_sec: number }>; total_sec: number }
+    { start: Date; end: Date; categories: Array<{ path: string[]; total_sec: number }>; total_sec: number }
   >()
 
   for (const row of rows) {
@@ -345,6 +357,7 @@ export const assembleScreentimeBuckets = (
     const entry = bucketMap.getOrInsertComputed(key, () => ({
       categories: [],
       start: row.bucket_start,
+      end: row.bucket_end ?? new Date(row.bucket_start.getTime() + bucketMs),
       total_sec: 0,
     }))
     entry.total_sec += row.total_sec
@@ -358,7 +371,7 @@ export const assembleScreentimeBuckets = (
     .sort((a, b) => a.start.getTime() - b.start.getTime())
     .map((b) => ({
       categories: b.categories.sort((a, c) => c.total_sec - a.total_sec),
-      end: new Date(b.start.getTime() + bucketMs).toISOString(),
+      end: b.end.toISOString(),
       start: b.start.toISOString(),
       total_sec: b.total_sec,
     }))

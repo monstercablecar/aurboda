@@ -134,24 +134,6 @@ class SyncWorker(
         }
       if (outboundStop != null) return stopRun(attemptAt, reporter, outboundStop)
 
-      // Step 4: ActivityWatch sync (if enabled).
-      // Best-effort: failures don't affect overall sync result.
-      if (isActivityWatchSyncEnabled(applicationContext)) {
-        val activityWatchStop =
-          try {
-            processActivityWatchSync(
-              apiUrl = credentials.apiUrl,
-              authToken = credentials.authToken,
-              httpClient = httpClient,
-              context = applicationContext,
-            ).stop
-          } catch (e: Exception) {
-            Log.w(TAG, "ActivityWatch sync failed: ${e.message}")
-            null
-          }
-        if (activityWatchStop != null) return stopRun(attemptAt, reporter, activityWatchStop)
-      }
-
       HrZoneWidgetProvider.triggerUpdate(applicationContext)
       ChallengeWidgetProvider.triggerUpdate(applicationContext)
       reporter.end()

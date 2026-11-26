@@ -427,6 +427,24 @@ describe('sync router', () => {
   })
 
   describe('activitywatch endpoint', () => {
+    test('POST /sync/activitywatch rejects a logical ingestion failure', async () => {
+      const app = createTestApp()
+      vi.mocked(mockDeps.processActivityWatchEvents).mockResolvedValueOnce({
+        status: 'error',
+        records_stored: 0,
+        device_name: 'test',
+        error: 'synthetic failure',
+      })
+      const response = await request(app)
+        .post('/sync/activitywatch')
+        .send({
+          device_name: 'test',
+          events: [{ app: 'test', timestamp: '2026-01-01T00:00:00Z', duration: 1 }],
+        })
+      expect(response.status).toBe(500)
+      expect(response.body.success).toBe(false)
+    })
+
     test('POST /sync/activitywatch passes events and device_name', async () => {
       const app = createTestApp()
       const events = [{ app: 'firefox', duration: 120, timestamp: '2024-01-15T10:00:00Z' }]

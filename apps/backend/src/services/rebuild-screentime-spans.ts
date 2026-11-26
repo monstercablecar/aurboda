@@ -1,3 +1,4 @@
+import type { ProductivityRecord } from '../db/types.ts'
 /**
  * Rebuilds every screentime span activity from the productivity records'
  * current `resolved_category`, so a recategorization reaches the timeline:
@@ -8,12 +9,15 @@
  * lands on them instead of creating a duplicate.
  */
 
-import type { ProductivityRecord } from '../db/types.ts'
-
 import { query, withUserTransaction } from '../db/connection.ts'
 import { getScreentimeCategories, insertActivities } from '../db/index.ts'
 import { auditInfo } from './audit-log.ts'
-import { buildScreentimeActivitySpans, spansToActivities } from './screentime-activities.ts'
+import { allocateProductivity } from './productivity-union.ts'
+import {
+  buildScreentimeActivitySpans,
+  isCategoryExcluded,
+  spansToActivities,
+} from './screentime-activities.ts'
 import { ensureAllCategoriesHaveTypes } from './screentime-category-sync.ts'
 
 export interface RebuildScreentimeSpansResult {
@@ -133,7 +137,11 @@ const rebuild = async (
 
   const cutoff = now()
   const records = await loadCategorizedRecords(user)
-  const activities = spansToActivities(buildScreentimeActivitySpans(records, categories))
+  const excluded = categories.filter((c) => c.exclude_from_screentime).map((c) => c.name)
+  const included = records.filter((r) => !isCategoryExcluded(r.resolved_category ?? [], excluded))
+  const activities = spansToActivities(
+    buildScreentimeActivitySpans(allocateProductivity(included), categories, 0),
+  )
 
   await reviveProducedSpans(
     user,

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { endOfDay, formatISO, startOfDay, subDays } from 'date-fns'
 
+import { ActivityWatchStatus } from '../../components/ActivityWatchStatus'
 import { fetchProductivity } from '../../state/api'
 import { auth } from '../../state/auth'
 import './style.css'
@@ -59,10 +60,7 @@ export function ActivityWatchAndroidSource() {
           </div>
         </div>
 
-        <div class={`status-banner ${hasData ? 'connected' : 'not-connected'}`}>
-          <span class={`status-dot ${hasData ? 'connected' : 'not-connected'}`} />
-          {hasData ? 'Mobile screen time data syncing' : 'ActivityWatch mobile not set up'}
-        </div>
+        <ActivityWatchStatus mobile={true} />
 
         <div class="links-row">
           <a
@@ -97,7 +95,14 @@ export function ActivityWatchAndroidSource() {
                 from GitHub.
               </li>
               <li>Install the Aurboda Android app.</li>
-              <li>In the Aurboda app, go to the Sync tab and enable &quot;ActivityWatch Sync&quot;.</li>
+              <li>
+                In ActivityWatch Settings, copy its API authentication key. Save it in the Aurboda Sync tab’s
+                ActivityWatch section, enable synchronization, and press Sync Now.
+              </li>
+              <li>
+                Initial sync imports all available history. Keep both apps allowed to run in the background.
+                Use “Import all history again” to reconcile older changes.
+              </li>
             </ol>
           </div>
         )}

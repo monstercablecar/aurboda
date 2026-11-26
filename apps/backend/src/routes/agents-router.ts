@@ -8,7 +8,9 @@ const readTemplate = (name: string): string =>
   readFileSync(new URL(`../agents/${name}`, import.meta.url), 'utf8')
 
 export const renderAgentScript = (template: string, apiBaseUrl: string): string =>
-  template.replaceAll(API_URL_PLACEHOLDER, apiBaseUrl.replace(/\/+$/, ''))
+  template
+    .replaceAll(API_URL_PLACEHOLDER, apiBaseUrl.replace(/\/+$/, ''))
+    .replaceAll('__AW_PYTHON_AGENT__', readTemplate('activitywatch-agent.py'))
 
 /**
  * Public installers for the ActivityWatch push agent, served with this server's API base URL

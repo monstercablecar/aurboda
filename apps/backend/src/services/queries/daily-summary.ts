@@ -37,6 +37,7 @@ import { getPlaceVisits, type PlaceVisit } from '../locations.ts'
 import { toMetricEntityId } from '../metric-entity-id.ts'
 import { toNoteReplyData } from '../notes.ts'
 import { maxOf, minOf } from '../numeric-extremes.ts'
+import { allocateProductivity } from '../productivity-union.ts'
 import {
   categoryPathToString,
   getScreentimeCategoryPath,
@@ -408,7 +409,7 @@ export async function getDailySummary(
             very_productive_sec: 0,
           }
 
-          for (const record of productivity) {
+          for (const record of allocateProductivity(productivity, start, end)) {
             totals.total_duration_sec += record.duration_sec
             const score =
               record.productivity ?? categoryScoreMap.get(JSON.stringify(record.resolved_category ?? []))
@@ -417,12 +418,13 @@ export async function getDailySummary(
               if (score >= 2) totals.very_productive_sec += record.duration_sec
               if (score <= -1) totals.distracting_sec += record.duration_sec
             }
-            const cat = record.resolved_category
-            const isExcl = cat !== undefined && isCategoryExcluded(cat, excludedCategoryPaths)
-            if (!isExcl) {
-              const key = JSON.stringify(cat ?? [])
-              productivityCategoryMap.set(key, (productivityCategoryMap.get(key) ?? 0) + record.duration_sec)
-            }
+          }
+          const included = productivity.filter(
+            (r) => !isCategoryExcluded(r.resolved_category ?? [], excludedCategoryPaths),
+          )
+          for (const record of allocateProductivity(included, start, end)) {
+            const key = JSON.stringify(record.resolved_category ?? [])
+            productivityCategoryMap.set(key, (productivityCategoryMap.get(key) ?? 0) + record.duration_sec)
           }
 
           const categories = [...productivityCategoryMap.entries()]

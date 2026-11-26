@@ -441,7 +441,6 @@ fun HealthConnectScreen(
   val bgSyncStatus by bgSyncStatusFlow.collectAsState()
 
   var awSyncEnabled by remember { mutableStateOf(isActivityWatchSyncEnabled(context)) }
-  var awSyncResult by remember { mutableStateOf<ActivityWatchSyncResult?>(null) }
 
   val batteryOptimizationLauncher =
     rememberLauncherForActivityResult(
@@ -688,6 +687,7 @@ fun HealthConnectScreen(
 
   /** Perform full sync: aggregates + Health Connect data + outbound + ActivityWatch. */
   suspend fun syncNow(currentContext: Context) {
+    if (isActivityWatchSyncEnabled(currentContext)) ActivityWatchWorker.enqueue(currentContext)
     if (reporter.state.value.isRunning) return
     reporter.begin()
     var fatal: String? = null
@@ -738,7 +738,6 @@ fun HealthConnectScreen(
               httpClient = ktorHttpClient,
               context = currentContext,
             )
-          awSyncResult = r
           reporter.updateStage(SyncStage.ActivityWatch) {
             when {
               r.error != null -> it.copy(status = SyncStageStatus.Failed, errorMessage = r.error)
@@ -748,7 +747,6 @@ fun HealthConnectScreen(
           }
         } catch (e: Exception) {
           Log.w("ActivityWatch", "AW sync failed in syncNow: ${e.message}", e)
-          awSyncResult = ActivityWatchSyncResult(error = e.message)
           reporter.updateStage(SyncStage.ActivityWatch) {
             it.copy(status = SyncStageStatus.Failed, errorMessage = e.message)
           }
@@ -1024,72 +1022,9 @@ fun HealthConnectScreen(
     }
 
     item {
-      androidx.compose.material3.Card(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            "ActivityWatch",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          Text(
-            "Sync app usage data from ActivityWatch for Android.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            Text("ActivityWatch Sync", style = MaterialTheme.typography.bodyMedium)
-            Switch(
-              checked = awSyncEnabled,
-              onCheckedChange = { enabled ->
-                awSyncEnabled = enabled
-                setActivityWatchSyncEnabled(context, enabled)
-              },
-            )
-          }
-
-          if (awSyncEnabled) {
-            val result = awSyncResult
-            val awStatusText =
-              when {
-                result == null -> "Sync on next run"
-                result.error != null -> "Error: ${result.error}"
-                !result.available -> "ActivityWatch not detected"
-                result.eventsPushed > 0 -> "${result.eventsPushed} events synced"
-                result.bucketsFound == 0 -> "No app-usage buckets found"
-                else -> "Up to date"
-              }
-            val awStatusColor =
-              when {
-                result == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                result.error != null -> MaterialTheme.colorScheme.error
-                !result.available -> MaterialTheme.colorScheme.onSurfaceVariant
-                result.eventsPushed > 0 -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-              }
-            Text(
-              awStatusText,
-              style = MaterialTheme.typography.bodySmall,
-              color = awStatusColor,
-            )
-
-            if (result != null && !result.available) {
-              Text(
-                "Install ActivityWatch for Android to sync app usage data.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
-            }
-          }
-        }
+      ActivityWatchSection(context, awSyncEnabled) { enabled ->
+        awSyncEnabled = enabled
+        setActivityWatchSyncEnabled(context, enabled)
       }
     }
 

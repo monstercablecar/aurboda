@@ -38,13 +38,10 @@ describe('GET /agents/activitywatch.sh', () => {
     expect(res.text).not.toContain(API_URL_PLACEHOLDER)
   })
 
-  test('installs the same push agent docs/activitywatch.md gives for manual setup', async () => {
-    const installed = (await fetchScript('/agents/activitywatch.sh'))
-      .split("<<'AGENT_EOF'\n")[1]
-      .split('\nAGENT_EOF\n')[0]
-    const docs = readFileSync(new URL('../../../../docs/activitywatch.md', import.meta.url), 'utf8')
-
-    expect(docs).toContain(`\`\`\`bash\n${installed}\n\`\`\``)
+  test('both installers embed the same tested import engine', async () => {
+    const engine = readFileSync(new URL('../agents/activitywatch-agent.py', import.meta.url), 'utf8')
+    expect(await fetchScript('/agents/activitywatch.sh')).toContain(engine)
+    expect(await fetchScript('/agents/activitywatch.ps1')).toContain(engine)
   })
 
   test.skipIf(!hasCommand('bash'))('renders a script bash can parse', async () => {

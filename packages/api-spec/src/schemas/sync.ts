@@ -600,9 +600,15 @@ export type LastFmSyncStatusResponse = z.infer<typeof lastFmSyncStatusResponseSc
  */
 export const activityWatchEventSchema = z
   .object({
-    app: z.string().meta({ description: 'Application name' }),
-    duration: z.number().meta({ description: 'Duration in seconds' }),
-    timestamp: iso8601DateTimeSchema.meta({ description: 'Event start time (ISO 8601)' }),
+    app: z.string().min(1).max(255).meta({ description: 'Application name' }),
+    duration: z.number().min(0).max(315576000).meta({ description: 'Duration in seconds' }),
+    bucket_id: z.string().min(1).max(255).optional(),
+    source_event_id: z.string().min(1).max(100).optional(),
+    source_instance: z.string().max(100).optional(),
+    is_afk: z.boolean().optional(),
+    source_data: z.record(z.string(), z.unknown()).optional(),
+    category: z.string().max(100).optional(),
+    timestamp: z.iso.datetime({ offset: true }).meta({ description: 'Event start time (ISO 8601)' }),
     title: z.string().optional().meta({ description: 'Window title' }),
   })
   .meta({ id: 'ActivityWatchEvent' })
@@ -615,7 +621,11 @@ export const syncActivityWatchBodySchema = z
     device_name: z.string().max(100).optional().meta({
       description: 'Hostname or user-configured device name. Defaults to empty string (single-device setup).',
     }),
-    events: z.array(activityWatchEventSchema).min(1).meta({ description: 'ActivityWatch events to store' }),
+    events: z
+      .array(activityWatchEventSchema)
+      .min(1)
+      .max(10000)
+      .meta({ description: 'ActivityWatch events to store' }),
     is_mobile: z.boolean().optional().meta({
       description: 'Whether the events come from a mobile device. Defaults to false.',
     }),
@@ -628,7 +638,13 @@ export const activityWatchSyncResultSchema = z
   .object({
     device_name: z.string().meta({ description: 'Device name used for deduplication' }),
     error: z.string().optional().meta({ description: 'Error message if status is error' }),
-    records_stored: z.number().int().meta({ description: 'Number of events stored' }),
+    records_stored: z
+      .number()
+      .int()
+      .meta({ description: 'Number of events acknowledged, including replays' }),
+    events_total: z.number().int().optional(),
+    earliest_event: iso8601DateTimeSchema.optional(),
+    latest_event: iso8601DateTimeSchema.optional(),
     status: syncResultStatusSchema,
   })
   .meta({ id: 'ActivityWatchSyncResult' })
@@ -643,8 +659,21 @@ export const activityWatchSyncResponseSchema = baseResponseSchema
 
 export type ActivityWatchSyncResponse = z.infer<typeof activityWatchSyncResponseSchema>
 
+export const activityWatchDeviceSchema = z
+  .object({
+    device_name: z.string(),
+    is_mobile: z.boolean(),
+    events_total: z.number().int(),
+    earliest_event: iso8601DateTimeSchema,
+    latest_event: iso8601DateTimeSchema,
+    last_received: iso8601DateTimeSchema.optional(),
+  })
+  .meta({ id: 'ActivityWatchDevice' })
+export type ActivityWatchDevice = z.infer<typeof activityWatchDeviceSchema>
+
 export const activityWatchSyncStatusResponseSchema = baseResponseSchema
   .extend({
+    devices: z.array(activityWatchDeviceSchema).optional(),
     states: z
       .array(providerSyncStatusSchema)
       .optional()

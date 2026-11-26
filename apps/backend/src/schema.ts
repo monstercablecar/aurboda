@@ -170,6 +170,8 @@ export const tableCreationOrder = [
   'tags_indexes',
   'productivity',
   'productivity_indexes',
+  'activitywatch_projection',
+  'activitywatch_observations',
   'screentime_categories',
   'screentime_categories_indexes',
   'lab_results',

@@ -46,7 +46,7 @@ android {
   }
 
   defaultConfig {
-    applicationId = "net.aurboda"
+    applicationId = System.getenv("AURBODA_APPLICATION_ID") ?: "net.aurboda"
     minSdk = 34
     targetSdk = 36
     versionCode = versionCodeFromEnv

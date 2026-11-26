@@ -17,6 +17,7 @@ import type { SourceEnrichQueue } from '../services/source-enrich-queue.ts'
 import type { StravaQueue } from '../services/strava-queue.ts'
 import type { AnyMiddleware } from '../typed-router.ts'
 
+import { getActivityWatchDevices } from '../db/activitywatch.ts'
 import {
   ackOutboundSync,
   deleteHealthConnectRecords,
@@ -138,6 +139,7 @@ export const mountSyncRouter = ({
         ackOutboundSync,
         deleteHealthConnectRecords,
         getOutboundSyncHistory,
+        getActivityWatchDevices,
         getActivityWatchSyncStates: (user) => transformSyncStates(user, 'activitywatch'),
         getCalendarSyncStates: (user) => transformSyncStates(user, 'calendar'),
         getGarminSyncStates: (user) => transformSyncStates(user, 'garmin'),

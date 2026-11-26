@@ -21,7 +21,7 @@ export const getRecentSourceActivity = async (
          (SELECT json_agg(p ORDER BY p.source, p.is_mobile)
             FROM (SELECT DISTINCT source, COALESCE(is_mobile, false) AS is_mobile
                     FROM productivity
-                   WHERE start_time >= $1 AND deleted_at IS NULL) p),
+                   WHERE (start_time >= $1 OR source = 'activitywatch') AND deleted_at IS NULL) p),
          '[]'::json
        ) AS productivity,
        EXISTS (

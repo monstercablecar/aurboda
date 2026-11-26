@@ -1,16 +1,24 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ProductivityRecord, ScreentimeCategory } from '../../db/index.ts'
 
 import { getTopApps, type TopAppsDeps } from './top-apps.ts'
 
-const record = (activity: string, minutes: number, resolved_category?: string[]): ProductivityRecord => ({
-  activity,
-  duration_sec: minutes * 60,
-  end_time: new Date('2026-10-02T10:00:00Z'),
-  resolved_category,
-  start_time: new Date('2026-10-02T09:00:00Z'),
+let cursor = new Date('2026-10-02T00:00:00Z').getTime()
+beforeEach(() => {
+  cursor = new Date('2026-10-02T00:00:00Z').getTime()
 })
+const record = (activity: string, minutes: number, resolved_category?: string[]): ProductivityRecord => {
+  const start = cursor
+  cursor += minutes * 60000
+  return {
+    activity,
+    duration_sec: minutes * 60,
+    start_time: new Date(start),
+    end_time: new Date(cursor),
+    resolved_category,
+  }
+}
 
 const category = (name: string[], exclude_from_screentime?: boolean): ScreentimeCategory => ({
   created_at: new Date(0),
@@ -85,4 +93,11 @@ describe('getTopApps', () => {
       total_hours: 0,
     })
   })
+})
+
+test('overlapping devices do not inflate combined app hours', async () => {
+  const a = record('Browser', 60, ['Work'])
+  const b = { ...a, activity: 'Phone', device_name: 'phone', source: 'activitywatch' as const }
+  const result = await getTopApps('u', window, 10, deps([a, b]))
+  expect(result.total_hours).toBe(1)
 })

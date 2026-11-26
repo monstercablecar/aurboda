@@ -23,6 +23,7 @@ class AurbodaApplication : Application() {
     sessionRefused.value = isSessionRefused(this)
 
     // Keeps sync going across app restarts and device reboots.
+    if (getSharedPreferences("ActivityWatchSyncV2", Context.MODE_PRIVATE).all.any { (key, value) -> key.endsWith(".enabled") && value == true }) ActivityWatchWorker.schedule(this)
     if (isBackgroundSyncEnabled(this)) {
       Log.d(TAG, "Background sync was previously enabled, scheduling worker")
       SyncWorker.schedule(this)
