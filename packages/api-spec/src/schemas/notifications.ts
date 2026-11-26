@@ -8,6 +8,7 @@ import { baseResponseSchema, iso8601DateTimeSchema, queryBooleanSchema, UUID_RE 
  * changes, since a stored notification's `type` is plain text.
  */
 export const notificationTypes = [
+  'adhd_prompt',
   'check_in_due',
   'people_event',
   'reminder',
@@ -56,6 +57,12 @@ export interface NotificationTypeInfo {
 }
 
 export const notificationTypeInfo: Record<NotificationType, NotificationTypeInfo> = {
+  adhd_prompt: {
+    admin_only: false,
+    description: 'Optional private ADHD invitations, disabled until configured',
+    group: 'reminders',
+    label: 'ADHD',
+  },
   check_in_due: {
     admin_only: false,
     description: 'Optional reusable form and routine reminders',

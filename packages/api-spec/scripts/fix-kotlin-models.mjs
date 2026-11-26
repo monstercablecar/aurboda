@@ -21,7 +21,22 @@ const primitiveValue = (wire, kind) => {
 /** Repair generator 7.19's Kotlin output without changing the OpenAPI contracts. */
 export const fixKotlinModel = (source) => {
   const packageName = source.match(/^package ([\w.]+)$/m)?.[1] ?? 'generated'
-  const modelName = source.match(/^data class (\w+)/m)?.[1]
+  const modelName = source.match(/^(?:data )?class (\w+)/m)?.[1]
+  const adhdJsonAliases = new Map([
+    ['AdhdCommand', 'JsonObject'],
+    ['AdhdObservationAnswersValue', 'JsonElement'],
+    ['AdhdItemsValueValue', 'JsonElement'],
+    ['AdhdItemsOutputValueValue', 'JsonElement'],
+  ])
+  if (adhdJsonAliases.has(modelName)) {
+    return `package ${packageName}\n\ntypealias ${modelName} = kotlinx.serialization.json.${adhdJsonAliases.get(modelName)}\n`
+  }
+  if (modelName === 'AdhdRecord' || modelName === 'AdhdStateLegacyInner') {
+    source = source.replaceAll(
+      'kotlin.collections.Map<kotlin.String, kotlin.String>',
+      'kotlin.collections.Map<kotlin.String, kotlinx.serialization.json.JsonElement>',
+    )
+  }
   const enums = new Map()
   let fixed = source.replaceAll(primitiveEnums, (_match, indent, name, kind, body) => {
     const entries = [...body.matchAll(enumEntries)].map((entry) => ({

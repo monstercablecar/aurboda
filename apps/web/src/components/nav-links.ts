@@ -12,6 +12,12 @@ export interface NavigationLink {
 
 export const NAV_LINKS_PRIMARY: NavigationLink[] = [
   {
+    href: '/adhd',
+    label: 'ADHD',
+    icon: '◉',
+    description: 'Optional support, private observations and bounded personal experiments.',
+  },
+  {
     href: '/check-ins',
     label: 'Check-ins',
     icon: '✓',

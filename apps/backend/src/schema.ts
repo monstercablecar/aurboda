@@ -9,6 +9,7 @@ import { activitiesTables } from './schema/activities.ts'
  * See docs/data-storage.md for design decisions and data flow documentation.
  */
 import { activityFeaturesTables } from './schema/activity-features.ts'
+import { adhdTables } from './schema/adhd.ts'
 import { checkInsTables } from './schema/check-ins.ts'
 import { journalTables } from './schema/journal.ts'
 import { locationsTables } from './schema/locations.ts'
@@ -60,6 +61,7 @@ export const SCHEMA_VERSION = 1
  */
 export const createTableStatements: Record<string, string> = {
   ...checkInsTables,
+  ...adhdTables,
   ...journalTables,
   ...peopleTables,
   ...privateLinkTables,
@@ -97,6 +99,7 @@ export const tableCreationOrder = [
   'check_ins',
   'check_in_requests',
   'check_ins_indexes',
+  ...Object.keys(adhdTables),
   ...Object.keys(journalTables),
   ...Object.keys(nativeTaskTables),
   ...Object.keys(peopleTables),

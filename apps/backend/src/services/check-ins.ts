@@ -378,7 +378,7 @@ export const getCheckInFormById = async (
 ): Promise<CheckInForm | null> => {
   if (!UUID_RE.test(id)) return null
   const record = await deps.getForm(user, id)
-  return record ? serializeCheckInForm(record) : null
+  return record && !record.owner_scope ? serializeCheckInForm(record) : null
 }
 
 interface FormDefinition {
@@ -482,7 +482,7 @@ const updateCheckInFormLocked = async (
   body: UpdateCheckInFormBody,
 ): Promise<Outcome<CheckInForm>> => {
   const existing = await deps.getForm(user, id)
-  if (!existing || existing.deleted_at) return fail(404, FORM_NOT_FOUND)
+  if (!existing || existing.owner_scope || existing.deleted_at) return fail(404, FORM_NOT_FOUND)
   const questions = body.questions ?? existing.questions
   const score = body.score !== undefined ? body.score : existing.score
   const changesDefinition = body.questions !== undefined || body.score !== undefined
@@ -501,8 +501,12 @@ export const deleteCheckInFormById = async (
   id: string,
 ): Promise<CheckInForm | null> => {
   if (!UUID_RE.test(id)) return null
-  const record = await deps.withFormLock(user, id, (scoped) => (scoped ?? deps).softDeleteForm(user, id))
-  return record ? serializeCheckInForm(record) : null
+  const record = await deps.withFormLock(user, id, async (scoped) => {
+    const active = scoped ?? deps
+    if ((await active.getForm(user, id))?.owner_scope) return null
+    return active.softDeleteForm(user, id)
+  })
+  return record && !record.owner_scope ? serializeCheckInForm(record) : null
 }
 
 export const restoreCheckInFormById = async (
@@ -511,10 +515,12 @@ export const restoreCheckInFormById = async (
   id: string,
 ): Promise<CheckInForm | null> => {
   if (!UUID_RE.test(id)) return null
-  const record = await deps.withFormLock(user, id, (scoped) =>
-    (scoped ?? deps).restoreForm(user, id, deps.now()),
-  )
-  return record ? serializeCheckInForm(record) : null
+  const record = await deps.withFormLock(user, id, async (scoped) => {
+    const active = scoped ?? deps
+    if ((await active.getForm(user, id))?.owner_scope) return null
+    return active.restoreForm(user, id, deps.now())
+  })
+  return record && !record.owner_scope ? serializeCheckInForm(record) : null
 }
 
 type LogErrors = { error: string; question_key: string }[]
@@ -846,15 +852,26 @@ const checkInEntityFields = (body: SubmitCheckInBody) => ({
   entity_type: body.entity_type ?? null,
   note: blankToNull(body.note),
 })
+// eslint-disable-next-line complexity -- canonical answer submission keeps refusal, immutable managed scope and output ownership in one transaction
 export const submitCheckInLocked = async (
   deps: CheckInDeps,
   user: string,
   body: SubmitCheckInBody,
+  managed?: { scope: 'adhd'; expected_version: number; expected_outputs_enabled?: boolean },
 ): Promise<Outcome<CheckIn>> => {
   const retried = await deps.retryRequest?.(body)
   if (retried) return ok(serializeCheckIn(retried))
   const form = await deps.getForm(user, body.form_id)
-  if (!form || form.deleted_at) return fail(404, FORM_NOT_FOUND)
+  if (!form || form.deleted_at || (form.owner_scope && form.owner_scope !== managed?.scope)) {
+    return fail(404, FORM_NOT_FOUND)
+  }
+  if (
+    managed &&
+    (form.version !== managed.expected_version ||
+      form.outputs_enabled !== (managed.expected_outputs_enabled ?? false))
+  ) {
+    return fail(409, 'The frozen check-in form changed')
+  }
   const entity = await entityProblem(deps, user, body)
   if (entity) return fail(400, entity)
   if (body.status === 'skipped') {
@@ -905,12 +922,12 @@ const withCheckInLocked = async <T>(
 ): Promise<T | null> => {
   if (!UUID_RE.test(id)) return null
   const before = await deps.getCheckIn(user, id)
-  if (!before) return null
+  if (!before || (await deps.getForm(user, before.form_id))?.owner_scope) return null
   return deps.withFormLock(user, before.form_id, async (scoped) => {
     const active = scoped ?? deps
     active.setResponseOwner?.(id)
     const checkIn = await active.getCheckIn(user, id)
-    return checkIn ? fn(checkIn, active) : null
+    return checkIn && !(await active.getForm(user, checkIn.form_id))?.owner_scope ? fn(checkIn, active) : null
   })
 }
 
@@ -1267,7 +1284,7 @@ export const getCheckInAdherence = async (
 ): Promise<Outcome<CheckInAdherence>> => {
   if (!UUID_RE.test(id)) return fail(404, FORM_NOT_FOUND)
   const form = await deps.getForm(user, id)
-  if (!form || form.deleted_at) return fail(404, FORM_NOT_FOUND)
+  if (!form || form.owner_scope || form.deleted_at) return fail(404, FORM_NOT_FOUND)
   const timezone = await deps.getTimezone(user)
   const startsAt = form.schedule?.day_starts_at ?? DEFAULT_DAY_STARTS_AT
   const to = query.to ?? currentDay(deps.now(), startsAt, timezone)

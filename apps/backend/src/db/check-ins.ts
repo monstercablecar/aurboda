@@ -13,6 +13,7 @@ import { query, withUserTransaction } from './connection.ts'
 import { buildDynamicUpdate, type UpdateEntry } from './dynamic-update.ts'
 
 export interface CheckInFormRecord {
+  owner_scope?: string | null
   outputs_enabled?: boolean
   id: string
   name: string
@@ -133,7 +134,7 @@ export interface SlotCheckInRecord {
 }
 
 const FORM_COLUMNS =
-  'id, name, description, version, questions, score, schedule, schedule_not_before, notify, outputs_enabled, archived, deleted_at, created_at, updated_at'
+  'owner_scope, id, name, description, version, questions, score, schedule, schedule_not_before, notify, outputs_enabled, archived, deleted_at, created_at, updated_at'
 
 const json = (value: unknown): string | null =>
   value === null || value === undefined ? null : JSON.stringify(value)
@@ -145,7 +146,7 @@ export const listCheckInForms = async (
   const result = await query<CheckInFormRecord>(
     user,
     `SELECT ${FORM_COLUMNS} FROM check_in_forms
-     WHERE ${options.deleted ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'}
+     WHERE owner_scope IS NULL AND ${options.deleted ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'}
      ORDER BY lower(name), created_at, id`,
   )
   return result.rows
@@ -353,7 +354,10 @@ export const listCheckIns = async (
   user: string | Queryable,
   options: ListCheckInsOptions,
 ): Promise<(CheckInRecord & { cursor_ts: string })[]> => {
-  const conditions = [options.deleted ? 'c.deleted_at IS NOT NULL' : 'c.deleted_at IS NULL']
+  const conditions = [
+    'f.owner_scope IS NULL',
+    options.deleted ? 'c.deleted_at IS NOT NULL' : 'c.deleted_at IS NULL',
+  ]
   const params: unknown[] = []
   const param = (value: unknown): string => {
     params.push(value)
