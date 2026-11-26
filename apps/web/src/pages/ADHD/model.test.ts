@@ -63,6 +63,21 @@ describe('ADHD honest analysis and supports', () => {
     expect(bin.median).toBe(5)
     expect(coverage(obs, 'Asia/Tokyo').find((b) => b.n > 0)?.label).not.toBe(bin.label)
   })
+  test.each([
+    { values: [1, 5], expected: 3 },
+    { values: [5, 2, 1, 4], expected: 3 },
+    { values: [5, 1, 2], expected: 2 },
+  ])('hour coverage reports the clarity median for $values', ({ values, expected }) => {
+    const rows = values.map((value, index) =>
+      observation({ id: `clarity-${index}`, answers: { clarity_now_v1: value } }),
+    )
+    const sampled = coverage(rows, 'UTC').find((bin) => bin.n > 0)!
+    expect(sampled.median).toBe(expected)
+    expect(sampled.values).toEqual(values)
+  })
+  test('unsampled hour bins have no clarity median', () => {
+    expect(coverage([], 'UTC').every((bin) => bin.median === null)).toBe(true)
+  })
   test('pretty arm averages cannot hide missingness, unexposed assignment or method decline', () => {
     const make = (data: AdhdRecord['data']): AdhdRecord => ({
       id: 'r',

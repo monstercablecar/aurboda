@@ -77,13 +77,15 @@ export const coverage = (observations: AdhdObservation[], zone: string) => {
     bin.days.add(day)
     if (typeof o.answers.clarity_now_v1 === 'number') bin.values.push(o.answers.clarity_now_v1)
   }
-  return bins.map((b) => ({
-    ...b,
-    days: b.days.size,
-    median: b.values.length
-      ? [...b.values].sort((left, right) => left - right)[Math.floor(b.values.length / 2)]
-      : null,
-  }))
+  return bins.map((b) => {
+    const sorted = [...b.values].sort((left, right) => left - right),
+      mid = Math.floor(sorted.length / 2)
+    return {
+      ...b,
+      days: b.days.size,
+      median: sorted.length ? (sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2) : null,
+    }
+  })
 }
 export const supportIds = (barrier: string) =>
   ({
