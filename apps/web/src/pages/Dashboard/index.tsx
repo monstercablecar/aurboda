@@ -9,6 +9,7 @@ import { EditableDashboard } from '../../components/EditableDashboard'
 import { FamilyPhotoQuickLink } from '../../components/FamilyPhotoQuickLink'
 import { FoghouseGames } from '../../components/FoghouseGames'
 import { GetStartedGuide } from '../../components/GetStartedGuide'
+import { HomeRegimens } from '../../components/HomeRegimens'
 import { PeriodDashboardBar } from '../../components/PeriodSwitcher'
 import { ShareDashboardPeriodDialog } from '../../components/ShareDashboardPeriodDialog'
 import { useDashboardDraft } from '../../components/useDashboardDraft'
@@ -116,6 +117,7 @@ export function Dashboard() {
         <>
           <GetStartedGuide />
           <DueTodayCard />
+          <HomeRegimens />
           <FamilyPhotoQuickLink />
           <FoghouseGames />
         </>
